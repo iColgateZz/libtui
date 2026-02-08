@@ -2,3 +2,16 @@
 2. https://github.com/Cubified/tuibox/blob/main/tuibox.h
 3. https://viewsourcecode.org/snaptoken/kilo/02.enteringRawMode.html
 4. https://gist.github.com/fnky/458719343aabd01cfb17a3a4f7296797
+
+When adding to an existing repo:
+    git submodule add <url>
+    git submodule update --init --recursive
+
+When cloning a repo:
+    git clone <url>
+    git submodule update --init --recursive
+Or:
+    git clone --recurse-submodules <url>
+
+
+

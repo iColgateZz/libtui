@@ -5,6 +5,5 @@ i32 main(i32 argc, byte *argv[]) {
     PSH_REBUILD_UNITY_AUTO(argc, argv);
 
     printf("Hello, world!\n");
-
     return 0;
 }
