@@ -52,7 +52,7 @@ void restore_term() {
 
     // write_str("\33[?1000l");                     // disable mouse
     // write_str("\33[?1002l");                     // disable mouse
-    write_str("\33[m");                          // reset colors
+    write_str("\33[0m");                         // reset text attributes
     write_str("\33[?25h");                       // show cursor
     write_str("\33[?1049l");                     // exit alternate buffer
 
