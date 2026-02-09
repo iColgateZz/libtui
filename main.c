@@ -6,15 +6,18 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <ctype.h>
+#include <sys/ioctl.h>
 
 void init_term();
 void restore_term();
 void write_str_len(byte *str, usize len);
+void get_screen_dimensions();
 
 #define write_str(s)    write_str_len(s, sizeof(s) - 1)
 
 struct {
     struct termios orig_term;
+    u16 width, height;
 } Terminal = {0};
 
 void write_str_len(byte *str, usize len) {
@@ -32,6 +35,8 @@ void init_term() {
     raw.c_cc[VMIN] = 0;
     raw.c_cc[VTIME] = 10;
 
+    assert(tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw) == 0);
+
     write_str("\33[?2004l");                 // reset bracketed paste mode
     write_str("\33[?1049h");                 // use alternate buffer
     write_str("\33[?25l");                   // hide cursor
@@ -42,9 +47,17 @@ void init_term() {
     write_str("\33[0m");                     // reset text attributes
     write_str("\33[2J");                     // clear screen
 
-    assert(tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw) == 0);
+    get_screen_dimensions();
 
     atexit(restore_term);
+}
+
+void get_screen_dimensions() {
+    struct winsize ws = {0};
+    assert(ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == 0);
+
+    Terminal.width = ws.ws_col;
+    Terminal.height = ws.ws_row;
 }
 
 void restore_term() {
