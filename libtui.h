@@ -1,4 +1,5 @@
 #ifndef LIBTUI_INCLUDE
+#define PSH_CORE_NO_PREFIX
 #include "psh_build/psh_build.h"
 
 void init_term();
@@ -23,6 +24,7 @@ void handle_sigwinch(i32 signo);
 struct {
     struct termios orig_term;
     u16 width, height;
+    Unix_Pipe pipe;
 } Terminal = {0};
 
 void write_str_len(byte *str, usize len) {
@@ -53,8 +55,13 @@ void init_term() {
     write_str("\33[2J");                     // clear screen
 
     get_screen_dimensions();
-
     atexit(restore_term);
+    assert(pipe_open(&Terminal.pipe));
+
+    struct sigaction sa = {0};
+    sa.sa_handler = handle_sigwinch;
+    sa.sa_flags = SA_RESTART;
+    sigaction(SIGWINCH, &sa, NULL);
 }
 
 void get_screen_dimensions() {
@@ -79,7 +86,7 @@ void restore_term() {
 }
 
 void handle_sigwinch(i32 signo) {
-
+    write(Terminal.pipe.write_fd, &signo, sizeof signo);
 }
 
 #endif //LIBTUI_IMPL
