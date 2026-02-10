@@ -77,6 +77,7 @@ struct {
     Unix_Pipe pipe;
     u32 timeout;
     PollEvent event;
+    i64 saved_time, dt;
 } Terminal = {0};
 
 void parse_event(PollEvent *e, isize n);
@@ -165,7 +166,11 @@ void handle_sigwinch(i32 signo) {
 }
 
 void set_target_fps(u32 fps) {
-    Terminal.timeout = 1000 / fps;
+    if (fps == 0){
+        Terminal.timeout = 0;
+    } else {
+        Terminal.timeout = 1000 / fps;
+    }
 }
 
 void poll_input() {
@@ -178,8 +183,8 @@ void poll_input() {
     PollEvent *e = &Terminal.event;
     *e = (PollEvent) {0};
 
-    i32 timeout = Terminal.timeout > 0 ? Terminal.timeout : -1;
-    i32 rval = poll(pfd, PFD_SIZE, timeout);
+    i32 timeout_ms = Terminal.timeout > 0 ? Terminal.timeout : -1;
+    i32 rval = poll(pfd, PFD_SIZE, timeout_ms);
 
     if (rval < 0) {
         if (errno == EAGAIN || errno == EINTR) {
@@ -250,5 +255,14 @@ b32 key_pressed(Key k) {
     return Terminal.event.parsed_key == k 
         && Terminal.event.type == EKey;
 }
+
+i64 time_ms() {
+    struct timespec ts = {0};
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+}
+
+void save_timestamp()  { Terminal.saved_time = time_ms(); }
+void calculate_dt() { Terminal.dt = time_ms() - Terminal.saved_time; }
 
 #endif //LIBTUI_IMPL

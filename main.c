@@ -20,19 +20,24 @@ i32 main(i32 argc, byte *argv[]) {
     PSH_REBUILD_UNITY_AUTO(argc, argv);
 
     init_term();
-    set_target_fps(1);
+    set_target_fps(60);
 
     while (1) {
+        save_timestamp();
+
         // capture events
         poll_input();
 
         // update state & other user logic
-        Key k = get_key();
-        print_char(k);
-
+        // Key k = get_key();
+        // print_char(k);
+        
         if (key_pressed('q')) break;
-
+        
         // draw ui
+
+        calculate_dt();
+        printf("dt: %llu\r\n", Terminal.dt);
     }
 
     return 0;
