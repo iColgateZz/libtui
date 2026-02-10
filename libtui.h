@@ -5,11 +5,17 @@
 void init_term();
 void restore_term();
 void write_str_len(byte *str, usize len);
+void write_strf_impl(byte *fmt, ...);
 void get_screen_dimensions();
 void handle_sigwinch(i32 signo);
 void set_target_fps(u32 fps);
 
-#define write_str(s)    write_str_len(s, sizeof(s) - 1)
+#define write_str(s)        write_str_len(s, sizeof(s) - 1)
+#define write_strf(...)     write_strf_impl(__VA_ARGS__)
+
+#define MAX(a, b)     ((a) > (b) ? (a) : (b))
+#define MIN(a, b)     ((a) < (b) ? (a) : (b))
+#define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
 
 #endif //LIBTUI_INCLUDE
 
@@ -17,21 +23,72 @@ void set_target_fps(u32 fps);
 
 #include <unistd.h>
 #include <termios.h>
+#include <stdarg.h>
 #include <stdlib.h>
 #include <assert.h>
 #include <sys/ioctl.h>
 #include <signal.h>
+#include <errno.h>
+
+typedef enum {
+    BACKSPACE_KEY = 8,
+    TAB_KEY       = 9,
+    ENTER_KEY     = 13,
+    ESCAPE_KEY    = 27,
+    INSERT_KEY    = -1,
+    DELETE_KEY    = -2,
+    HOME_KEY      = -3,
+    END_KEY       = -4,
+    PAGEUP_KEY    = -5,
+    PAGEDOWN_KEY  = -6,
+    UP_KEY        = -7,
+    DOWN_KEY      = -8,
+    LEFT_KEY      = -9,
+    RIGHT_KEY     = -10,
+} Key;
+
+typedef enum {
+    EDraw,
+    EKey,
+} PollEventType;
+
+typedef struct {
+    PollEventType type;
+    byte buf[32];
+    i32 parsed_key;
+} PollEvent;
 
 struct {
     struct termios orig_term;
     u16 width, height;
     Unix_Pipe pipe;
     u32 timeout;
+    PollEvent event;
 } Terminal = {0};
+
+void parse_event(PollEvent *e, isize n);
+b32 escaped(byte *);
+Key get_key();
 
 void write_str_len(byte *str, usize len) {
     write(STDOUT_FILENO, str, len);
 }
+
+void write_strf_impl(byte *fmt, ...) {
+    char buf[1024];
+    va_list args;
+
+    va_start(args, fmt);
+    int len = vsnprintf(buf, sizeof(buf), fmt, args);
+    va_end(args);
+
+    if (len > 0) {
+        if (len > (int)sizeof(buf))
+            len = sizeof(buf);
+        write(STDOUT_FILENO, buf, len);
+    }
+}
+
 
 void init_term() {
     assert(tcgetattr(STDIN_FILENO, &Terminal.orig_term) == 0);
@@ -97,5 +154,96 @@ void handle_sigwinch(i32 signo) {
 void set_target_fps(u32 fps) {
     Terminal.timeout = 1000 / fps;
 }
+
+void poll_input() {
+    #define PFD_SIZE 2
+    struct pollfd pfd[PFD_SIZE] = {
+        {.fd = Terminal.pipe.read_fd, .events = POLLIN},
+        {.fd = STDIN_FILENO,          .events = POLLIN},
+    };
+
+    PollEvent *e = &Terminal.event;
+    *e = (PollEvent) {0};
+
+    i32 timeout = Terminal.timeout > 0 ? Terminal.timeout : -1;
+    i32 rval = poll(pfd, PFD_SIZE, timeout);
+
+    if (rval < 0) {
+        if (errno == EAGAIN || errno == EINTR) {
+            poll_input();
+            return;
+        }
+
+        assert(false);
+    }
+
+    else if (rval == 0) { // timeout
+        e->type = EDraw;
+        return;
+    }
+
+    if (pfd[0].revents & POLLIN) { // window resize
+        i32 sig;
+        read(Terminal.pipe.read_fd, &sig, sizeof sig);
+
+        e->type = EDraw;
+        get_screen_dimensions();
+        return;
+    }
+
+    if (pfd[1].revents & POLLIN) {
+        isize n = read(STDIN_FILENO, e->buf, sizeof(e->buf) - 1);
+        assert(n > 0);
+        parse_event(e, n);
+    }
+}
+
+void parse_event(PollEvent *e, isize n) {
+    byte *str = e->buf;
+
+    if (n == 1 && !escaped(str)) { // regular key
+        e->type = EKey;
+
+        #define DELETE 127
+        if (str[0] == DELETE) {
+            e->parsed_key = BACKSPACE_KEY;
+        } else {
+            // maybe decode ut8 later
+            e->parsed_key = str[0];
+        }
+
+        return;
+    }
+
+    static struct {byte str[4]; i32 k;} key_table[] = {
+        {"[A" , UP_KEY},
+        {"[B" , DOWN_KEY},
+        {"[C" , RIGHT_KEY},
+        {"[D" , LEFT_KEY},
+        {"[2~", INSERT_KEY},
+        {"[3~", DELETE_KEY},
+        {"[H" , HOME_KEY},
+        {"[4~", END_KEY},
+        {"[5~", PAGEUP_KEY},
+        {"[6~", PAGEDOWN_KEY},
+    };
+
+    if ((n == 3 || n == 4) && escaped(str)) { // longer escaped sequence
+        for (usize i = 0; i < ARRAY_SIZE(key_table); i++) {
+            if (memcmp(str + 1, key_table[i].str, n - 1) == EXIT_SUCCESS) {
+                e->type = EKey;
+                e->parsed_key  = key_table[i].k;
+                return;
+            }
+        }
+    }
+
+    e->type = EDraw;
+    return;
+}
+
+b32 escaped(byte *s) { return s[0] == ESCAPE_KEY; }
+
+Key get_key() { return Terminal.event.parsed_key; }
 
 #endif //LIBTUI_IMPL
