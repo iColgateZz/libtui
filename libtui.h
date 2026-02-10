@@ -246,4 +246,9 @@ b32 escaped(byte *s) { return s[0] == ESCAPE_KEY; }
 
 Key get_key() { return Terminal.event.parsed_key; }
 
+b32 key_pressed(Key k) {
+    return Terminal.event.parsed_key == k 
+        && Terminal.event.type == EKey;
+}
+
 #endif //LIBTUI_IMPL

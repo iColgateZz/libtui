@@ -26,13 +26,11 @@ i32 main(i32 argc, byte *argv[]) {
         // capture events
         poll_input();
 
-        // update state & other use logic
+        // update state & other user logic
         Key k = get_key();
         print_char(k);
 
-        printf("%d, %d\r\n", Terminal.width, Terminal.height);
-
-        if (k == 'q') break;
+        if (key_pressed('q')) break;
 
         // draw ui
     }
