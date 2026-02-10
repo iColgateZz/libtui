@@ -5,6 +5,7 @@ void init_term();
 void restore_term();
 void write_str_len(byte *str, usize len);
 void get_screen_dimensions();
+void handle_sigwinch(i32 signo);
 
 #define write_str(s)    write_str_len(s, sizeof(s) - 1)
 
@@ -17,6 +18,7 @@ void get_screen_dimensions();
 #include <stdlib.h>
 #include <assert.h>
 #include <sys/ioctl.h>
+#include <signal.h>
 
 struct {
     struct termios orig_term;
@@ -74,6 +76,10 @@ void restore_term() {
 
     //TODO: If I print an error and the return to the original buffer,
     // the error will not be visible to the user.
+}
+
+void handle_sigwinch(i32 signo) {
+
 }
 
 #endif //LIBTUI_IMPL
