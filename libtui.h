@@ -7,6 +7,7 @@ void restore_term();
 void write_str_len(byte *str, usize len);
 void get_screen_dimensions();
 void handle_sigwinch(i32 signo);
+void set_target_fps(u32 fps);
 
 #define write_str(s)    write_str_len(s, sizeof(s) - 1)
 
@@ -25,6 +26,7 @@ struct {
     struct termios orig_term;
     u16 width, height;
     Unix_Pipe pipe;
+    u32 timeout;
 } Terminal = {0};
 
 void write_str_len(byte *str, usize len) {
@@ -83,10 +85,17 @@ void restore_term() {
 
     //TODO: If I print an error and the return to the original buffer,
     // the error will not be visible to the user.
+
+    fd_close(Terminal.pipe.read_fd);
+    fd_close(Terminal.pipe.write_fd);
 }
 
 void handle_sigwinch(i32 signo) {
     write(Terminal.pipe.write_fd, &signo, sizeof signo);
+}
+
+void set_target_fps(u32 fps) {
+    Terminal.timeout = 1000 / fps;
 }
 
 #endif //LIBTUI_IMPL
