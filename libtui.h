@@ -47,6 +47,19 @@ typedef enum {
     RIGHT_KEY     = -10,
 } Key;
 
+static struct {byte str[4]; i32 k;} key_table[] = {
+    {"[A" , UP_KEY},
+    {"[B" , DOWN_KEY},
+    {"[C" , RIGHT_KEY},
+    {"[D" , LEFT_KEY},
+    {"[2~", INSERT_KEY},
+    {"[3~", DELETE_KEY},
+    {"[H" , HOME_KEY},
+    {"[4~", END_KEY},
+    {"[5~", PAGEUP_KEY},
+    {"[6~", PAGEDOWN_KEY},
+};
+
 typedef enum {
     EDraw,
     EKey,
@@ -214,19 +227,6 @@ void parse_event(PollEvent *e, isize n) {
 
         return;
     }
-
-    static struct {byte str[4]; i32 k;} key_table[] = {
-        {"[A" , UP_KEY},
-        {"[B" , DOWN_KEY},
-        {"[C" , RIGHT_KEY},
-        {"[D" , LEFT_KEY},
-        {"[2~", INSERT_KEY},
-        {"[3~", DELETE_KEY},
-        {"[H" , HOME_KEY},
-        {"[4~", END_KEY},
-        {"[5~", PAGEUP_KEY},
-        {"[6~", PAGEDOWN_KEY},
-    };
 
     if ((n == 3 || n == 4) && escaped(str)) { // longer escaped sequence
         for (usize i = 0; i < ARRAY_SIZE(key_table); i++) {
