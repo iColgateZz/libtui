@@ -52,7 +52,7 @@ i32 main(i32 argc, byte *argv[]) {
         }
         
         // draw ui
-        draw_widgets();
+        
 
         calculate_dt();
         // printf("dt: %llu\r\n", Terminal.dt);

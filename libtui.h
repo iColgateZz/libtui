@@ -71,9 +71,6 @@ typedef struct {
     i32 parsed_key;
 } PollEvent;
 
-
-typedef struct Widget Widget;
-
 struct {
     struct termios orig_term;
     u16 width, height;
@@ -81,12 +78,6 @@ struct {
     u32 timeout;
     PollEvent event;
     i64 saved_time, dt;
-    struct {
-        usize count;
-        usize capacity;
-        Widget **items;
-    } widgets;
-    usize cringe;
 } Terminal = {0};
 
 void parse_event(PollEvent *e, isize n);
@@ -168,8 +159,6 @@ void restore_term() {
 
     fd_close(Terminal.pipe.read_fd);
     fd_close(Terminal.pipe.write_fd);
-
-    da_free(Terminal.widgets);
 }
 
 void handle_sigwinch(i32 signo) {
@@ -276,24 +265,11 @@ i64 time_ms() {
 void save_timestamp()  { Terminal.saved_time = time_ms(); }
 void calculate_dt() { Terminal.dt = time_ms() - Terminal.saved_time; }
 
+typedef struct Widget Widget;
 struct Widget {
     u32 x, y;
     u32 w, h;
-    void (*on_click)(Widget *);
-    void (*on_hover)(Widget *);
     void (*draw)(Widget *);
 };
-
-void add_widget(Widget *w) {
-    da_append(&Terminal.widgets, w);
-}
-
-void draw_widgets() {
-    write_str("\33[H");
-    for (usize i = 0; i < Terminal.widgets.count; ++i) {
-        Widget *w = Terminal.widgets.items[i];
-        w->draw(w);
-    }
-}
 
 #endif //LIBTUI_IMPL
