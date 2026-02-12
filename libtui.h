@@ -73,11 +73,13 @@ typedef struct {
 
 struct {
     struct termios orig_term;
-    u16 width, height;
     Unix_Pipe pipe;
     u32 timeout;
     PollEvent event;
     i64 saved_time, dt;
+    Arena arena;
+    byte *framebuffer;
+    u16 width, height;
 } Terminal = {0};
 
 void parse_event(PollEvent *e, isize n);
@@ -135,6 +137,10 @@ void init_term() {
     sa.sa_handler = handle_sigwinch;
     sa.sa_flags = SA_RESTART;
     sigaction(SIGWINCH, &sa, NULL);
+
+    Terminal.arena = arena_init(GB(1));
+    Terminal.framebuffer = arena_push(&Terminal.arena, byte, Terminal.width * Terminal.height);
+    assert(Terminal.framebuffer);
 }
 
 void get_screen_dimensions() {
@@ -159,6 +165,8 @@ void restore_term() {
 
     fd_close(Terminal.pipe.read_fd);
     fd_close(Terminal.pipe.write_fd);
+
+    arena_destroy(Terminal.arena);
 }
 
 void handle_sigwinch(i32 signo) {
@@ -206,6 +214,11 @@ void poll_input() {
 
         e->type = EDraw;
         get_screen_dimensions();
+        if (Terminal.width * Terminal.height > Terminal.arena.committed_size) {
+            arena_clear(&Terminal.arena);
+            arena_push(&Terminal.arena, byte, Terminal.width * Terminal.height);
+        }
+
         return;
     }
 
