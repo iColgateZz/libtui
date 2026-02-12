@@ -289,6 +289,7 @@ void add_widget(Widget *w) {
 }
 
 void draw_widgets() {
+    write_str("\33[H");
     for (usize i = 0; i < Terminal.widgets.count; ++i) {
         Widget *w = Terminal.widgets.items[i];
         w->draw(w);
