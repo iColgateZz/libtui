@@ -2,34 +2,7 @@
 #define PSH_CORE_NO_PREFIX
 #include "psh_build/psh_build.h"
 
-void init_term();
-void restore_term();
-void write_str_len(byte *str, usize len);
-void write_strf_impl(byte *fmt, ...);
-void get_screen_dimensions();
-void handle_sigwinch(i32 signo);
-void set_target_fps(u32 fps);
-
-#define write_str(s)        write_str_len(s, sizeof(s) - 1)
-#define write_strf(...)     write_strf_impl(__VA_ARGS__)
-
-#define MAX(a, b)     ((a) > (b) ? (a) : (b))
-#define MIN(a, b)     ((a) < (b) ? (a) : (b))
-#define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
-
-#endif //LIBTUI_INCLUDE
-
-#ifdef LIBTUI_IMPL
-
-#include <unistd.h>
-#include <termios.h>
-#include <stdarg.h>
-#include <stdlib.h>
-#include <assert.h>
-#include <sys/ioctl.h>
-#include <signal.h>
-#include <errno.h>
-
+// public
 typedef enum {
     BACKSPACE_KEY = 8,
     TAB_KEY       = 9,
@@ -47,44 +20,89 @@ typedef enum {
     RIGHT_KEY     = -10,
 } Key;
 
-static struct {byte str[4]; i32 k;} key_table[] = {
-    {"[A" , UP_KEY},
-    {"[B" , DOWN_KEY},
-    {"[C" , RIGHT_KEY},
-    {"[D" , LEFT_KEY},
-    {"[2~", INSERT_KEY},
-    {"[3~", DELETE_KEY},
-    {"[H" , HOME_KEY},
-    {"[4~", END_KEY},
-    {"[5~", PAGEUP_KEY},
-    {"[6~", PAGEDOWN_KEY},
-};
-
 typedef enum {
     EDraw,
     EKey,
-} PollEventType;
+} EventType;
 
 typedef struct {
-    PollEventType type;
+    EventType type;
     byte buf[32];
-    i32 parsed_key;
-} PollEvent;
+    Key parsed_key;
+} Event;
+
+typedef struct Widget Widget;
+struct Widget {
+    u32 x, y;
+    u32 w, h;
+    void (*draw)(Widget *);
+};
+
+void init_terminal();
+void set_target_fps(u32 fps);
+void begin_frame();
+void end_frame();
+u64 get_delta_time();
+u32 get_terminal_width();
+u32 get_terminal_height();
+EventType get_event_type();
+Event get_event();
+Key get_key();
+b32 is_key_pressed(Key k);
+
+// in the middle
+void write_str_len(byte *str, usize len);
+void write_strf_impl(byte *fmt, ...);
+#define write_str(s)        write_str_len(s, sizeof(s) - 1)
+#define write_strf(...)     write_strf_impl(__VA_ARGS__)
+
+#endif //LIBTUI_INCLUDE
+
+#ifdef LIBTUI_IMPL
+
+#include <unistd.h>
+#include <termios.h>
+#include <stdarg.h>
+#include <stdlib.h>
+#include <assert.h>
+#include <sys/ioctl.h>
+#include <signal.h>
+#include <errno.h>
+#include <string.h>
+
+#define MAX(a, b)     ((a) > (b) ? (a) : (b))
+#define MIN(a, b)     ((a) < (b) ? (a) : (b))
+#define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
+
+// private
+void _restore_term();
+void _update_screen_dimensions();
+void _handle_sigwinch(i32 signo);
+i64  _time_ms();
+void _save_timestamp();
+void _calculate_dt();
+void _parse_event(Event *e, isize n);
+void _poll_input();
 
 struct {
     struct termios orig_term;
     Unix_Pipe pipe;
     u32 timeout;
-    PollEvent event;
-    i64 saved_time, dt;
+    Event event;
+    u64 saved_time, dt;
     Arena arena;
     byte *framebuffer;
-    u16 width, height;
+    u32 width, height;
 } Terminal = {0};
 
-void parse_event(PollEvent *e, isize n);
-b32 escaped(byte *);
-Key get_key();
+u64 get_delta_time() { return Terminal.dt; }
+u32 get_terminal_width() { return Terminal.width; }
+u32 get_terminal_height() { return Terminal.height; }
+EventType get_event_type() { return Terminal.event.type; }
+Event get_event() { return Terminal.event; }
+Key get_key() { return Terminal.event.parsed_key; }
+b32 is_key_pressed(Key k) { return Terminal.event.parsed_key == k 
+                            && Terminal.event.type == EKey; }
 
 void write_str_len(byte *str, usize len) {
     write(STDOUT_FILENO, str, len);
@@ -105,8 +123,7 @@ void write_strf_impl(byte *fmt, ...) {
     }
 }
 
-
-void init_term() {
+void init_terminal() {
     assert(tcgetattr(STDIN_FILENO, &Terminal.orig_term) == 0);
     
     struct termios raw = Terminal.orig_term;
@@ -115,7 +132,7 @@ void init_term() {
     raw.c_cflag |= (CS8);
     raw.c_lflag &= ~(ECHO | ICANON | IEXTEN | ISIG);
     raw.c_cc[VMIN] = 0;
-    raw.c_cc[VTIME] = 10;
+    raw.c_cc[VTIME] = 0;
 
     assert(tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw) == 0);
 
@@ -128,13 +145,14 @@ void init_term() {
     // write_str("\33[?1006h");                 // use mouse sgr protocol
     write_str("\33[0m");                     // reset text attributes
     write_str("\33[2J");                     // clear screen
+    write_str("\33[H");                     // move cursor to home position
 
-    get_screen_dimensions();
-    atexit(restore_term);
+    _update_screen_dimensions();
+    atexit(_restore_term);
     assert(pipe_open(&Terminal.pipe));
 
     struct sigaction sa = {0};
-    sa.sa_handler = handle_sigwinch;
+    sa.sa_handler = _handle_sigwinch;
     sa.sa_flags = SA_RESTART;
     sigaction(SIGWINCH, &sa, NULL);
 
@@ -143,7 +161,7 @@ void init_term() {
     assert(Terminal.framebuffer);
 }
 
-void get_screen_dimensions() {
+void _update_screen_dimensions() {
     struct winsize ws = {0};
     assert(ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == 0);
 
@@ -151,7 +169,7 @@ void get_screen_dimensions() {
     Terminal.height = ws.ws_row;
 }
 
-void restore_term() {
+void _restore_term() {
     assert(tcsetattr(STDIN_FILENO, TCSAFLUSH, &Terminal.orig_term) == 0);
 
     // write_str("\33[?1000l");                     // disable mouse
@@ -169,7 +187,13 @@ void restore_term() {
     arena_destroy(Terminal.arena);
 }
 
-void handle_sigwinch(i32 signo) {
+void _handle_sigwinch(i32 signo) {
+    _update_screen_dimensions();
+    if (Terminal.width * Terminal.height > Terminal.arena.committed_size) {
+        arena_clear(&Terminal.arena);
+        arena_push(&Terminal.arena, byte, Terminal.width * Terminal.height);
+    }
+
     write(Terminal.pipe.write_fd, &signo, sizeof signo);
 }
 
@@ -181,22 +205,51 @@ void set_target_fps(u32 fps) {
     }
 }
 
-void poll_input() {
+void begin_frame() {
+    memset(Terminal.framebuffer, 0, 
+        Terminal.width * Terminal.height * sizeof(*Terminal.framebuffer));
+
+    _save_timestamp();
+    _poll_input();
+}
+
+void _save_timestamp()  { Terminal.saved_time = _time_ms(); }
+
+i64 _time_ms() {
+    struct timespec ts = {0};
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+}
+
+void end_frame() {
+    write_str("\33[H");
+    _calculate_dt();
+
+    // for (u32 y = 0; y < Terminal.height; ++y) {
+    //     write_str_len(Terminal.framebuffer + y * Terminal.width, Terminal.width);
+    //     if (y < Terminal.height - 1)
+    //     write_str("\r\n");
+    // }
+}
+
+void _calculate_dt() { Terminal.dt = _time_ms() - Terminal.saved_time; }
+
+void _poll_input() {
     #define PFD_SIZE 2
     struct pollfd pfd[PFD_SIZE] = {
         {.fd = Terminal.pipe.read_fd, .events = POLLIN},
         {.fd = STDIN_FILENO,          .events = POLLIN},
     };
 
-    PollEvent *e = &Terminal.event;
-    *e = (PollEvent) {0};
+    Event *e = &Terminal.event;
+    *e = (Event) {0};
 
     i32 timeout_ms = Terminal.timeout > 0 ? Terminal.timeout : -1;
     i32 rval = poll(pfd, PFD_SIZE, timeout_ms);
 
     if (rval < 0) {
         if (errno == EAGAIN || errno == EINTR) {
-            poll_input();
+            _poll_input();
             return;
         }
 
@@ -211,28 +264,34 @@ void poll_input() {
     if (pfd[0].revents & POLLIN) { // window resize
         i32 sig;
         read(Terminal.pipe.read_fd, &sig, sizeof sig);
-
         e->type = EDraw;
-        get_screen_dimensions();
-        if (Terminal.width * Terminal.height > Terminal.arena.committed_size) {
-            arena_clear(&Terminal.arena);
-            arena_push(&Terminal.arena, byte, Terminal.width * Terminal.height);
-        }
-
         return;
     }
 
     if (pfd[1].revents & POLLIN) {
         isize n = read(STDIN_FILENO, e->buf, sizeof(e->buf) - 1);
         assert(n > 0);
-        parse_event(e, n);
+        _parse_event(e, n);
     }
 }
 
-void parse_event(PollEvent *e, isize n) {
+static struct {byte str[4]; i32 k;} key_table[] = {
+    {"[A" , UP_KEY},
+    {"[B" , DOWN_KEY},
+    {"[C" , RIGHT_KEY},
+    {"[D" , LEFT_KEY},
+    {"[2~", INSERT_KEY},
+    {"[3~", DELETE_KEY},
+    {"[H" , HOME_KEY},
+    {"[4~", END_KEY},
+    {"[5~", PAGEUP_KEY},
+    {"[6~", PAGEDOWN_KEY},
+};
+
+void _parse_event(Event *e, isize n) {
     byte *str = e->buf;
 
-    if (n == 1 && !escaped(str)) { // regular key
+    if (n == 1 && str[0] != ESCAPE_KEY) { // regular key
         e->type = EKey;
 
         #define DELETE 127
@@ -246,7 +305,7 @@ void parse_event(PollEvent *e, isize n) {
         return;
     }
 
-    if ((n == 3 || n == 4) && escaped(str)) { // longer escaped sequence
+    if ((n == 3 || n == 4) && str[0] == ESCAPE_KEY) { // longer escaped sequence
         for (usize i = 0; i < ARRAY_SIZE(key_table); i++) {
             if (memcmp(str + 1, key_table[i].str, n - 1) == EXIT_SUCCESS) {
                 e->type = EKey;
@@ -259,30 +318,5 @@ void parse_event(PollEvent *e, isize n) {
     e->type = EDraw;
     return;
 }
-
-b32 escaped(byte *s) { return s[0] == ESCAPE_KEY; }
-
-Key get_key() { return Terminal.event.parsed_key; }
-
-b32 key_pressed(Key k) {
-    return Terminal.event.parsed_key == k 
-        && Terminal.event.type == EKey;
-}
-
-i64 time_ms() {
-    struct timespec ts = {0};
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    return ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
-}
-
-void save_timestamp()  { Terminal.saved_time = time_ms(); }
-void calculate_dt() { Terminal.dt = time_ms() - Terminal.saved_time; }
-
-typedef struct Widget Widget;
-struct Widget {
-    u32 x, y;
-    u32 w, h;
-    void (*draw)(Widget *);
-};
 
 #endif //LIBTUI_IMPL

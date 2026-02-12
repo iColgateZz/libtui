@@ -22,7 +22,7 @@ void draw(Widget *w) {
 i32 main(i32 argc, byte *argv[]) {
     PSH_REBUILD_UNITY_AUTO(argc, argv);
 
-    init_term();
+    init_terminal();
     set_target_fps(60);
 
     Widget w = {
@@ -37,25 +37,19 @@ i32 main(i32 argc, byte *argv[]) {
         .counter = 0,
     };
 
-    add_widget(&a);
+    while (!is_key_pressed('q')) {
+        begin_frame();
 
-    while (!key_pressed('q')) {
-        save_timestamp();
-
-        // capture events
-        poll_input();
-
-        a.counter += Terminal.dt;
+        // application logic
+        a.counter += get_delta_time();
         if (a.counter > 1000) {
             a.counter = 0;
             a.state = !a.state;
         }
-        
-        // draw ui
-        
 
-        calculate_dt();
-        // printf("dt: %llu\r\n", Terminal.dt);
+        a.w.draw(&a.w);
+
+        end_frame();
     }
 
     return 0;
