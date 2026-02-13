@@ -13,9 +13,9 @@ typedef struct {
 void draw(Widget *w) {
     AnimationWidget *a = (AnimationWidget *)w;
     if (a->state == 0) {
-        write_str("-");
+        put_char(0, 0, '-');
     } else {
-        write_str("|");
+        put_char(0, 0, '|');
     }
 }
 

@@ -50,11 +50,7 @@ Event get_event();
 Key get_key();
 b32 is_key_pressed(Key k);
 
-// in the middle
-void write_str_len(byte *str, usize len);
-void write_strf_impl(byte *fmt, ...);
-#define write_str(s)        write_str_len(s, sizeof(s) - 1)
-#define write_strf(...)     write_strf_impl(__VA_ARGS__)
+void put_char(u32 x, u32 y, byte c);
 
 #endif //LIBTUI_INCLUDE
 
@@ -83,6 +79,10 @@ void _save_timestamp();
 void _calculate_dt();
 void _parse_event(Event *e, isize n);
 void _poll_input();
+void _write_str_len(byte *str, usize len);
+void _write_strf_impl(byte *fmt, ...);
+#define write_str(s)        _write_str_len(s, sizeof(s) - 1)
+#define write_strf(...)     _write_strf_impl(__VA_ARGS__)
 
 struct {
     struct termios orig_term;
@@ -104,11 +104,11 @@ Key get_key() { return Terminal.event.parsed_key; }
 b32 is_key_pressed(Key k) { return Terminal.event.parsed_key == k 
                             && Terminal.event.type == EKey; }
 
-void write_str_len(byte *str, usize len) {
+void _write_str_len(byte *str, usize len) {
     write(STDOUT_FILENO, str, len);
 }
 
-void write_strf_impl(byte *fmt, ...) {
+void _write_strf_impl(byte *fmt, ...) {
     char buf[1024];
     va_list args;
 
@@ -222,14 +222,14 @@ i64 _time_ms() {
 }
 
 void end_frame() {
-    write_str("\33[H");
+    write_str("\33[H"); // move cursor to home position
     _calculate_dt();
 
-    // for (u32 y = 0; y < Terminal.height; ++y) {
-    //     write_str_len(Terminal.framebuffer + y * Terminal.width, Terminal.width);
-    //     if (y < Terminal.height - 1)
-    //     write_str("\r\n");
-    // }
+    for (u32 y = 0; y < Terminal.height; ++y) {
+        _write_str_len(Terminal.framebuffer + y * Terminal.width, Terminal.width);
+        // if (y < Terminal.height - 1)
+        // write_str("\r\n");
+    }
 }
 
 void _calculate_dt() { Terminal.dt = _time_ms() - Terminal.saved_time; }
@@ -317,6 +317,10 @@ void _parse_event(Event *e, isize n) {
 
     e->type = EDraw;
     return;
+}
+
+void put_char(u32 x, u32 y, byte c) {
+    Terminal.framebuffer[x + y * Terminal.width] = c;
 }
 
 #endif //LIBTUI_IMPL
