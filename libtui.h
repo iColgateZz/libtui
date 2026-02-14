@@ -288,6 +288,12 @@ void end_frame() {
         // If distance between batches is smaller than a command,
         // it is okay to just copy the few bytes between them
         // instead of emitting a cursor move sequence
+
+        // Everything above is probably more than enough but
+        // if I feel fancy I can also implement dirty rectangle
+        // optimization: track where the user writes and mark
+        // these areas as dirty. Instead of diffing the whole
+        // buffer, diff only the dirty rectangles.
         write_strf("\33[%u;%uH", row + 1, col + 1);
         _write_str_len(Terminal.backbuffer.items + run_start, run_len);
 
