@@ -139,7 +139,7 @@ void _write_str_len(byte *str, usize len) {
 }
 
 void _write_strf_impl(byte *fmt, ...) {
-    char buf[1024];
+    static char buf[1024];
     va_list args;
 
     va_start(args, fmt);
