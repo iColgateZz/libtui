@@ -4,6 +4,13 @@
 #define PSH_BUILD_IMPL
     #include "psh_build/psh_build.h"
 
+typedef struct Widget Widget;
+struct Widget {
+    u32 x, y;
+    u32 w, h;
+    void (*draw)(Widget *);
+};
+
 typedef struct {
     Widget w;
     i32 state;

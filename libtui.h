@@ -31,13 +31,6 @@ typedef struct {
     Key parsed_key;
 } Event;
 
-typedef struct Widget Widget;
-struct Widget {
-    u32 x, y;
-    u32 w, h;
-    void (*draw)(Widget *);
-};
-
 void init_terminal();
 void set_max_timeout_ms(u32 timeout);
 void begin_frame();
@@ -51,6 +44,7 @@ Key get_key();
 b32 is_key_pressed(Key k);
 
 void put_char(u32 x, u32 y, byte c);
+void put_str(u32 x, u32 y, byte *str, usize len);
 
 #endif //LIBTUI_INCLUDE
 
