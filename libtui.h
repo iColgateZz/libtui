@@ -224,12 +224,7 @@ i64 _time_ms() {
 void end_frame() {
     write_str("\33[H"); // move cursor to home position
     _calculate_dt();
-
-    for (u32 y = 0; y < Terminal.height; ++y) {
-        _write_str_len(Terminal.framebuffer + y * Terminal.width, Terminal.width);
-        // if (y < Terminal.height - 1)
-        // write_str("\r\n");
-    }
+    _write_str_len(Terminal.framebuffer, Terminal.width * Terminal.height);
 }
 
 void _calculate_dt() { Terminal.dt = _time_ms() - Terminal.saved_time; }
