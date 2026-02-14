@@ -91,6 +91,7 @@ CharArray char_arr_init(usize reserve_size) {
 
     byte *arr = arena_push(&arena, byte, reserve_size);
     assert(arr);
+    memset(arr, 0, reserve_size);
 
     return (CharArray) {
         .arena = arena,
@@ -223,6 +224,9 @@ void _handle_sigwinch(i32 signo) {
     char_arr_extend_to(&Terminal.backbuffer, new_size);
     char_arr_extend_to(&Terminal.frontbuffer, new_size);
 
+    // trigger full redraw
+    memset(Terminal.frontbuffer.items, 0, Terminal.frontbuffer.count);
+
     write(Terminal.pipe.write_fd, &signo, sizeof signo);
 }
 
@@ -244,10 +248,27 @@ i64 _time_ms() {
 }
 
 void end_frame() {
-    write_str("\33[H"); // move cursor to home position
     _calculate_dt();
-    _write_str_len(Terminal.backbuffer.items, Terminal.backbuffer.count);
+
+    u32 w = Terminal.width;
+    u32 h = Terminal.height;
+
+    for (u32 y = 0; y < h; y++) {
+        for (u32 x = 0; x < w; x++) {
+            usize i = x + y * w;
+
+            byte back  = Terminal.backbuffer.items[i];
+            byte front = Terminal.frontbuffer.items[i];
+
+            if (back != front) {
+                write_strf("\33[%u;%uH", y + 1, x + 1);
+                _write_str_len(&back, 1);
+                Terminal.frontbuffer.items[i] = back;
+            }
+        }
+    }
 }
+
 
 void _calculate_dt() { Terminal.dt = _time_ms() - Terminal.saved_time; }
 
