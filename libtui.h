@@ -39,7 +39,7 @@ struct Widget {
 };
 
 void init_terminal();
-void set_target_fps(u32 fps);
+void set_max_timeout_ms(u32 timeout);
 void begin_frame();
 void end_frame();
 u64 get_delta_time();
@@ -197,13 +197,7 @@ void _handle_sigwinch(i32 signo) {
     write(Terminal.pipe.write_fd, &signo, sizeof signo);
 }
 
-void set_target_fps(u32 fps) {
-    if (fps == 0){
-        Terminal.timeout = 0;
-    } else {
-        Terminal.timeout = 1000 / fps;
-    }
-}
+void set_max_timeout_ms(u32 timeout) { Terminal.timeout = timeout; }
 
 void begin_frame() {
     memset(Terminal.framebuffer, 0, 

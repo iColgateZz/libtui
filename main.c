@@ -23,7 +23,7 @@ i32 main(i32 argc, byte *argv[]) {
     PSH_REBUILD_UNITY_AUTO(argc, argv);
 
     init_terminal();
-    set_target_fps(60);
+    set_max_timeout_ms(100);
 
     Widget w = {
         .w = 10,
