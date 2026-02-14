@@ -252,22 +252,37 @@ void end_frame() {
 
     u32 w = Terminal.width;
     u32 h = Terminal.height;
+    usize total = w * h;
 
-    for (u32 y = 0; y < h; y++) {
-        for (u32 x = 0; x < w; x++) {
-            usize i = x + y * w;
-
-            byte back  = Terminal.backbuffer.items[i];
-            byte front = Terminal.frontbuffer.items[i];
-
-            if (back != front) {
-                write_strf("\33[%u;%uH", y + 1, x + 1);
-                _write_str_len(&back, 1);
-                Terminal.frontbuffer.items[i] = back;
-            }
+    usize i = 0;
+    while (i < total) {
+        if (Terminal.backbuffer.items[i] ==
+            Terminal.frontbuffer.items[i]) {
+            i++;
+            continue;
         }
+
+        usize run_start = i;
+        while (i < total &&
+               Terminal.backbuffer.items[i] !=
+               Terminal.frontbuffer.items[i]) {
+            i++;
+        }
+
+        usize run_len = i - run_start;
+        u32 row = run_start / w;
+        u32 col = run_start % w;
+        write_strf("\33[%u;%uH", row + 1, col + 1);
+        _write_str_len(Terminal.backbuffer.items + run_start, run_len);
+
+        memcpy(
+            Terminal.frontbuffer.items + run_start,
+            &Terminal.backbuffer.items + run_start,
+            run_len
+        );
     }
 }
+
 
 
 void _calculate_dt() { Terminal.dt = _time_ms() - Terminal.saved_time; }
