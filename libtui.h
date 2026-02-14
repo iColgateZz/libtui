@@ -23,6 +23,7 @@ typedef enum {
 typedef enum {
     EDraw,
     EKey,
+    EWinch,
 } EventType;
 
 typedef struct {
@@ -100,15 +101,14 @@ CharArray char_arr_init(usize reserve_size) {
 }
 
 void char_arr_extend_to(CharArray *a, usize new_size) {
-    if (a->count >= new_size) return;
-
-    if (new_size >= a->capacity) {
-        void *result = arena_push(&a->arena, byte, new_size - a->count);
-        assert(result);
-
-        a->count = new_size;
+    if (new_size > a->capacity) {
+        arena_clear(&a->arena);
+        a->items = arena_push(&a->arena, byte, new_size);
+        assert(a->items);
         a->capacity = a->arena.committed_size;
     }
+
+    a->count = new_size;
 }
 
 void char_arr_destroy(CharArray a) { arena_destroy(a.arena); }
@@ -218,8 +218,10 @@ void _restore_term() {
 
 void _handle_sigwinch(i32 signo) {
     _update_screen_dimensions();
-    char_arr_extend_to(&Terminal.backbuffer, Terminal.width * Terminal.height);
-    char_arr_extend_to(&Terminal.frontbuffer, Terminal.width * Terminal.height);
+
+    u32 new_size = Terminal.width * Terminal.height;
+    char_arr_extend_to(&Terminal.backbuffer, new_size);
+    char_arr_extend_to(&Terminal.frontbuffer, new_size);
 
     write(Terminal.pipe.write_fd, &signo, sizeof signo);
 }
@@ -227,7 +229,7 @@ void _handle_sigwinch(i32 signo) {
 void set_max_timeout_ms(u32 timeout) { Terminal.timeout = timeout; }
 
 void begin_frame() {
-    memset(Terminal.backbuffer.items, 0, Terminal.backbuffer.count);
+    memset(Terminal.backbuffer.items, ' ', Terminal.backbuffer.count);
 
     _save_timestamp();
     _poll_input();
@@ -279,7 +281,7 @@ void _poll_input() {
     if (pfd[0].revents & POLLIN) { // window resize
         i32 sig;
         read(Terminal.pipe.read_fd, &sig, sizeof sig);
-        e->type = EDraw;
+        e->type = EWinch;
         return;
     }
 
