@@ -78,14 +78,49 @@ void _write_strf_impl(byte *fmt, ...);
 #define write_str(s)        _write_str_len(s, sizeof(s) - 1)
 #define write_strf(...)     _write_strf_impl(__VA_ARGS__)
 
+typedef struct {
+    Arena arena;
+    byte *items;
+    usize count;
+    usize capacity;
+} CharArray;
+
+CharArray char_arr_init(usize reserve_size) {
+    Arena arena = arena_init(GB(1));
+
+    byte *arr = arena_push(&arena, byte, reserve_size);
+    assert(arr);
+
+    return (CharArray) {
+        .arena = arena,
+        .items = arr,
+        .count = reserve_size,
+        .capacity = arena.committed_size
+    };
+}
+
+void char_arr_extend_to(CharArray *a, usize new_size) {
+    if (a->count >= new_size) return;
+
+    if (new_size >= a->capacity) {
+        void *result = arena_push(&a->arena, byte, new_size - a->count);
+        assert(result);
+
+        a->count = new_size;
+        a->capacity = a->arena.committed_size;
+    }
+}
+
+void char_arr_destroy(CharArray a) { arena_destroy(a.arena); }
+
 struct {
     struct termios orig_term;
     Unix_Pipe pipe;
     u32 timeout;
     Event event;
     u64 saved_time, dt;
-    Arena arena;
-    byte *framebuffer;
+    CharArray frontbuffer;
+    CharArray backbuffer;
     u32 width, height;
 } Terminal = {0};
 
@@ -150,9 +185,8 @@ void init_terminal() {
     sa.sa_flags = SA_RESTART;
     sigaction(SIGWINCH, &sa, NULL);
 
-    Terminal.arena = arena_init(GB(1));
-    Terminal.framebuffer = arena_push(&Terminal.arena, byte, Terminal.width * Terminal.height);
-    assert(Terminal.framebuffer);
+    Terminal.backbuffer  = char_arr_init(Terminal.width * Terminal.height);
+    Terminal.frontbuffer = char_arr_init(Terminal.width * Terminal.height);
 }
 
 void _update_screen_dimensions() {
@@ -178,15 +212,14 @@ void _restore_term() {
     fd_close(Terminal.pipe.read_fd);
     fd_close(Terminal.pipe.write_fd);
 
-    arena_destroy(Terminal.arena);
+    char_arr_destroy(Terminal.backbuffer);
+    char_arr_destroy(Terminal.frontbuffer);
 }
 
 void _handle_sigwinch(i32 signo) {
     _update_screen_dimensions();
-    if (Terminal.width * Terminal.height > Terminal.arena.committed_size) {
-        arena_clear(&Terminal.arena);
-        arena_push(&Terminal.arena, byte, Terminal.width * Terminal.height);
-    }
+    char_arr_extend_to(&Terminal.backbuffer, Terminal.width * Terminal.height);
+    char_arr_extend_to(&Terminal.frontbuffer, Terminal.width * Terminal.height);
 
     write(Terminal.pipe.write_fd, &signo, sizeof signo);
 }
@@ -194,8 +227,7 @@ void _handle_sigwinch(i32 signo) {
 void set_max_timeout_ms(u32 timeout) { Terminal.timeout = timeout; }
 
 void begin_frame() {
-    memset(Terminal.framebuffer, 0, 
-        Terminal.width * Terminal.height * sizeof(*Terminal.framebuffer));
+    memset(Terminal.backbuffer.items, 0, Terminal.backbuffer.count);
 
     _save_timestamp();
     _poll_input();
@@ -212,7 +244,7 @@ i64 _time_ms() {
 void end_frame() {
     write_str("\33[H"); // move cursor to home position
     _calculate_dt();
-    _write_str_len(Terminal.framebuffer, Terminal.width * Terminal.height);
+    _write_str_len(Terminal.backbuffer.items, Terminal.backbuffer.count);
 }
 
 void _calculate_dt() { Terminal.dt = _time_ms() - Terminal.saved_time; }
@@ -303,11 +335,11 @@ void _parse_event(Event *e, isize n) {
 }
 
 void put_char(u32 x, u32 y, byte c) {
-    Terminal.framebuffer[x + y * Terminal.width] = c;
+    Terminal.backbuffer.items[x + y * Terminal.width] = c;
 }
 
 void put_str(u32 x, u32 y, byte *str, usize len) {
-    memcpy(Terminal.framebuffer + x + y * Terminal.width, str, len);
+    memcpy(Terminal.backbuffer.items + x + y * Terminal.width, str, len);
 }
 
 #endif //LIBTUI_IMPL
