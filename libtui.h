@@ -358,11 +358,16 @@ void _parse_event(Event *e, isize n) {
 }
 
 void put_char(u32 x, u32 y, byte c) {
+    if (x >= Terminal.width || y >= Terminal.height) return;
     Terminal.backbuffer.items[x + y * Terminal.width] = c;
 }
 
 void put_str(u32 x, u32 y, byte *str, usize len) {
-    memcpy(Terminal.backbuffer.items + x + y * Terminal.width, str, len);
+    if (x >= Terminal.width || y >= Terminal.height) return;
+
+    // usize copy_len = MIN(len, Terminal.width - x); // clip at row end
+    usize copy_len = MIN(len, Terminal.width * Terminal.height - (x + y * Terminal.width));
+    memcpy(Terminal.backbuffer.items + x + y * Terminal.width, str, copy_len);
 }
 
 #endif //LIBTUI_IMPL
