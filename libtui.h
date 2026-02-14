@@ -272,6 +272,22 @@ void end_frame() {
         usize run_len = i - run_start;
         u32 row = run_start / w;
         u32 col = run_start % w;
+        // Do not use vsnprintf, write code that generates
+        // correct cursor move string, maybe use relative
+        // cursor move if it is cheaper. E.g. instead of
+        // go to (x, y), go 1 unit down.
+
+        // Remove write syscalls. Store everything in a buffer,
+        // flush cursor cmds and new text in one go. Single
+        // flush per frame! Track cursor position?
+
+        // Maybe instead of storing raw bytes, emit commands
+        // (new struct) and store them. Later some logic may
+        // handle the commands, reorder them or something
+
+        // If distance between batches is smaller than a command,
+        // it is okay to just copy the few bytes between them
+        // instead of emitting a cursor move sequence
         write_strf("\33[%u;%uH", row + 1, col + 1);
         _write_str_len(Terminal.backbuffer.items + run_start, run_len);
 
@@ -282,8 +298,6 @@ void end_frame() {
         );
     }
 }
-
-
 
 void _calculate_dt() { Terminal.dt = _time_ms() - Terminal.saved_time; }
 
