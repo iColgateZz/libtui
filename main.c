@@ -13,9 +13,11 @@ typedef struct {
 void draw(Widget *w) {
     AnimationWidget *a = (AnimationWidget *)w;
     if (a->state == 0) {
-        put_char(0, 0, '-');
+        byte *text = "Some text!";
+        put_str(0, 0, text, strlen(text));
     } else {
-        put_char(0, 0, '|');
+        for (usize i = 0; i < 10; i++)
+            put_char(i, 0, '|');
     }
 }
 
@@ -23,7 +25,7 @@ i32 main(i32 argc, byte *argv[]) {
     PSH_REBUILD_UNITY_AUTO(argc, argv);
 
     init_terminal();
-    set_max_timeout_ms(100);
+    set_max_timeout_ms(16);
 
     Widget w = {
         .w = 10,

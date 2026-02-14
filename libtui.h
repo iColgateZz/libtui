@@ -312,4 +312,8 @@ void put_char(u32 x, u32 y, byte c) {
     Terminal.framebuffer[x + y * Terminal.width] = c;
 }
 
+void put_str(u32 x, u32 y, byte *str, usize len) {
+    memcpy(Terminal.framebuffer + x + y * Terminal.width, str, len);
+}
+
 #endif //LIBTUI_IMPL
