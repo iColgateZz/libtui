@@ -108,16 +108,15 @@ void array_extend_to(Array *a, usize new_size) {
         assert(a->items);
         a->capacity = a->arena.committed_size;
     }
-
-    a->count = new_size;
 }
 
 void array_append(Array *a, byte *item, usize len) {
-    if (a->items + a->count + len >= a->capacity) {
-        array_extend_to(a, a->items + a->count + len);
+    if (a->count + len >= a->capacity) {
+        array_extend_to(a, a->count + len);
     }
 
     memcpy(a->items + a->count, item, len);
+    a->count += len;
 }
 
 void array_destroy(Array a) { arena_destroy(a.arena); }
@@ -133,6 +132,9 @@ struct {
     Array frame_cmds;
     u32 width, height;
 } Terminal = {0};
+
+void _generate_cursor_move(Array *a, u32 row, u32 col);
+usize _u32_to_ascii(byte *dst, u32 value);
 
 u64 get_delta_time() { return Terminal.dt; }
 u32 get_terminal_width() { return Terminal.width; }
@@ -234,6 +236,8 @@ void _handle_sigwinch(i32 signo) {
     u32 new_size = Terminal.width * Terminal.height;
     array_extend_to(&Terminal.backbuffer, new_size);
     array_extend_to(&Terminal.frontbuffer, new_size);
+    Terminal.backbuffer.count  = new_size;
+    Terminal.frontbuffer.count = new_size;
 
     // trigger full redraw
     memset(Terminal.frontbuffer.items, 0, Terminal.frontbuffer.count);
@@ -261,9 +265,16 @@ i64 _time_ms() {
 void end_frame() {
     _calculate_dt();
 
+    Terminal.frame_cmds.count = 0;
+    array_append(&Terminal.frame_cmds, "\33[H", 3);
+
     u32 w = Terminal.width;
     u32 h = Terminal.height;
     usize total = w * h;
+
+    struct {
+        u32 x, y;
+    } cursor = {0};
 
     usize i = 0;
     while (i < total) {
@@ -283,6 +294,12 @@ void end_frame() {
         usize run_len = i - run_start;
         u32 row = run_start / w;
         u32 col = run_start % w;
+        _generate_cursor_move(&Terminal.frame_cmds, row, col);
+        array_append(&Terminal.frame_cmds, Terminal.backbuffer.items + run_start, run_len);
+        u32 new_pos = run_start + run_len;
+        cursor.y = new_pos / w;
+        cursor.x = new_pos % w;
+
         // Do not use vsnprintf, write code that generates
         // correct cursor move string, maybe use relative
         // cursor move if it is cheaper. E.g. instead of
@@ -305,18 +322,49 @@ void end_frame() {
         // optimization: track where the user writes and mark
         // these areas as dirty. Instead of diffing the whole
         // buffer, diff only the dirty rectangles.
-        write_strf("\33[%u;%uH", row + 1, col + 1);
-        _write_str_len(Terminal.backbuffer.items + run_start, run_len);
 
         memcpy(
             Terminal.frontbuffer.items + run_start,
-            &Terminal.backbuffer.items + run_start,
+            Terminal.backbuffer.items + run_start,
             run_len
         );
     }
+
+    _write_str_len(Terminal.frame_cmds.items, Terminal.frame_cmds.count);
 }
 
 void _calculate_dt() { Terminal.dt = _time_ms() - Terminal.saved_time; }
+
+void _generate_cursor_move(Array *a, u32 row, u32 col) {
+    byte tmp[64];
+    byte *p = tmp;
+
+    *p++ = '\33';
+    *p++ = '[';
+    p += _u32_to_ascii(p, row + 1);
+    *p++ = ';';
+    p += _u32_to_ascii(p, col + 1);
+    *p++ = 'H';
+
+    array_append(a, tmp, (usize)(p - tmp));
+}
+
+usize _u32_to_ascii(byte *dst, u32 value) {
+    byte tmp[16];
+    usize len = 0;
+
+    do {
+        tmp[len++] = '0' + (value % 10);
+        value /= 10;
+    } while (value);
+
+    for (usize i = 0; i < len; i++)
+        dst[i] = tmp[len - 1 - i];
+
+    return len;
+}
+
+
 
 void _poll_input() {
     #define PFD_SIZE 2
