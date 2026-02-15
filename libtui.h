@@ -112,6 +112,14 @@ void array_extend_to(Array *a, usize new_size) {
     a->count = new_size;
 }
 
+void array_append(Array *a, byte *item, usize len) {
+    if (a->items + a->count + len >= a->capacity) {
+        array_extend_to(a, a->items + a->count + len);
+    }
+
+    memcpy(a->items + a->count, item, len);
+}
+
 void array_destroy(Array a) { arena_destroy(a.arena); }
 
 struct {
@@ -122,6 +130,7 @@ struct {
     u64 saved_time, dt;
     Array frontbuffer;
     Array backbuffer;
+    Array frame_cmds;
     u32 width, height;
 } Terminal = {0};
 
@@ -188,6 +197,7 @@ void init_terminal() {
 
     Terminal.backbuffer  = array_init(Terminal.width * Terminal.height);
     Terminal.frontbuffer = array_init(Terminal.width * Terminal.height);
+    Terminal.frame_cmds  = array_init(0);
 }
 
 void _update_screen_dimensions() {
@@ -215,6 +225,7 @@ void _restore_term() {
 
     array_destroy(Terminal.backbuffer);
     array_destroy(Terminal.frontbuffer);
+    array_destroy(Terminal.frame_cmds);
 }
 
 void _handle_sigwinch(i32 signo) {
