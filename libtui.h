@@ -84,16 +84,16 @@ typedef struct {
     byte *items;
     usize count;
     usize capacity;
-} CharArray;
+} Array;
 
-CharArray char_arr_init(usize reserve_size) {
+Array array_init(usize reserve_size) {
     Arena arena = arena_init(GB(1));
 
     byte *arr = arena_push(&arena, byte, reserve_size);
     assert(arr);
     memset(arr, 0, reserve_size);
 
-    return (CharArray) {
+    return (Array) {
         .arena = arena,
         .items = arr,
         .count = reserve_size,
@@ -101,7 +101,7 @@ CharArray char_arr_init(usize reserve_size) {
     };
 }
 
-void char_arr_extend_to(CharArray *a, usize new_size) {
+void array_extend_to(Array *a, usize new_size) {
     if (new_size > a->capacity) {
         arena_clear(&a->arena);
         a->items = arena_push(&a->arena, byte, new_size);
@@ -112,7 +112,7 @@ void char_arr_extend_to(CharArray *a, usize new_size) {
     a->count = new_size;
 }
 
-void char_arr_destroy(CharArray a) { arena_destroy(a.arena); }
+void array_destroy(Array a) { arena_destroy(a.arena); }
 
 struct {
     struct termios orig_term;
@@ -120,8 +120,8 @@ struct {
     u32 timeout;
     Event event;
     u64 saved_time, dt;
-    CharArray frontbuffer;
-    CharArray backbuffer;
+    Array frontbuffer;
+    Array backbuffer;
     u32 width, height;
 } Terminal = {0};
 
@@ -186,8 +186,8 @@ void init_terminal() {
     sa.sa_flags = SA_RESTART;
     sigaction(SIGWINCH, &sa, NULL);
 
-    Terminal.backbuffer  = char_arr_init(Terminal.width * Terminal.height);
-    Terminal.frontbuffer = char_arr_init(Terminal.width * Terminal.height);
+    Terminal.backbuffer  = array_init(Terminal.width * Terminal.height);
+    Terminal.frontbuffer = array_init(Terminal.width * Terminal.height);
 }
 
 void _update_screen_dimensions() {
@@ -213,16 +213,16 @@ void _restore_term() {
     fd_close(Terminal.pipe.read_fd);
     fd_close(Terminal.pipe.write_fd);
 
-    char_arr_destroy(Terminal.backbuffer);
-    char_arr_destroy(Terminal.frontbuffer);
+    array_destroy(Terminal.backbuffer);
+    array_destroy(Terminal.frontbuffer);
 }
 
 void _handle_sigwinch(i32 signo) {
     _update_screen_dimensions();
 
     u32 new_size = Terminal.width * Terminal.height;
-    char_arr_extend_to(&Terminal.backbuffer, new_size);
-    char_arr_extend_to(&Terminal.frontbuffer, new_size);
+    array_extend_to(&Terminal.backbuffer, new_size);
+    array_extend_to(&Terminal.frontbuffer, new_size);
 
     // trigger full redraw
     memset(Terminal.frontbuffer.items, 0, Terminal.frontbuffer.count);
