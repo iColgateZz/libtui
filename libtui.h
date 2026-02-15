@@ -299,15 +299,8 @@ void end_frame() {
         u32 new_pos = run_start + run_len;
         cursor.y = new_pos / w;
         cursor.x = new_pos % w;
-
-        // Do not use vsnprintf, write code that generates
-        // correct cursor move string, maybe use relative
-        // cursor move if it is cheaper. E.g. instead of
-        // go to (x, y), go 1 unit down.
-
-        // Remove write syscalls. Store everything in a buffer,
-        // flush cursor cmds and new text in one go. Single
-        // flush per frame! Track cursor position?
+        // Maybe use relative cursor move if it is cheaper. 
+        // E.g. instead of go to (x, y), go 1 unit down.
 
         // Maybe instead of storing raw bytes, emit commands
         // (new struct) and store them. Later some logic may
