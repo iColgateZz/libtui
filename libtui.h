@@ -133,7 +133,7 @@ struct {
     u32 width, height;
 } Terminal = {0};
 
-void _generate_cursor_move(Array *a, u32 row, u32 col);
+void _generate_cursor_move(Array *a, u32 old_row, u32 old_col, u32 new_row, u32 new_col);
 usize _u32_to_ascii(byte *dst, u32 value);
 
 u64 get_delta_time() { return Terminal.dt; }
@@ -262,6 +262,7 @@ i64 _time_ms() {
     return ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
 }
 
+#define GAP_THRESHOLD 8
 void end_frame() {
     _calculate_dt();
 
@@ -276,39 +277,44 @@ void end_frame() {
         u32 x, y;
     } cursor = {0};
 
-    usize i = 0;
-    while (i < total) {
-        if (Terminal.backbuffer.items[i] ==
-            Terminal.frontbuffer.items[i]) {
-            i++;
+    usize pos = 0;
+    usize gap = 0;
+    while (pos < total) {
+        if (Terminal.backbuffer.items[pos] ==
+            Terminal.frontbuffer.items[pos]) {
+            pos++;
+            gap++;
             continue;
         }
 
-        usize run_start = i;
-        while (i < total &&
-               Terminal.backbuffer.items[i] !=
-               Terminal.frontbuffer.items[i]) {
-            i++;
+        usize run_start = pos;
+        while (pos < total &&
+               Terminal.backbuffer.items[pos] !=
+               Terminal.frontbuffer.items[pos]) {
+            pos++;
         }
 
-        usize run_len = i - run_start;
-        u32 row = run_start / w;
-        u32 col = run_start % w;
-        _generate_cursor_move(&Terminal.frame_cmds, row, col);
-        array_append(&Terminal.frame_cmds, Terminal.backbuffer.items + run_start, run_len);
-        u32 new_pos = run_start + run_len;
-        cursor.y = new_pos / w;
-        cursor.x = new_pos % w;
+        usize run_len = pos - run_start;
+        if (gap <= GAP_THRESHOLD) {
+            // instead of emitting cursor move, just copy the bytes
+            // that are the same in both buffers
+            array_append(&Terminal.frame_cmds, Terminal.backbuffer.items + run_start - gap, run_len + gap);
+        } else {
+            u32 new_row = run_start / w;
+            u32 new_col = run_start % w;
+            _generate_cursor_move(&Terminal.frame_cmds, cursor.y, cursor.x, new_row, new_col);
+            array_append(&Terminal.frame_cmds, Terminal.backbuffer.items + run_start, run_len);
+        }
+
+        cursor.y = pos / w;
+        cursor.x = pos % w;
+        gap = 0;
         // Maybe use relative cursor move if it is cheaper. 
         // E.g. instead of go to (x, y), go 1 unit down.
 
         // Maybe instead of storing raw bytes, emit commands
         // (new struct) and store them. Later some logic may
         // handle the commands, reorder them or something
-
-        // If distance between batches is smaller than a command,
-        // it is okay to just copy the few bytes between them
-        // instead of emitting a cursor move sequence
 
         // Everything above is probably more than enough but
         // if I feel fancy I can also implement dirty rectangle
@@ -328,16 +334,30 @@ void end_frame() {
 
 void _calculate_dt() { Terminal.dt = _time_ms() - Terminal.saved_time; }
 
-void _generate_cursor_move(Array *a, u32 row, u32 col) {
+// absolute: 4 + len(x) + len(y)
+// relative 3 + len(d)
+// relative move is indeed cheaper, however
+// there is a bug when using it and I have
+// no idea what causes it
+void _generate_cursor_move(Array *a, u32 old_row, u32 old_col, u32 new_row, u32 new_col) {
     byte tmp[64];
     byte *p = tmp;
+    UNUSED(old_col);
+    UNUSED(old_row);
 
-    *p++ = '\33';
-    *p++ = '[';
-    p += _u32_to_ascii(p, row + 1);
-    *p++ = ';';
-    p += _u32_to_ascii(p, col + 1);
-    *p++ = 'H';
+    // if (old_row == new_row) {
+    //     *p++ = '\33';
+    //     *p++ = '[';
+    //     p += _u32_to_ascii(p, new_col - old_col);
+    //     *p++ = 'C';
+    // } else {
+        *p++ = '\33';
+        *p++ = '[';
+        p += _u32_to_ascii(p, new_row + 1);
+        *p++ = ';';
+        p += _u32_to_ascii(p, new_col + 1);
+        *p++ = 'H';
+    // }
 
     array_append(a, tmp, (usize)(p - tmp));
 }
@@ -356,8 +376,6 @@ usize _u32_to_ascii(byte *dst, u32 value) {
 
     return len;
 }
-
-
 
 void _poll_input() {
     #define PFD_SIZE 2
