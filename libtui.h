@@ -84,39 +84,45 @@ typedef struct {
     byte *items;
     usize count;
     usize capacity;
+    usize item_size;
 } Array;
 
-Array array_init(usize reserve_size) {
-    Arena arena = arena_init(GB(1));
+Array array_init(usize reserve_size, usize item_size) {
+    Arena arena = arena_init(GB(16));
 
-    byte *arr = arena_push(&arena, byte, reserve_size);
+    byte *arr = arena_push(&arena, byte, reserve_size * item_size);
     assert(arr);
-    memset(arr, 0, reserve_size);
+    memset(arr, 0, reserve_size * item_size);
 
     return (Array) {
         .arena = arena,
         .items = arr,
-        .count = reserve_size,
-        .capacity = arena.committed_size
+        .count = 0,
+        .capacity = arena.committed_size,
+        .item_size = item_size
     };
 }
 
-void array_extend_to(Array *a, usize new_size) {
-    if (new_size > a->capacity) {
-        arena_clear(&a->arena);
-        a->items = arena_push(&a->arena, byte, new_size);
-        assert(a->items);
-        a->capacity = a->arena.committed_size;
+void array_resize(Array *a, usize new_size) {
+    arena_clear(&a->arena);
+    a->items = arena_push(&a->arena, byte, new_size * a->item_size);
+    assert(a->items);
+    a->capacity = a->arena.committed_size;
+}
+
+void array_extend_to(Array *a, usize new_capacity) {
+    if (new_capacity * a->item_size >= a->capacity) {
+        array_resize(a, new_capacity);
     }
 }
 
-void array_append(Array *a, byte *item, usize len) {
-    if (a->count + len >= a->capacity) {
-        array_extend_to(a, a->count + len);
+void array_append(Array *a, byte *item, usize n) {
+    if ((a->count + n) * a->item_size >= a->capacity) {
+        array_resize(a, a->count + n);
     }
 
-    memcpy(a->items + a->count, item, len);
-    a->count += len;
+    memcpy(a->items + a->count * a->item_size, item, n * a->item_size);
+    a->count += n;
 }
 
 void array_destroy(Array a) { arena_destroy(a.arena); }
@@ -197,9 +203,13 @@ void init_terminal() {
     sa.sa_flags = SA_RESTART;
     sigaction(SIGWINCH, &sa, NULL);
 
-    Terminal.backbuffer  = array_init(Terminal.width * Terminal.height);
-    Terminal.frontbuffer = array_init(Terminal.width * Terminal.height);
-    Terminal.frame_cmds  = array_init(0);
+    Terminal.backbuffer  = array_init(Terminal.width * Terminal.height, sizeof(byte));
+    Terminal.backbuffer.count = Terminal.width * Terminal.height;
+
+    Terminal.frontbuffer = array_init(Terminal.width * Terminal.height, sizeof(byte));
+    Terminal.frontbuffer.count = Terminal.width * Terminal.height;
+
+    Terminal.frame_cmds  = array_init(Terminal.width * Terminal.height, sizeof(byte));
 }
 
 void _update_screen_dimensions() {
