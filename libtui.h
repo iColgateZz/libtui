@@ -344,6 +344,11 @@ void end_frame() {
         u32 x, y;
     } cursor = {0};
 
+    // implement dirty rectangle optimization:
+    // track where the user writes and mark
+    // these areas as dirty. Instead of diffing the whole
+    // buffer, diff only the dirty rectangles.
+
     usize pos = 0;
     usize gap = 0;
     while (pos < total) {
@@ -369,6 +374,8 @@ void end_frame() {
         } else {
             u32 new_row = run_start / w;
             u32 new_col = run_start % w;
+            // Maybe use relative cursor move if it is cheaper. 
+            // E.g. instead of go to (x, y), go 1 unit down.
             _generate_cursor_move(&Terminal.frame_cmds, cursor.y, cursor.x, new_row, new_col);
             array_append(&Terminal.frame_cmds, Terminal.backbuffer.items + run_start, run_len);
         }
@@ -376,18 +383,6 @@ void end_frame() {
         cursor.y = pos / w;
         cursor.x = pos % w;
         gap = 0;
-        // Maybe use relative cursor move if it is cheaper. 
-        // E.g. instead of go to (x, y), go 1 unit down.
-
-        // Maybe instead of storing raw bytes, emit commands
-        // (new struct) and store them. Later some logic may
-        // handle the commands, reorder them or something
-
-        // Everything above is probably more than enough but
-        // if I feel fancy I can also implement dirty rectangle
-        // optimization: track where the user writes and mark
-        // these areas as dirty. Instead of diffing the whole
-        // buffer, diff only the dirty rectangles.
 
         memcpy(
             Terminal.frontbuffer.items + run_start,
@@ -401,8 +396,6 @@ void end_frame() {
 
 void _calculate_dt() { Terminal.dt = _time_ms() - Terminal.saved_time; }
 
-// absolute: 4 + len(x) + len(y)
-// relative 3 + len(d)
 // relative move is indeed cheaper, however
 // there is a bug when using it and I have
 // no idea what causes it
