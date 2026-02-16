@@ -144,9 +144,22 @@ typedef struct {
     u32 x, y, w, h;
 } Rectangle;
 
-void push_scope(u32 x, u32 y, u32 w, u32 h) {
-    Rectangle r = {x, y, w, h};
-    array_append(&Terminal.scopes, &r, 1);
+b32 point_in_rect(u32 x, u32 y, Rectangle r) {
+    return r.x <= x && x < r.x + r.w 
+        && r.y <= y && y < r.y + r.h;
+}
+
+Rectangle rect_intersect(Rectangle a, Rectangle b) {
+    u32 x1 = MAX(a.x, b.x);
+    u32 y1 = MAX(a.y, b.y);
+    u32 x2 = MIN(a.x + a.w, b.x + b.w);
+    u32 y2 = MIN(a.y + a.h, b.y + b.h);
+
+    if (x2 <= x1 || y2 <= y1) {
+        return (Rectangle){0,0,0,0}; // fully clipped
+    }
+
+    return (Rectangle){ x1, y1, x2 - x1, y2 - y1 };
 }
 
 void pop_scope() { 
@@ -161,9 +174,11 @@ Rectangle peek_scope() {
     return *r;
 }
 
-b32 point_in_scope(u32 x, u32 y, Rectangle r) {
-    return r.x <= x && x < r.x + r.w 
-        && r.y <= y && y < r.y + r.h;
+void push_scope(u32 x, u32 y, u32 w, u32 h) {
+    Rectangle parent = peek_scope();
+    Rectangle r = {x, y, w, h};
+    Rectangle clipped = rect_intersect(parent, r);
+    array_append(&Terminal.scopes, &clipped, 1);
 }
 
 void _generate_cursor_move(Array *a, u32 old_row, u32 old_col, u32 new_row, u32 new_col);
@@ -238,7 +253,13 @@ void init_terminal() {
 
     Terminal.frame_cmds  = array_init(Terminal.width * Terminal.height, sizeof(byte));
     Terminal.scopes      = array_init(256, sizeof(Rectangle));
-    push_scope(0, 0, Terminal.width, Terminal.height);
+    // manually add the terminal scope
+    Terminal.scopes.count = 1;
+    Rectangle *r = (Rectangle *)Terminal.scopes.items;
+    *r = (Rectangle) {
+        .w = Terminal.width,
+        .h = Terminal.height,
+    };
 }
 
 void _update_screen_dimensions() {
@@ -280,8 +301,10 @@ void _handle_sigwinch(i32 signo) {
     Terminal.frontbuffer.count = new_size;
 
     Rectangle *r = (Rectangle *)Terminal.scopes.items;
-    r->w = Terminal.width;
-    r->h = Terminal.height;
+    *r = (Rectangle) {
+        .w = Terminal.width,
+        .h = Terminal.height,
+    };
 
     // trigger full redraw
     memset(Terminal.frontbuffer.items, 0, Terminal.frontbuffer.count);
@@ -506,15 +529,16 @@ void _parse_event(Event *e, isize n) {
     return;
 }
 
+// Draw relative to parent scope?
 void put_char(u32 x, u32 y, byte c) {
     Rectangle parent = peek_scope();
-    if (!point_in_scope(x, y, parent)) return;
+    if (!point_in_rect(x, y, parent)) return;
     Terminal.backbuffer.items[x + y * Terminal.width] = c;
 }
 
 void put_str(u32 x, u32 y, byte *str, usize len) {
     Rectangle parent = peek_scope();
-    if (!point_in_scope(x, y, parent)) return;
+    if (!point_in_rect(x, y, parent)) return;
 
     usize copy_len = MIN(len, parent.x + parent.w - x);
     memcpy(Terminal.backbuffer.items + x + y * Terminal.width, str, copy_len);

@@ -44,18 +44,25 @@ i32 main(i32 argc, byte *argv[]) {
     PSH_REBUILD_UNITY_AUTO(argc, argv);
 
     init_terminal();
-    set_max_timeout_ms(16);
+    set_max_timeout_ms(10);
 
     u32 len = 6;
     Widget a = {
-        .x = get_terminal_width() / 2 - len / 2,
-        .y = get_terminal_height() / 2 - len / 2,
-        .w = len,
-        .h = len,
+        // .x = get_terminal_width() / 2 - len / 2,
+        // .y = get_terminal_height() / 2 - len / 2,
+        // .w = len,
+        // .h = len,
+        .w = get_terminal_width(),
+        .h = get_terminal_height(),
         .len = len,
         .state = 0,
         .counter = 0,
     };
+
+    usize side = 88;
+    push_scope(0, 0, side, side);
+    push_scope(side - 1, 0, 1, 15);
+    // push_scope(0, 0, 10, 10);
 
     while (!is_key_pressed('q')) {
         begin_frame();
