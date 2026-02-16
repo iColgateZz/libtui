@@ -116,7 +116,7 @@ void array_extend_to(Array *a, usize new_capacity) {
     }
 }
 
-void array_append(Array *a, byte *item, usize n) {
+void array_append(Array *a, void *item, usize n) {
     if ((a->count + n) * a->item_size >= a->capacity) {
         array_resize(a, a->count + n);
     }
@@ -136,8 +136,35 @@ struct {
     Array frontbuffer;
     Array backbuffer;
     Array frame_cmds;
+    Array scopes;
     u32 width, height;
 } Terminal = {0};
+
+typedef struct {
+    u32 x, y, w, h;
+} Rectangle;
+
+void push_scope(u32 x, u32 y, u32 w, u32 h) {
+    Rectangle r = {x, y, w, h};
+    array_append(&Terminal.scopes, &r, 1);
+}
+
+void pop_scope() { 
+    Terminal.scopes.count--;
+    assert(Terminal.scopes.count >= 1);
+}
+
+Rectangle peek_scope() {
+    byte *base = Terminal.scopes.items;
+    usize idx = Terminal.scopes.count - 1;
+    Rectangle *r = (Rectangle *)(base + idx * Terminal.scopes.item_size);
+    return *r;
+}
+
+b32 point_in_scope(u32 x, u32 y, Rectangle r) {
+    return r.x <= x && x < r.x + r.w 
+        && r.y <= y && y < r.y + r.h;
+}
 
 void _generate_cursor_move(Array *a, u32 old_row, u32 old_col, u32 new_row, u32 new_col);
 usize _u32_to_ascii(byte *dst, u32 value);
@@ -210,6 +237,8 @@ void init_terminal() {
     Terminal.frontbuffer.count = Terminal.width * Terminal.height;
 
     Terminal.frame_cmds  = array_init(Terminal.width * Terminal.height, sizeof(byte));
+    Terminal.scopes      = array_init(256, sizeof(Rectangle));
+    push_scope(0, 0, Terminal.width, Terminal.height);
 }
 
 void _update_screen_dimensions() {
@@ -238,6 +267,7 @@ void _restore_term() {
     array_destroy(Terminal.backbuffer);
     array_destroy(Terminal.frontbuffer);
     array_destroy(Terminal.frame_cmds);
+    array_destroy(Terminal.scopes);
 }
 
 void _handle_sigwinch(i32 signo) {
@@ -248,6 +278,10 @@ void _handle_sigwinch(i32 signo) {
     array_extend_to(&Terminal.frontbuffer, new_size);
     Terminal.backbuffer.count  = new_size;
     Terminal.frontbuffer.count = new_size;
+
+    Rectangle *r = (Rectangle *)Terminal.scopes.items;
+    r->w = Terminal.width;
+    r->h = Terminal.height;
 
     // trigger full redraw
     memset(Terminal.frontbuffer.items, 0, Terminal.frontbuffer.count);
@@ -473,15 +507,16 @@ void _parse_event(Event *e, isize n) {
 }
 
 void put_char(u32 x, u32 y, byte c) {
-    if (x >= Terminal.width || y >= Terminal.height) return;
+    Rectangle parent = peek_scope();
+    if (!point_in_scope(x, y, parent)) return;
     Terminal.backbuffer.items[x + y * Terminal.width] = c;
 }
 
 void put_str(u32 x, u32 y, byte *str, usize len) {
-    if (x >= Terminal.width || y >= Terminal.height) return;
+    Rectangle parent = peek_scope();
+    if (!point_in_scope(x, y, parent)) return;
 
-    // usize copy_len = MIN(len, Terminal.width - x); // clip at row end
-    usize copy_len = MIN(len, Terminal.width * Terminal.height - (x + y * Terminal.width));
+    usize copy_len = MIN(len, parent.x + parent.w - x);
     memcpy(Terminal.backbuffer.items + x + y * Terminal.width, str, copy_len);
 }
 
