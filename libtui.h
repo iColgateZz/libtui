@@ -141,6 +141,7 @@ struct {
     Array backbuffer;
     Array frame_cmds;
     Array scopes;
+    Array dirty;
     u32 width, height;
 } Terminal = {0};
 
@@ -165,6 +166,22 @@ Rectangle rect_intersect(Rectangle a, Rectangle b) {
 
     return (Rectangle){ x1, y1, x2 - x1, y2 - y1 };
 }
+
+Rectangle rect_union(Rectangle a, Rectangle b) {
+    u32 left   = MIN(a.x, b.x);
+    u32 top    = MIN(a.y, b.y);
+    u32 right  = MAX(a.x + a.w, b.x + b.w);
+    u32 bottom = MAX(a.y + a.h, b.y + b.h);
+
+    return (Rectangle) {
+        .x = left,
+        .y = top,
+        .w = right - left,
+        .h = bottom - top
+    };
+}
+
+Rectangle merge_dirty_rects();
 
 void pop_scope() { 
     Terminal.scopes.count--;
@@ -256,6 +273,7 @@ void init_terminal() {
     Terminal.frontbuffer.count = Terminal.width * Terminal.height;
 
     Terminal.frame_cmds  = array_init(Terminal.width * Terminal.height, sizeof(byte));
+    Terminal.dirty       = array_init(256, sizeof(Rectangle));
     Terminal.scopes      = array_init(256, sizeof(Rectangle));
     // manually add the terminal scope
     Terminal.scopes.count = 1;
@@ -292,6 +310,7 @@ void _restore_term() {
     array_destroy(Terminal.backbuffer);
     array_destroy(Terminal.frontbuffer);
     array_destroy(Terminal.frame_cmds);
+    array_destroy(Terminal.dirty);
     array_destroy(Terminal.scopes);
 }
 
@@ -337,65 +356,87 @@ i64 _time_ms() {
 void end_frame() {
     _calculate_dt();
 
+    if (Terminal.dirty.count == 0) return; // nothing changed
+
+    Rectangle dirty = merge_dirty_rects();
+
     Terminal.frame_cmds.count = 0;
     array_append(&Terminal.frame_cmds, "\33[H", 3);
 
-    u32 w = Terminal.width;
-    u32 h = Terminal.height;
-    usize total = w * h;
+    u32 screen_w = Terminal.width;
 
     struct {
         u32 x, y;
     } cursor = {0};
 
-    // implement dirty rectangle optimization:
-    // track where the user writes and mark
-    // these areas as dirty. Instead of diffing the whole
-    // buffer, diff only the dirty rectangles.
+    for (u32 row = dirty.y; row < dirty.y + dirty.h; row++) {
 
-    usize pos = 0;
-    usize gap = 0;
-    while (pos < total) {
-        if (Terminal.backbuffer.items[pos] ==
-            Terminal.frontbuffer.items[pos]) {
-            pos++;
-            gap++;
-            continue;
+        usize row_start = row * screen_w + dirty.x;
+        usize row_end   = row_start + dirty.w;
+
+        usize pos = row_start;
+        usize gap = 0;
+        b32 first_in_row = true;
+
+        while (pos < row_end) {
+
+            if (Terminal.backbuffer.items[pos] ==
+                Terminal.frontbuffer.items[pos]) {
+                pos++;
+                gap++;
+                continue;
+            }
+
+            usize run_start = pos;
+
+            while (pos < row_end &&
+                   Terminal.backbuffer.items[pos] !=
+                   Terminal.frontbuffer.items[pos]) {
+                pos++;
+            }
+
+            usize run_len = pos - run_start;
+
+            if (gap <= GAP_THRESHOLD && !first_in_row) {
+                // instead of emitting cursor move, just copy the bytes
+                // that are the same in both buffers
+                array_append(&Terminal.frame_cmds, Terminal.backbuffer.items + run_start - gap, run_len + gap);
+            } else {
+                u32 new_row = run_start / screen_w;
+                u32 new_col = run_start % screen_w;
+
+                // Maybe use relative cursor move if it is cheaper. 
+                // E.g. instead of go to (x, y), go 1 unit down.
+                _generate_cursor_move(&Terminal.frame_cmds, cursor.y, cursor.x, new_row, new_col);
+                array_append(&Terminal.frame_cmds, Terminal.backbuffer.items + run_start, run_len);
+            }
+
+            cursor.y = pos / screen_w;
+            cursor.x = pos % screen_w;
+            gap = 0;
+            first_in_row = false;
+
+            memcpy(
+                Terminal.frontbuffer.items + run_start,
+                Terminal.backbuffer.items + run_start,
+                run_len
+            );
         }
-
-        usize run_start = pos;
-        while (pos < total &&
-               Terminal.backbuffer.items[pos] !=
-               Terminal.frontbuffer.items[pos]) {
-            pos++;
-        }
-
-        usize run_len = pos - run_start;
-        if (gap <= GAP_THRESHOLD) {
-            // instead of emitting cursor move, just copy the bytes
-            // that are the same in both buffers
-            array_append(&Terminal.frame_cmds, Terminal.backbuffer.items + run_start - gap, run_len + gap);
-        } else {
-            u32 new_row = run_start / w;
-            u32 new_col = run_start % w;
-            // Maybe use relative cursor move if it is cheaper. 
-            // E.g. instead of go to (x, y), go 1 unit down.
-            _generate_cursor_move(&Terminal.frame_cmds, cursor.y, cursor.x, new_row, new_col);
-            array_append(&Terminal.frame_cmds, Terminal.backbuffer.items + run_start, run_len);
-        }
-
-        cursor.y = pos / w;
-        cursor.x = pos % w;
-        gap = 0;
-
-        memcpy(
-            Terminal.frontbuffer.items + run_start,
-            Terminal.backbuffer.items + run_start,
-            run_len
-        );
     }
 
+    Terminal.dirty.count = 0;
     _write_str_len(Terminal.frame_cmds.items, Terminal.frame_cmds.count);
+}
+
+Rectangle merge_dirty_rects() {
+    Rectangle bounds = *((Rectangle *)array_get(&Terminal.dirty, 0));
+
+    for (usize i = 1; i < Terminal.dirty.count; i++) {
+        Rectangle r = *((Rectangle *)array_get(&Terminal.dirty, i));
+        bounds = rect_union(bounds, r);
+    }
+
+    return bounds;
 }
 
 void _calculate_dt() { Terminal.dt = _time_ms() - Terminal.saved_time; }
@@ -530,7 +571,11 @@ void _parse_event(Event *e, isize n) {
 void put_char(u32 x, u32 y, byte c) {
     Rectangle parent = peek_scope();
     if (!point_in_rect(x, y, parent)) return;
+
     Terminal.backbuffer.items[x + y * Terminal.width] = c;
+
+    Rectangle r = {x, y, 1, 1};
+    array_append(&Terminal.dirty, &r, 1);
 }
 
 void put_str(u32 x, u32 y, byte *str, usize len) {
@@ -539,6 +584,9 @@ void put_str(u32 x, u32 y, byte *str, usize len) {
 
     usize copy_len = MIN(len, parent.x + parent.w - x);
     memcpy(Terminal.backbuffer.items + x + y * Terminal.width, str, copy_len);
+
+    Rectangle r = {x, y, copy_len, 1};
+    array_append(&Terminal.dirty, &r, 1);
 }
 
 #endif //LIBTUI_IMPL
