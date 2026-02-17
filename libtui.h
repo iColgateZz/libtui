@@ -404,9 +404,6 @@ void end_frame() {
             } else {
                 u32 new_row = run_start / screen_w;
                 u32 new_col = run_start % screen_w;
-
-                // Maybe use relative cursor move if it is cheaper. 
-                // E.g. instead of go to (x, y), go 1 unit down.
                 _generate_cursor_move(&Terminal.frame_cmds, cursor.y, cursor.x, new_row, new_col);
                 array_append(&Terminal.frame_cmds, Terminal.backbuffer.items + run_start, run_len);
             }
@@ -449,6 +446,9 @@ void _generate_cursor_move(Array *a, u32 old_row, u32 old_col, u32 new_row, u32 
     byte *p = tmp;
     UNUSED(old_col);
     UNUSED(old_row);
+
+    // Maybe use relative cursor move if it is cheaper. 
+    // E.g. instead of go to (x, y), go 1 unit down.
 
     // if (old_row == new_row) {
     //     *p++ = '\33';
