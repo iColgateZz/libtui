@@ -32,6 +32,34 @@ typedef struct {
     Key parsed_key;
 } Event;
 
+EventType get_event_type();
+Event get_event();
+Key get_key();
+b32 is_key_pressed(Key k);
+
+typedef struct {
+    u32 x, y, w, h;
+} Rectangle;
+
+b32 point_in_rect(u32 x, u32 y, Rectangle r);
+Rectangle rect_intersect(Rectangle a, Rectangle b);
+Rectangle rect_union(Rectangle a, Rectangle b);
+
+typedef struct {
+    Arena arena;
+    byte *items;
+    usize count;
+    usize capacity;
+    usize item_size;
+} Array;
+
+Array array_init(usize reserve_size, usize item_size);
+void  array_resize(Array *a, usize new_size);
+void  array_extend_to(Array *a, usize new_capacity);
+void  array_append(Array *a, void *item, usize n);
+void *array_get(Array *a, usize i);
+void  array_destroy(Array a);
+
 void init_terminal();
 void set_max_timeout_ms(u32 timeout);
 void begin_frame();
@@ -39,10 +67,6 @@ void end_frame();
 u64 get_delta_time();
 u32 get_terminal_width();
 u32 get_terminal_height();
-EventType get_event_type();
-Event get_event();
-Key get_key();
-b32 is_key_pressed(Key k);
 
 void put_char(u32 x, u32 y, byte c);
 void put_str(u32 x, u32 y, byte *str, usize len);
@@ -65,6 +89,20 @@ void put_str(u32 x, u32 y, byte *str, usize len);
 #define MIN(a, b)     ((a) < (b) ? (a) : (b))
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
 
+struct {
+    struct termios orig_term;
+    Unix_Pipe pipe;
+    u32 timeout;
+    Event event;
+    u64 saved_time, dt;
+    Array frontbuffer;
+    Array backbuffer;
+    Array frame_cmds;
+    Array scopes;
+    Array dirty;
+    u32 width, height;
+} Terminal = {0};
+
 // private
 void restore_term();
 void update_screen_dimensions();
@@ -78,14 +116,13 @@ void write_str_len(byte *str, usize len);
 void write_strf_impl(byte *fmt, ...);
 #define write_str(s)        write_str_len(s, sizeof(s) - 1)
 #define write_strf(...)     write_strf_impl(__VA_ARGS__)
-
-typedef struct {
-    Arena arena;
-    byte *items;
-    usize count;
-    usize capacity;
-    usize item_size;
-} Array;
+void generate_absolute_cursor_move(Array *a, u32 row, u32 col);
+void generate_relative_cursor_move(Array *a, u32 step);
+usize u32_to_ascii(byte *dst, u32 value);
+Rectangle merge_dirty_rects();
+void pop_scope();
+Rectangle peek_scope();
+void push_scope(u32 x, u32 y, u32 w, u32 h);
 
 Array array_init(usize reserve_size, usize item_size) {
     Arena arena = arena_init(GB(16));
@@ -131,23 +168,6 @@ void *array_get(Array *a, usize i) {
 
 void array_destroy(Array a) { arena_destroy(a.arena); }
 
-struct {
-    struct termios orig_term;
-    Unix_Pipe pipe;
-    u32 timeout;
-    Event event;
-    u64 saved_time, dt;
-    Array frontbuffer;
-    Array backbuffer;
-    Array frame_cmds;
-    Array scopes;
-    Array dirty;
-    u32 width, height;
-} Terminal = {0};
-
-typedef struct {
-    u32 x, y, w, h;
-} Rectangle;
 
 b32 point_in_rect(u32 x, u32 y, Rectangle r) {
     return r.x <= x && x < r.x + r.w 
@@ -181,8 +201,6 @@ Rectangle rect_union(Rectangle a, Rectangle b) {
     };
 }
 
-Rectangle merge_dirty_rects();
-
 void pop_scope() { 
     Terminal.scopes.count--;
     assert(Terminal.scopes.count >= 1);
@@ -201,10 +219,6 @@ void push_scope(u32 x, u32 y, u32 w, u32 h) {
     Rectangle clipped = rect_intersect(parent, r);
     array_append(&Terminal.scopes, &clipped, 1);
 }
-
-void generate_absolute_cursor_move(Array *a, u32 row, u32 col);
-void generate_relative_cursor_move(Array *a, u32 step);
-usize u32_to_ascii(byte *dst, u32 value);
 
 u64 get_delta_time() { return Terminal.dt; }
 u32 get_terminal_width() { return Terminal.width; }
