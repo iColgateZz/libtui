@@ -202,7 +202,8 @@ void push_scope(u32 x, u32 y, u32 w, u32 h) {
     array_append(&Terminal.scopes, &clipped, 1);
 }
 
-void _generate_cursor_move(Array *a, u32 old_row, u32 old_col, u32 new_row, u32 new_col);
+void _generate_absolute_cursor_move(Array *a, u32 row, u32 col);
+void _generate_relative_cursor_move(Array *a, u32 step);
 usize _u32_to_ascii(byte *dst, u32 value);
 
 u64 get_delta_time() { return Terminal.dt; }
@@ -330,7 +331,10 @@ void _handle_sigwinch(i32 signo) {
     };
 
     // trigger full redraw
-    memset(Terminal.frontbuffer.items, 0, Terminal.frontbuffer.count);
+    memset(Terminal.frontbuffer.items, 0xFF, Terminal.frontbuffer.count);
+    Rectangle full = {0, 0, Terminal.width, Terminal.height};
+    Terminal.dirty.count = 0;
+    array_append(&Terminal.dirty, &full, 1);
 
     write(Terminal.pipe.write_fd, &signo, sizeof signo);
 }
@@ -397,21 +401,26 @@ void end_frame() {
 
             usize run_len = pos - run_start;
 
-            if (gap <= GAP_THRESHOLD && !first_in_row) {
+            if (first_in_row) {
+                first_in_row = false;
+                u32 new_row = run_start / screen_w;
+                u32 new_col = run_start % screen_w;
+                _generate_absolute_cursor_move(&Terminal.frame_cmds, new_row, new_col);
+                array_append(&Terminal.frame_cmds, Terminal.backbuffer.items + run_start, run_len);
+            } else if (gap <= GAP_THRESHOLD) {
                 // instead of emitting cursor move, just copy the bytes
                 // that are the same in both buffers
                 array_append(&Terminal.frame_cmds, Terminal.backbuffer.items + run_start - gap, run_len + gap);
+                gap = 0;
             } else {
-                u32 new_row = run_start / screen_w;
+                // I know it is the same row
                 u32 new_col = run_start % screen_w;
-                _generate_cursor_move(&Terminal.frame_cmds, cursor.y, cursor.x, new_row, new_col);
+                _generate_relative_cursor_move(&Terminal.frame_cmds, new_col - cursor.x);
                 array_append(&Terminal.frame_cmds, Terminal.backbuffer.items + run_start, run_len);
             }
 
             cursor.y = pos / screen_w;
             cursor.x = pos % screen_w;
-            gap = 0;
-            first_in_row = false;
 
             memcpy(
                 Terminal.frontbuffer.items + run_start,
@@ -438,31 +447,28 @@ Rectangle merge_dirty_rects() {
 
 void _calculate_dt() { Terminal.dt = _time_ms() - Terminal.saved_time; }
 
-// relative move is indeed cheaper, however
-// there is a bug when using it and I have
-// no idea what causes it
-void _generate_cursor_move(Array *a, u32 old_row, u32 old_col, u32 new_row, u32 new_col) {
+void _generate_absolute_cursor_move(Array *a, u32 row, u32 col) {
     byte tmp[64];
     byte *p = tmp;
-    UNUSED(old_col);
-    UNUSED(old_row);
 
-    // Maybe use relative cursor move if it is cheaper. 
-    // E.g. instead of go to (x, y), go 1 unit down.
+    *p++ = '\33';
+    *p++ = '[';
+    p += _u32_to_ascii(p, row + 1);
+    *p++ = ';';
+    p += _u32_to_ascii(p, col + 1);
+    *p++ = 'H';
 
-    // if (old_row == new_row) {
-    //     *p++ = '\33';
-    //     *p++ = '[';
-    //     p += _u32_to_ascii(p, new_col - old_col);
-    //     *p++ = 'C';
-    // } else {
-        *p++ = '\33';
-        *p++ = '[';
-        p += _u32_to_ascii(p, new_row + 1);
-        *p++ = ';';
-        p += _u32_to_ascii(p, new_col + 1);
-        *p++ = 'H';
-    // }
+    array_append(a, tmp, (usize)(p - tmp));
+}
+
+void _generate_relative_cursor_move(Array *a, u32 step) {
+    byte tmp[64];
+    byte *p = tmp;
+
+    *p++ = '\33';
+    *p++ = '[';
+    p += _u32_to_ascii(p, step);
+    *p++ = 'C';
 
     array_append(a, tmp, (usize)(p - tmp));
 }

@@ -48,12 +48,20 @@ i32 main(i32 argc, byte *argv[]) {
 
     u32 len = 6;
     Widget a = {
-        .x = get_terminal_width() / 2 - len / 2,
+        .x = get_terminal_width() / 4 - len / 2,
         .y = get_terminal_height() / 2 - len / 2,
         .w = len,
         .h = len,
-        // .w = get_terminal_width(),
-        // .h = get_terminal_height(),
+        .len = len,
+        .state = 0,
+        .counter = 0,
+    };
+
+    Widget b = {
+        .x = get_terminal_width() / 4 * 3 - len / 2,
+        .y = get_terminal_height() / 2 - len / 2,
+        .w = len,
+        .h = len,
         .len = len,
         .state = 0,
         .counter = 0,
@@ -70,10 +78,14 @@ i32 main(i32 argc, byte *argv[]) {
         // application logic
         if (get_event_type() == EWinch) {
             on_winch(&a);
+            on_winch(&b);
         }
 
         update(&a);
         draw(&a);
+
+        update(&b);
+        draw(&b);
 
         end_frame();
     }
