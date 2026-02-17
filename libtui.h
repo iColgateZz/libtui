@@ -133,6 +133,11 @@ void pop_scope();
 Rectangle peek_scope();
 void push_scope(u32 x, u32 y, u32 w, u32 h);
 
+// TODO: remove this array impl and use da_append
+//       and its friends
+// TODO: extract repeating functionality into 
+//       smaller functions
+
 Array array_init(usize reserve_size, usize item_size) {
     Arena arena = arena_init(GB(16));
 
