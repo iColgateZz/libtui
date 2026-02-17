@@ -103,6 +103,15 @@ struct {
     u32 width, height;
 } Terminal = {0};
 
+u64 get_delta_time() { return Terminal.dt; }
+u32 get_terminal_width() { return Terminal.width; }
+u32 get_terminal_height() { return Terminal.height; }
+EventType get_event_type() { return Terminal.event.type; }
+Event get_event() { return Terminal.event; }
+Key get_key() { return Terminal.event.parsed_key; }
+b32 is_key_pressed(Key k) { return Terminal.event.parsed_key == k 
+                            && Terminal.event.type == EKey; }
+
 // private
 void restore_term();
 void update_screen_dimensions();
@@ -167,67 +176,6 @@ void *array_get(Array *a, usize i) {
 }
 
 void array_destroy(Array a) { arena_destroy(a.arena); }
-
-
-b32 point_in_rect(u32 x, u32 y, Rectangle r) {
-    return r.x <= x && x < r.x + r.w 
-        && r.y <= y && y < r.y + r.h;
-}
-
-Rectangle rect_intersect(Rectangle a, Rectangle b) {
-    u32 x1 = MAX(a.x, b.x);
-    u32 y1 = MAX(a.y, b.y);
-    u32 x2 = MIN(a.x + a.w, b.x + b.w);
-    u32 y2 = MIN(a.y + a.h, b.y + b.h);
-
-    if (x2 <= x1 || y2 <= y1) {
-        return (Rectangle){0,0,0,0}; // fully clipped
-    }
-
-    return (Rectangle){ x1, y1, x2 - x1, y2 - y1 };
-}
-
-Rectangle rect_union(Rectangle a, Rectangle b) {
-    u32 left   = MIN(a.x, b.x);
-    u32 top    = MIN(a.y, b.y);
-    u32 right  = MAX(a.x + a.w, b.x + b.w);
-    u32 bottom = MAX(a.y + a.h, b.y + b.h);
-
-    return (Rectangle) {
-        .x = left,
-        .y = top,
-        .w = right - left,
-        .h = bottom - top
-    };
-}
-
-void pop_scope() { 
-    Terminal.scopes.count--;
-    assert(Terminal.scopes.count >= 1);
-}
-
-Rectangle peek_scope() {
-    byte *base = Terminal.scopes.items;
-    usize idx = Terminal.scopes.count - 1;
-    Rectangle *r = (Rectangle *)(base + idx * Terminal.scopes.item_size);
-    return *r;
-}
-
-void push_scope(u32 x, u32 y, u32 w, u32 h) {
-    Rectangle parent = peek_scope();
-    Rectangle r = {x, y, w, h};
-    Rectangle clipped = rect_intersect(parent, r);
-    array_append(&Terminal.scopes, &clipped, 1);
-}
-
-u64 get_delta_time() { return Terminal.dt; }
-u32 get_terminal_width() { return Terminal.width; }
-u32 get_terminal_height() { return Terminal.height; }
-EventType get_event_type() { return Terminal.event.type; }
-Event get_event() { return Terminal.event; }
-Key get_key() { return Terminal.event.parsed_key; }
-b32 is_key_pressed(Key k) { return Terminal.event.parsed_key == k 
-                            && Terminal.event.type == EKey; }
 
 void write_str_len(byte *str, usize len) {
     write(STDOUT_FILENO, str, len);
@@ -363,6 +311,7 @@ void begin_frame() {
 }
 
 void save_timestamp()  { Terminal.saved_time = time_ms(); }
+void calculate_dt() { Terminal.dt = time_ms() - Terminal.saved_time; }
 
 i64 time_ms() {
     struct timespec ts = {0};
@@ -447,19 +396,6 @@ void end_frame() {
     Terminal.dirty.count = 0;
     write_str_len(Terminal.frame_cmds.items, Terminal.frame_cmds.count);
 }
-
-Rectangle merge_dirty_rects() {
-    Rectangle bounds = *((Rectangle *)array_get(&Terminal.dirty, 0));
-
-    for (usize i = 1; i < Terminal.dirty.count; i++) {
-        Rectangle r = *((Rectangle *)array_get(&Terminal.dirty, i));
-        bounds = rect_union(bounds, r);
-    }
-
-    return bounds;
-}
-
-void calculate_dt() { Terminal.dt = time_ms() - Terminal.saved_time; }
 
 void generate_absolute_cursor_move(Array *a, u32 row, u32 col) {
     byte tmp[64];
@@ -607,6 +543,68 @@ void put_str(u32 x, u32 y, byte *str, usize len) {
 
     Rectangle r = {x, y, copy_len, 1};
     array_append(&Terminal.dirty, &r, 1);
+}
+
+void push_scope(u32 x, u32 y, u32 w, u32 h) {
+    Rectangle parent = peek_scope();
+    Rectangle r = {x, y, w, h};
+    Rectangle clipped = rect_intersect(parent, r);
+    array_append(&Terminal.scopes, &clipped, 1);
+}
+
+void pop_scope() { 
+    Terminal.scopes.count--;
+    assert(Terminal.scopes.count >= 1);
+}
+
+Rectangle peek_scope() {
+    byte *base = Terminal.scopes.items;
+    usize idx = Terminal.scopes.count - 1;
+    Rectangle *r = (Rectangle *)(base + idx * Terminal.scopes.item_size);
+    return *r;
+}
+
+b32 point_in_rect(u32 x, u32 y, Rectangle r) {
+    return r.x <= x && x < r.x + r.w 
+        && r.y <= y && y < r.y + r.h;
+}
+
+Rectangle rect_intersect(Rectangle a, Rectangle b) {
+    u32 x1 = MAX(a.x, b.x);
+    u32 y1 = MAX(a.y, b.y);
+    u32 x2 = MIN(a.x + a.w, b.x + b.w);
+    u32 y2 = MIN(a.y + a.h, b.y + b.h);
+
+    if (x2 <= x1 || y2 <= y1) {
+        return (Rectangle){0,0,0,0}; // fully clipped
+    }
+
+    return (Rectangle){ x1, y1, x2 - x1, y2 - y1 };
+}
+
+Rectangle rect_union(Rectangle a, Rectangle b) {
+    u32 left   = MIN(a.x, b.x);
+    u32 top    = MIN(a.y, b.y);
+    u32 right  = MAX(a.x + a.w, b.x + b.w);
+    u32 bottom = MAX(a.y + a.h, b.y + b.h);
+
+    return (Rectangle) {
+        .x = left,
+        .y = top,
+        .w = right - left,
+        .h = bottom - top
+    };
+}
+
+Rectangle merge_dirty_rects() {
+    Rectangle bounds = *((Rectangle *)array_get(&Terminal.dirty, 0));
+
+    for (usize i = 1; i < Terminal.dirty.count; i++) {
+        Rectangle r = *((Rectangle *)array_get(&Terminal.dirty, i));
+        bounds = rect_union(bounds, r);
+    }
+
+    return bounds;
 }
 
 #endif //LIBTUI_IMPL
