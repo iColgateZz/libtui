@@ -125,6 +125,10 @@ void array_append(Array *a, void *item, usize n) {
     a->count += n;
 }
 
+void *array_get(Array *a, usize i) {
+    return a->items + i * a->item_size;
+}
+
 void array_destroy(Array a) { arena_destroy(a.arena); }
 
 struct {
