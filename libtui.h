@@ -66,18 +66,18 @@ void put_str(u32 x, u32 y, byte *str, usize len);
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
 
 // private
-void _restore_term();
-void _update_screen_dimensions();
-void _handle_sigwinch(i32 signo);
-i64  _time_ms();
-void _save_timestamp();
-void _calculate_dt();
-void _parse_event(Event *e, isize n);
-void _poll_input();
-void _write_str_len(byte *str, usize len);
-void _write_strf_impl(byte *fmt, ...);
-#define write_str(s)        _write_str_len(s, sizeof(s) - 1)
-#define write_strf(...)     _write_strf_impl(__VA_ARGS__)
+void restore_term();
+void update_screen_dimensions();
+void handle_sigwinch(i32 signo);
+i64  time_ms();
+void save_timestamp();
+void calculate_dt();
+void parse_event(Event *e, isize n);
+void poll_input();
+void write_str_len(byte *str, usize len);
+void write_strf_impl(byte *fmt, ...);
+#define write_str(s)        write_str_len(s, sizeof(s) - 1)
+#define write_strf(...)     write_strf_impl(__VA_ARGS__)
 
 typedef struct {
     Arena arena;
@@ -202,9 +202,9 @@ void push_scope(u32 x, u32 y, u32 w, u32 h) {
     array_append(&Terminal.scopes, &clipped, 1);
 }
 
-void _generate_absolute_cursor_move(Array *a, u32 row, u32 col);
-void _generate_relative_cursor_move(Array *a, u32 step);
-usize _u32_to_ascii(byte *dst, u32 value);
+void generate_absolute_cursor_move(Array *a, u32 row, u32 col);
+void generate_relative_cursor_move(Array *a, u32 step);
+usize u32_to_ascii(byte *dst, u32 value);
 
 u64 get_delta_time() { return Terminal.dt; }
 u32 get_terminal_width() { return Terminal.width; }
@@ -215,11 +215,11 @@ Key get_key() { return Terminal.event.parsed_key; }
 b32 is_key_pressed(Key k) { return Terminal.event.parsed_key == k 
                             && Terminal.event.type == EKey; }
 
-void _write_str_len(byte *str, usize len) {
+void write_str_len(byte *str, usize len) {
     write(STDOUT_FILENO, str, len);
 }
 
-void _write_strf_impl(byte *fmt, ...) {
+void write_strf_impl(byte *fmt, ...) {
     static char buf[1024];
     va_list args;
 
@@ -258,12 +258,12 @@ void init_terminal() {
     write_str("\33[2J");                     // clear screen
     write_str("\33[H");                     // move cursor to home position
 
-    _update_screen_dimensions();
-    atexit(_restore_term);
+    update_screen_dimensions();
+    atexit(restore_term);
     assert(pipe_open(&Terminal.pipe));
 
     struct sigaction sa = {0};
-    sa.sa_handler = _handle_sigwinch;
+    sa.sa_handler = handle_sigwinch;
     sa.sa_flags = SA_RESTART;
     sigaction(SIGWINCH, &sa, NULL);
 
@@ -285,7 +285,7 @@ void init_terminal() {
     };
 }
 
-void _update_screen_dimensions() {
+void update_screen_dimensions() {
     struct winsize ws = {0};
     assert(ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == 0);
 
@@ -293,7 +293,7 @@ void _update_screen_dimensions() {
     Terminal.height = ws.ws_row;
 }
 
-void _restore_term() {
+void restore_term() {
     assert(tcsetattr(STDIN_FILENO, TCSAFLUSH, &Terminal.orig_term) == 0);
 
     // write_str("\33[?1000l");                     // disable mouse
@@ -315,8 +315,8 @@ void _restore_term() {
     array_destroy(Terminal.scopes);
 }
 
-void _handle_sigwinch(i32 signo) {
-    _update_screen_dimensions();
+void handle_sigwinch(i32 signo) {
+    update_screen_dimensions();
 
     u32 new_size = Terminal.width * Terminal.height;
     array_extend_to(&Terminal.backbuffer, new_size);
@@ -344,13 +344,13 @@ void set_max_timeout_ms(u32 timeout) { Terminal.timeout = timeout; }
 void begin_frame() {
     memset(Terminal.backbuffer.items, ' ', Terminal.backbuffer.count);
 
-    _save_timestamp();
-    _poll_input();
+    save_timestamp();
+    poll_input();
 }
 
-void _save_timestamp()  { Terminal.saved_time = _time_ms(); }
+void save_timestamp()  { Terminal.saved_time = time_ms(); }
 
-i64 _time_ms() {
+i64 time_ms() {
     struct timespec ts = {0};
     clock_gettime(CLOCK_MONOTONIC, &ts);
     return ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
@@ -358,7 +358,7 @@ i64 _time_ms() {
 
 #define GAP_THRESHOLD 8
 void end_frame() {
-    _calculate_dt();
+    calculate_dt();
 
     if (Terminal.dirty.count == 0) return; // nothing changed
 
@@ -405,7 +405,7 @@ void end_frame() {
                 first_in_row = false;
                 u32 new_row = run_start / screen_w;
                 u32 new_col = run_start % screen_w;
-                _generate_absolute_cursor_move(&Terminal.frame_cmds, new_row, new_col);
+                generate_absolute_cursor_move(&Terminal.frame_cmds, new_row, new_col);
                 array_append(&Terminal.frame_cmds, Terminal.backbuffer.items + run_start, run_len);
             } else if (gap <= GAP_THRESHOLD) {
                 // instead of emitting cursor move, just copy the bytes
@@ -415,7 +415,7 @@ void end_frame() {
             } else {
                 // I know it is the same row
                 u32 new_col = run_start % screen_w;
-                _generate_relative_cursor_move(&Terminal.frame_cmds, new_col - cursor.x);
+                generate_relative_cursor_move(&Terminal.frame_cmds, new_col - cursor.x);
                 array_append(&Terminal.frame_cmds, Terminal.backbuffer.items + run_start, run_len);
             }
 
@@ -431,7 +431,7 @@ void end_frame() {
     }
 
     Terminal.dirty.count = 0;
-    _write_str_len(Terminal.frame_cmds.items, Terminal.frame_cmds.count);
+    write_str_len(Terminal.frame_cmds.items, Terminal.frame_cmds.count);
 }
 
 Rectangle merge_dirty_rects() {
@@ -445,35 +445,35 @@ Rectangle merge_dirty_rects() {
     return bounds;
 }
 
-void _calculate_dt() { Terminal.dt = _time_ms() - Terminal.saved_time; }
+void calculate_dt() { Terminal.dt = time_ms() - Terminal.saved_time; }
 
-void _generate_absolute_cursor_move(Array *a, u32 row, u32 col) {
+void generate_absolute_cursor_move(Array *a, u32 row, u32 col) {
     byte tmp[64];
     byte *p = tmp;
 
     *p++ = '\33';
     *p++ = '[';
-    p += _u32_to_ascii(p, row + 1);
+    p += u32_to_ascii(p, row + 1);
     *p++ = ';';
-    p += _u32_to_ascii(p, col + 1);
+    p += u32_to_ascii(p, col + 1);
     *p++ = 'H';
 
     array_append(a, tmp, (usize)(p - tmp));
 }
 
-void _generate_relative_cursor_move(Array *a, u32 step) {
+void generate_relative_cursor_move(Array *a, u32 step) {
     byte tmp[64];
     byte *p = tmp;
 
     *p++ = '\33';
     *p++ = '[';
-    p += _u32_to_ascii(p, step);
+    p += u32_to_ascii(p, step);
     *p++ = 'C';
 
     array_append(a, tmp, (usize)(p - tmp));
 }
 
-usize _u32_to_ascii(byte *dst, u32 value) {
+usize u32_to_ascii(byte *dst, u32 value) {
     byte tmp[16];
     usize len = 0;
 
@@ -488,7 +488,7 @@ usize _u32_to_ascii(byte *dst, u32 value) {
     return len;
 }
 
-void _poll_input() {
+void poll_input() {
     #define PFD_SIZE 2
     struct pollfd pfd[PFD_SIZE] = {
         {.fd = Terminal.pipe.read_fd, .events = POLLIN},
@@ -503,7 +503,7 @@ void _poll_input() {
 
     if (rval < 0) {
         if (errno == EAGAIN || errno == EINTR) {
-            _poll_input();
+            poll_input();
             return;
         }
 
@@ -525,7 +525,7 @@ void _poll_input() {
     if (pfd[1].revents & POLLIN) {
         isize n = read(STDIN_FILENO, e->buf, sizeof(e->buf) - 1);
         assert(n > 0);
-        _parse_event(e, n);
+        parse_event(e, n);
     }
 }
 
@@ -542,7 +542,7 @@ static struct {byte str[4]; i32 k;} key_table[] = {
     {"[6~", PAGEDOWN_KEY},
 };
 
-void _parse_event(Event *e, isize n) {
+void parse_event(Event *e, isize n) {
     byte *str = e->buf;
 
     if (n == 1 && str[0] != ESCAPE_KEY) { // regular key
