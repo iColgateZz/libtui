@@ -327,16 +327,21 @@ i64 time_ms() {
 void end_frame() {
     if (Terminal.dirty.count == 0) return; // nothing changed
 
-    Rectangle dirty = merge_dirty_rects();
-
     Terminal.frame_cmds.count = 0;
+    Rectangle dirty = merge_dirty_rects();
+    render(dirty);
+    Terminal.dirty.count = 0;
+    write_str_len(Terminal.frame_cmds.items, Terminal.frame_cmds.count);
 
-    u32 screen_w = Terminal.width;
+    calculate_dt();
+}
 
+void render(Rectangle dirty) {
     struct {
         u32 x, y;
     } cursor = {0};
-
+    
+    u32 screen_w = Terminal.width;
     for (u32 row = dirty.y; row < dirty.y + dirty.h; row++) {
 
         usize row_start = row * screen_w + dirty.x;
@@ -393,11 +398,6 @@ void end_frame() {
             );
         }
     }
-
-    Terminal.dirty.count = 0;
-    write_str_len(Terminal.frame_cmds.items, Terminal.frame_cmds.count);
-
-    calculate_dt();
 }
 
 void generate_absolute_cursor_move(Array *a, u32 row, u32 col) {
