@@ -330,7 +330,6 @@ void end_frame() {
     Rectangle dirty = merge_dirty_rects();
 
     Terminal.frame_cmds.count = 0;
-    array_append(&Terminal.frame_cmds, "\33[H", 3);
 
     u32 screen_w = Terminal.width;
 
