@@ -309,9 +309,8 @@ void handle_sigwinch(i32 signo) {
 void set_max_timeout_ms(u32 timeout) { Terminal.timeout = timeout; }
 
 void begin_frame() {
-    memset(Terminal.backbuffer.items, ' ', Terminal.backbuffer.count);
-
     save_timestamp();
+    memset(Terminal.backbuffer.items, ' ', Terminal.backbuffer.count);
     poll_input();
 }
 
@@ -326,8 +325,6 @@ i64 time_ms() {
 
 #define GAP_THRESHOLD 8
 void end_frame() {
-    calculate_dt();
-
     if (Terminal.dirty.count == 0) return; // nothing changed
 
     Rectangle dirty = merge_dirty_rects();
@@ -400,6 +397,8 @@ void end_frame() {
 
     Terminal.dirty.count = 0;
     write_str_len(Terminal.frame_cmds.items, Terminal.frame_cmds.count);
+
+    calculate_dt();
 }
 
 void generate_absolute_cursor_move(Array *a, u32 row, u32 col) {
@@ -552,8 +551,7 @@ void put_str(u32 x, u32 y, byte *str, usize len) {
 
 void push_scope(u32 x, u32 y, u32 w, u32 h) {
     Rectangle parent = peek_scope();
-    Rectangle r = {x, y, w, h};
-    Rectangle clipped = rect_intersect(parent, r);
+    Rectangle clipped = rect_intersect(parent, (Rectangle) {x, y, w, h});
     array_append(&Terminal.scopes, &clipped, 1);
 }
 
@@ -563,10 +561,7 @@ void pop_scope() {
 }
 
 Rectangle peek_scope() {
-    byte *base = Terminal.scopes.items;
-    usize idx = Terminal.scopes.count - 1;
-    Rectangle *r = (Rectangle *)(base + idx * Terminal.scopes.item_size);
-    return *r;
+    return *(Rectangle *)array_get(&Terminal.scopes, Terminal.scopes.count - 1);
 }
 
 b32 point_in_rect(u32 x, u32 y, Rectangle r) {
