@@ -132,6 +132,7 @@ Rectangle merge_dirty_rects();
 void pop_scope();
 Rectangle peek_scope();
 void push_scope(u32 x, u32 y, u32 w, u32 h);
+void render(Rectangle dirty);
 
 // TODO: remove this array impl and use da_append
 //       and its friends
