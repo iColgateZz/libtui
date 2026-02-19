@@ -528,14 +528,14 @@ void parse_event(Event *e, isize n) {
         e->x    = strtol(str + 1, &str, 10) - 1;
         e->y    = strtol(str + 1, &str, 10) - 1;
         e->mouse_pressed = str[0] == 'M' ? true : false;
-
+        // write_strf("btn: %d, x: %d, y: %d\r\n", btn, e->x, e->y);
         switch (btn) {
-            case 0:  e->type = EMouseLeft;
-            case 1:  e->type = EMouseMiddle;
-            case 2:  e->type = EMouseRight;
-            case 32: e->type = EMouseDrag;
-            case 64: e->type = EScrollUp;
-            case 65: e->type = EScrollDown;
+            case 0:  e->type = EMouseLeft;   break;
+            case 1:  e->type = EMouseMiddle; break;
+            case 2:  e->type = EMouseRight;  break;
+            case 32: e->type = EMouseDrag;   break;
+            case 64: e->type = EScrollUp;    break;
+            case 65: e->type = EScrollDown;  break;
             default: e->type = ENone;
         }
 
