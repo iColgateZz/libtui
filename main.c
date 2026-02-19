@@ -4,18 +4,6 @@
 #define PSH_BUILD_IMPL
     #include "psh_build/psh_build.h"
 
-#include <ctype.h>
-
-void print_char(Key k) {
-    if (k < 0) {
-        write_strf("Escaped sequence: %d\r\n", k);
-    } else if (k < 32) {
-        write_strf("Non-printable char: %d\r\n", k);
-    } else {
-        write_strf("Regular char: %c, %d\r\n", k, k);
-    }
-}
-
 typedef struct {
     u32 x, y;
     u32 w, h;
@@ -87,22 +75,19 @@ i32 main(i32 argc, byte *argv[]) {
     while (!is_key_pressed('q')) {
         begin_frame();
 
-        Key k = get_key();
-        // print_char(k);
-
         // application logic
-        // if (get_event_type() == EWinch) {
-        //     on_winch(&a);
-        //     on_winch(&b);
-        // }
+        if (get_event_type() == EWinch) {
+            on_winch(&a);
+            on_winch(&b);
+        }
 
-        // update(&a);
-        // draw(&a);
+        update(&a);
+        draw(&a);
 
-        // update(&b);
-        // draw(&b);
+        update(&b);
+        draw(&b);
 
-        // end_frame();
+        end_frame();
     }
 
     return 0;
