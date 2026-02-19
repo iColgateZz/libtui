@@ -218,10 +218,10 @@ void init_terminal() {
     write_str("\33[?2004l");                 // reset bracketed paste mode
     write_str("\33[?1049h");                 // use alternate buffer
     write_str("\33[?25l");                   // hide cursor
-    // write_str("\33[?1000h");                 // enable mouse press/release
-    // write_str("\33[?1002h");                 // enable mouse press/release + drag
+    write_str("\33[?1000h");                 // enable mouse press/release
+    write_str("\33[?1002h");                 // enable mouse press/release + drag
     // write_str("\33[?1003h");                 // enable mouse press/release + drag + hover
-    // write_str("\33[?1006h");                 // use mouse sgr protocol
+    write_str("\33[?1006h");                 // use mouse sgr protocol
     write_str("\33[0m");                     // reset text attributes
     write_str("\33[2J");                     // clear screen
     write_str("\33[H");                     // move cursor to home position
@@ -264,8 +264,8 @@ void update_screen_dimensions() {
 void restore_term() {
     assert(tcsetattr(STDIN_FILENO, TCSAFLUSH, &Terminal.orig_term) == 0);
 
-    // write_str("\33[?1000l");                     // disable mouse
-    // write_str("\33[?1002l");                     // disable mouse
+    write_str("\33[?1000l");                     // disable mouse
+    write_str("\33[?1002l");                     // disable mouse
     write_str("\33[0m");                         // reset text attributes
     write_str("\33[?25h");                       // show cursor
     write_str("\33[?1049l");                     // exit alternate buffer
@@ -498,6 +498,8 @@ static struct {byte str[4]; i32 k;} key_table[] = {
 
 void parse_event(Event *e, isize n) {
     byte *str = e->buf;
+
+    write_strf("%ld: '%.*s'\r\n", n, (i32)n, str);
 
     if (n == 1 && str[0] != ESCAPE_KEY) { // regular key
         e->type = EKey;
