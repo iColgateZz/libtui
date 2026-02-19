@@ -21,7 +21,7 @@ typedef enum {
 } Key;
 
 typedef enum {
-    EDraw,
+    ENone,
     EKey,
     EWinch,
     EMouseLeft,
@@ -473,7 +473,7 @@ void poll_input() {
     }
 
     else if (rval == 0) { // timeout
-        e->type = EDraw;
+        e->type = ENone;
         return;
     }
 
@@ -523,7 +523,7 @@ void parse_event(Event *e, isize n) {
     }
 
     if (n >= 9 && memcmp(str, "\33[<", 3) == EXIT_SUCCESS) {
-        write_strf("%ld: '%.*s'\r\n", n, (i32)n - 3, str + 3);
+        // write_strf("%ld: '%.*s'\r\n", n, (i32)n - 3, str + 3);
         u32 btn = strtol(str + 3, &str, 10);
         e->x    = strtol(str + 1, &str, 10) - 1;
         e->y    = strtol(str + 1, &str, 10) - 1;
@@ -536,7 +536,7 @@ void parse_event(Event *e, isize n) {
             case 32: e->type = EMouseDrag;
             case 64: e->type = EScrollUp;
             case 65: e->type = EScrollDown;
-            default: e->type = EDraw;
+            default: e->type = ENone;
         }
 
         return;
@@ -552,7 +552,7 @@ void parse_event(Event *e, isize n) {
         }
     }
 
-    e->type = EDraw;
+    e->type = ENone;
     return;
 }
 
