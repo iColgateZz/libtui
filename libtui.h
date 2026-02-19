@@ -24,10 +24,18 @@ typedef enum {
     EDraw,
     EKey,
     EWinch,
+    EMouseLeft,
+    EMouseRight,
+    EMouseMiddle,
+    EScrollUp,
+    EScrollDown,
+    EMouseDrag,
 } EventType;
 
 typedef struct {
     EventType type;
+    u32 x, y;
+    b32 mouse_pressed;
     byte buf[32];
     Key parsed_key;
 } Event;
@@ -499,9 +507,8 @@ static struct {byte str[4]; i32 k;} key_table[] = {
 void parse_event(Event *e, isize n) {
     byte *str = e->buf;
 
-    write_strf("%ld: '%.*s'\r\n", n, (i32)n, str);
-
     if (n == 1 && str[0] != ESCAPE_KEY) { // regular key
+        // write_strf("%ld: '%.*s'\r\n", n, (i32)n, str);
         e->type = EKey;
 
         #define DELETE 127
@@ -510,6 +517,26 @@ void parse_event(Event *e, isize n) {
         } else {
             // maybe decode ut8 later
             e->parsed_key = str[0];
+        }
+
+        return;
+    }
+
+    if (n >= 9 && memcmp(str, "\33[<", 3) == EXIT_SUCCESS) {
+        write_strf("%ld: '%.*s'\r\n", n, (i32)n - 3, str + 3);
+        u32 btn = strtol(str + 3, &str, 10);
+        e->x    = strtol(str + 1, &str, 10) - 1;
+        e->y    = strtol(str + 1, &str, 10) - 1;
+        e->mouse_pressed = str[0] == 'M' ? true : false;
+
+        switch (btn) {
+            case 0:  e->type = EMouseLeft;
+            case 1:  e->type = EMouseMiddle;
+            case 2:  e->type = EMouseRight;
+            case 32: e->type = EMouseDrag;
+            case 64: e->type = EScrollUp;
+            case 65: e->type = EScrollDown;
+            default: e->type = EDraw;
         }
 
         return;
