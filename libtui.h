@@ -149,6 +149,7 @@ void pop_scope();
 Rectangle peek_scope();
 void push_scope(u32 x, u32 y, u32 w, u32 h);
 void render();
+void update_terminal_scope();
 
 // TODO: remove this array impl and use da_append
 //       and its friends
@@ -259,13 +260,10 @@ void init_terminal() {
 
     Terminal.frame_cmds  = array_init(Terminal.width * Terminal.height, sizeof(byte));
     Terminal.scopes      = array_init(256, sizeof(Rectangle));
+
     // manually add the terminal scope
     Terminal.scopes.count = 1;
-    Rectangle *r = (Rectangle *)Terminal.scopes.items;
-    *r = (Rectangle) {
-        .w = Terminal.width,
-        .h = Terminal.height,
-    };
+    update_terminal_scope();
 }
 
 void update_screen_dimensions() {
@@ -274,6 +272,14 @@ void update_screen_dimensions() {
 
     Terminal.width = ws.ws_col;
     Terminal.height = ws.ws_row;
+}
+
+void update_terminal_scope() {
+    Rectangle *r = (Rectangle *)Terminal.scopes.items;
+    *r = (Rectangle) {
+        .w = Terminal.width,
+        .h = Terminal.height,
+    };
 }
 
 void restore_term() {
@@ -306,11 +312,7 @@ void handle_sigwinch(i32 signo) {
     Terminal.backbuffer.count  = new_size;
     Terminal.frontbuffer.count = new_size;
 
-    Rectangle *r = (Rectangle *)Terminal.scopes.items;
-    *r = (Rectangle) {
-        .w = Terminal.width,
-        .h = Terminal.height,
-    };
+    update_terminal_scope();
 
     // trigger full redraw
     memset(Terminal.frontbuffer.items, 0xFF, Terminal.frontbuffer.count);
