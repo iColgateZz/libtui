@@ -12,6 +12,8 @@ typedef struct {
     u32 len;
 } Widget;
 
+static i32 y_offset = 0;
+
 void draw(Widget *a) {
     u8 ch;
     if (a->state == 0) {
@@ -22,7 +24,7 @@ void draw(Widget *a) {
 
     for (usize i = 0; i < a->h; i++) {
         for (usize j = 0; j < a->w; j++) {
-            put_char(a->x + j, a->y + i, ch);
+            put_char(a->x + j, a->y + i - y_offset, ch);
         }
     }
 }
@@ -32,6 +34,7 @@ void update(Widget *a) {
     if (a->counter > 1000) {
         a->counter = 0;
         a->state = !a->state;
+        a->x += 10;
     }
 }
 
@@ -44,7 +47,7 @@ i32 main(i32 argc, byte *argv[]) {
     PSH_REBUILD_UNITY_AUTO(argc, argv);
 
     init_terminal();
-    set_max_timeout_ms(1000);
+    set_max_timeout_ms(1);
 
     u32 len = 6;
     Widget a = {
@@ -79,6 +82,14 @@ i32 main(i32 argc, byte *argv[]) {
         if (get_event_type() == EWinch) {
             on_winch(&a);
             on_winch(&b);
+        }
+
+        if (get_event_type() == EScrollDown) {
+            y_offset++;
+            // write_str("Here\r\n");
+        }else if (get_event_type() == EScrollUp) {
+            y_offset--;
+            // write_str("Here2\r\n");
         }
 
         update(&a);
