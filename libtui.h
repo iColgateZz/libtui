@@ -544,7 +544,6 @@ void parse_event(Event *e, isize n) {
     return;
 }
 
-// Draw relative to parent scope?
 void put_char(u32 x, u32 y, byte c) {
     Rectangle parent = peek_scope();
     if (!point_in_rect(x, y, parent)) return;

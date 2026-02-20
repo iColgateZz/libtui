@@ -34,7 +34,7 @@ void update(Widget *a) {
     if (a->counter > 1000) {
         a->counter = 0;
         a->state = !a->state;
-        a->x += 10;
+        a->x += 1;
     }
 }
 
@@ -87,13 +87,15 @@ i32 main(i32 argc, byte *argv[]) {
         if (get_event_type() == EScrollDown) {
             y_offset++;
             // write_str("Here\r\n");
-        }else if (get_event_type() == EScrollUp) {
+        } else if (get_event_type() == EScrollUp) {
             y_offset--;
             // write_str("Here2\r\n");
         }
 
+        push_scope(0, 0, 88, 10);
         update(&a);
         draw(&a);
+        pop_scope();
 
         update(&b);
         draw(&b);
