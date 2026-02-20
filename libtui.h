@@ -41,6 +41,11 @@ typedef struct {
 } Event;
 
 EventType get_event_type();
+b32 is_event_type(EventType e);
+u32 get_mouse_x();
+u32 get_mouse_y();
+b32 is_mouse_pressed();
+b32 is_mouse_released();
 Event get_event();
 Key get_key();
 b32 is_key_pressed(Key k);
@@ -114,6 +119,11 @@ u64 get_delta_time() { return Terminal.dt; }
 u32 get_terminal_width() { return Terminal.width; }
 u32 get_terminal_height() { return Terminal.height; }
 EventType get_event_type() { return Terminal.event.type; }
+b32 is_event_type(EventType e) { return Terminal.event.type == e; }
+u32 get_mouse_x() { return Terminal.event.x; }
+u32 get_mouse_y() { return Terminal.event.y; }
+b32 is_mouse_pressed() { return Terminal.event.mouse_pressed; }
+b32 is_mouse_released() { return !is_mouse_pressed(); }
 Event get_event() { return Terminal.event; }
 Key get_key() { return Terminal.event.parsed_key; }
 b32 is_key_pressed(Key k) { return Terminal.event.parsed_key == k 
