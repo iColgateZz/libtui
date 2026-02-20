@@ -2,6 +2,7 @@
 2. https://github.com/Cubified/tuibox/blob/main/tuibox.h
 3. https://viewsourcecode.org/snaptoken/kilo/02.enteringRawMode.html
 4. https://gist.github.com/fnky/458719343aabd01cfb17a3a4f7296797
+5. https://www.phatcode.net/res/224/files/html/ch46/46-02.html
 
 When adding to an existing repo:
     git submodule add <url>
