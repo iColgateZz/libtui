@@ -153,8 +153,7 @@ void update_terminal_scope();
 
 // TODO: remove this array impl and use da_append
 //       and its friends
-// TODO: extract repeating functionality into 
-//       smaller functions
+// TODO: utf-8 handling
 
 Array array_init(usize reserve_size, usize item_size) {
     Arena arena = arena_init(GB(16));
