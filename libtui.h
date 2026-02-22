@@ -21,10 +21,7 @@ typedef enum {
 } Key;
 
 typedef struct {
-    union {
-        Key key;
-        byte raw[4];
-    };
+    byte raw[4];
     u8 raw_len;
     u8 display_width;
 } CodePoint;
@@ -39,9 +36,9 @@ CodePoint cp_new(byte *raw, u8 raw_len, u8 display_width) {
     return cp;
 }
 
-CodePoint cp_from_key(Key k) {
+CodePoint cp_from_byte(byte b) {
     return (CodePoint) {
-        .key = k,
+        .raw = {b},
         .display_width = 1,
         .raw_len = 1,
     };
@@ -56,6 +53,7 @@ b32 cp_equal(CodePoint a, CodePoint b) {
 typedef enum {
     ENone,
     EKey,
+    EText,
     EWinch,
     EMouseLeft,
     EMouseRight,
@@ -71,6 +69,7 @@ typedef struct {
     b32 mouse_pressed;
     byte buf[32];
     CodePoint parsed_cp;
+    Key key;
 } Event;
 
 EventType get_event_type();
@@ -82,6 +81,7 @@ b32 is_mouse_released();
 Event get_event();
 Key get_key();
 b32 is_key_pressed(Key k);
+b32 is_codepoint(CodePoint cp);
 
 typedef struct {
     u32 x, y, w, h;
@@ -158,9 +158,10 @@ u32 get_mouse_y() { return Terminal.event.y; }
 b32 is_mouse_pressed() { return Terminal.event.mouse_pressed; }
 b32 is_mouse_released() { return !is_mouse_pressed(); }
 Event get_event() { return Terminal.event; }
-Key get_key() { return Terminal.event.parsed_cp.key; }
-b32 is_key_pressed(Key k) { return Terminal.event.parsed_cp.key == k 
+Key get_key() { return Terminal.event.key; }
+b32 is_key_pressed(Key k) { return Terminal.event.key == k 
                             && Terminal.event.type == EKey; }
+b32 is_codepoint(CodePoint cp) { return cp_equal(cp, Terminal.event.parsed_cp); }
 
 // private
 void restore_term();
@@ -349,7 +350,7 @@ void handle_sigwinch(i32 signo) {
     // trigger full redraw
     CodePoint *cps = (CodePoint *)Terminal.frontbuffer.items;
     for (usize i = 0; i < Terminal.frontbuffer.count; ++i) {
-        cps[i] = cp_from_key(0xFF);
+        cps[i] = cp_from_byte(0xFF);
     }
 
     write(Terminal.pipe.write_fd, &signo, sizeof signo);
@@ -361,7 +362,7 @@ void begin_frame() {
     save_timestamp();
     CodePoint *cps = (CodePoint *)Terminal.backbuffer.items;
     for (usize i = 0; i < Terminal.backbuffer.count; ++i) {
-        cps[i] = cp_from_key(' ');
+        cps[i] = cp_from_byte(' ');
     }
     poll_input();
 }
@@ -553,21 +554,22 @@ void parse_event(Event *e, isize n) {
 
     if (n == 1 && str[0] != ESCAPE_KEY) { // regular key
         // write_strf("%ld: '%.*s'\r\n", n, (i32)n, str);
-        e->type = EKey;
-
+        
         #define DELETE 127
         if (str[0] == DELETE) {
-            e->parsed_cp = cp_from_key(BACKSPACE_KEY);
+            e->type = EKey;
+            e->key = BACKSPACE_KEY;
         } else {
             // decode ut8 later
-            e->parsed_cp = cp_from_key(str[0]);
+            e->type = EText;
+            e->parsed_cp = cp_from_byte(str[0]);
         }
 
         return;
     }
 
     if (str[0] != ESCAPE_KEY && 1 <= n && n <= 4) { // utf-8
-        e->type = EKey;
+        e->type = EText;
         e->parsed_cp = cp_new(str, n, 1);
         return;
     }
@@ -596,7 +598,7 @@ void parse_event(Event *e, isize n) {
         for (usize i = 0; i < ARRAY_SIZE(key_table); i++) {
             if (memcmp(str + 1, key_table[i].str, n - 1) == EXIT_SUCCESS) {
                 e->type = EKey;
-                e->parsed_cp  = cp_from_key(key_table[i].k);
+                e->key  = key_table[i].k;
                 return;
             }
         }
@@ -611,7 +613,7 @@ void put_char(u32 x, u32 y, byte c) {
     if (!point_in_rect(x, y, parent)) return;
 
     CodePoint *back_items = (CodePoint *)Terminal.backbuffer.items;
-    back_items[x + y * Terminal.width] = cp_from_key(c);
+    back_items[x + y * Terminal.width] = cp_from_byte(c);
 }
 
 // void put_str(u32 x, u32 y, byte *str, usize len) {

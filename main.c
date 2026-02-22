@@ -47,7 +47,7 @@ i32 main(i32 argc, byte *argv[]) {
     PSH_REBUILD_UNITY_AUTO(argc, argv);
 
     init_terminal();
-    set_max_timeout_ms(0);
+    set_max_timeout_ms(1);
 
     u32 len = 6;
     Widget a = {
@@ -75,38 +75,32 @@ i32 main(i32 argc, byte *argv[]) {
     // push_scope(side - 1, 0, 1, 15);
     // push_scope(0, 0, 10, 10);
 
-    while (!is_key_pressed('q')) {
+    while (!is_codepoint(cp_from_byte('q'))) {
         begin_frame();
 
-        Event e = get_event();
-        write_strf("%.*s: %d\r\n", (i32)e.parsed_cp.raw_len, e.parsed_cp.raw, e.parsed_cp.raw_len);
-        // write_str_len(e.parsed_cp.raw, e.parsed_cp.raw_len);
+        // application logic
+        if (get_event_type() == EWinch) {
+            on_winch(&a);
+            on_winch(&b);
+        }
 
-        // // application logic
-        // if (get_event_type() == EWinch) {
-        //     on_winch(&a);
-        //     on_winch(&b);
-        // }
+        if (get_event_type() == EScrollDown) {
+            y_offset++;
+            // write_str("Here\r\n");
+        } else if (get_event_type() == EScrollUp) {
+            y_offset--;
+            // write_str("Here2\r\n");
+        }
 
-        // if (get_event_type() == EScrollDown) {
-        //     y_offset++;
-        //     // write_str("Here\r\n");
-        // } else if (get_event_type() == EScrollUp) {
-        //     y_offset--;
-        //     // write_str("Here2\r\n");
-        // }
+        push_scope(0, 0, 88, 10);
+        update(&a);
+        draw(&a);
+        pop_scope();
 
-        // push_scope(0, 0, 88, 10);
-        // update(&a);
-        // draw(&a);
-        // pop_scope();
+        update(&b);
+        draw(&b);
 
-        // update(&b);
-        // draw(&b);
-
-        // end_frame();
-
-
+        end_frame();
     }
 
     return 0;
