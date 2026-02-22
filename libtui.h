@@ -20,6 +20,39 @@ typedef enum {
     RIGHT_KEY     = -10,
 } Key;
 
+typedef struct {
+    union {
+        Key key;
+        byte raw[4];
+    };
+    u8 raw_len;
+    u8 display_width;
+} CodePoint;
+
+CodePoint cp_new(byte *raw, u8 raw_len, u8 display_width) {
+    CodePoint cp = {
+        .raw_len = raw_len,
+        .display_width = display_width,
+    };
+
+    memcpy(cp.raw, raw, raw_len);
+    return cp;
+}
+
+CodePoint cp_from_key(Key k) {
+    return (CodePoint) {
+        .key = k,
+        .display_width = 1,
+        .raw_len = 1,
+    };
+}
+
+b32 cp_equal(CodePoint a, CodePoint b) {
+    if (a.raw_len != b.raw_len) return false;
+    if (a.display_width != b.display_width) return false;
+    return memcmp(a.raw, b.raw, a.raw_len) == 0;
+}
+
 typedef enum {
     ENone,
     EKey,
@@ -37,7 +70,7 @@ typedef struct {
     u32 x, y;
     b32 mouse_pressed;
     byte buf[32];
-    Key parsed_key;
+    CodePoint parsed_cp;
 } Event;
 
 EventType get_event_type();
@@ -125,8 +158,8 @@ u32 get_mouse_y() { return Terminal.event.y; }
 b32 is_mouse_pressed() { return Terminal.event.mouse_pressed; }
 b32 is_mouse_released() { return !is_mouse_pressed(); }
 Event get_event() { return Terminal.event; }
-Key get_key() { return Terminal.event.parsed_key; }
-b32 is_key_pressed(Key k) { return Terminal.event.parsed_key == k 
+Key get_key() { return Terminal.event.parsed_cp.key; }
+b32 is_key_pressed(Key k) { return Terminal.event.parsed_cp.key == k 
                             && Terminal.event.type == EKey; }
 
 // private
@@ -251,10 +284,10 @@ void init_terminal() {
     sa.sa_flags = SA_RESTART;
     sigaction(SIGWINCH, &sa, NULL);
 
-    Terminal.backbuffer  = array_init(Terminal.width * Terminal.height, sizeof(byte));
+    Terminal.backbuffer  = array_init(Terminal.width * Terminal.height, sizeof(CodePoint));
     Terminal.backbuffer.count = Terminal.width * Terminal.height;
 
-    Terminal.frontbuffer = array_init(Terminal.width * Terminal.height, sizeof(byte));
+    Terminal.frontbuffer = array_init(Terminal.width * Terminal.height, sizeof(CodePoint));
     Terminal.frontbuffer.count = Terminal.width * Terminal.height;
 
     Terminal.frame_cmds  = array_init(Terminal.width * Terminal.height, sizeof(byte));
@@ -314,7 +347,10 @@ void handle_sigwinch(i32 signo) {
     update_terminal_scope();
 
     // trigger full redraw
-    memset(Terminal.frontbuffer.items, 0xFF, Terminal.frontbuffer.count);
+    CodePoint *cps = (CodePoint *)Terminal.frontbuffer.items;
+    for (usize i = 0; i < Terminal.frontbuffer.count; ++i) {
+        cps[i] = cp_from_key(0xFF);
+    }
 
     write(Terminal.pipe.write_fd, &signo, sizeof signo);
 }
@@ -323,7 +359,10 @@ void set_max_timeout_ms(u32 timeout) { Terminal.timeout = timeout; }
 
 void begin_frame() {
     save_timestamp();
-    memset(Terminal.backbuffer.items, ' ', Terminal.backbuffer.count);
+    CodePoint *cps = (CodePoint *)Terminal.backbuffer.items;
+    for (usize i = 0; i < Terminal.backbuffer.count; ++i) {
+        cps[i] = cp_from_key(' ');
+    }
     poll_input();
 }
 
@@ -359,10 +398,12 @@ void render() {
         usize gap = 0;
         b32 first_in_row = true;
 
+        CodePoint *back_items = (CodePoint *)Terminal.backbuffer.items;
+        CodePoint *front_items = (CodePoint *)Terminal.frontbuffer.items;
+
         while (pos < row_end) {
 
-            if (Terminal.backbuffer.items[pos] ==
-                Terminal.frontbuffer.items[pos]) {
+            if (cp_equal(back_items[pos], front_items[pos])) {
                 pos++;
                 gap++;
                 continue;
@@ -370,9 +411,7 @@ void render() {
 
             usize run_start = pos;
 
-            while (pos < row_end &&
-                   Terminal.backbuffer.items[pos] !=
-                   Terminal.frontbuffer.items[pos]) {
+            while (pos < row_end && !cp_equal(back_items[pos], front_items[pos])) {
                 pos++;
             }
 
@@ -383,26 +422,32 @@ void render() {
                 u32 new_row = run_start / screen_w;
                 u32 new_col = run_start % screen_w;
                 generate_absolute_cursor_move(&Terminal.frame_cmds, new_row, new_col);
-                array_append(&Terminal.frame_cmds, Terminal.backbuffer.items + run_start, run_len);
+                for (usize i = 0; i < run_len; ++i) {
+                    array_append(&Terminal.frame_cmds, back_items[run_start + i].raw, back_items[run_start + i].raw_len);
+                }
             } else if (gap <= GAP_THRESHOLD) {
                 // instead of emitting cursor move, just copy the bytes
                 // that are the same in both buffers
-                array_append(&Terminal.frame_cmds, Terminal.backbuffer.items + run_start - gap, run_len + gap);
+                for (usize i = 0; i < run_len + gap; ++i) {
+                    array_append(&Terminal.frame_cmds, back_items[run_start - gap + i].raw, back_items[run_start - gap + i].raw_len);
+                }
                 gap = 0;
             } else {
                 // I know it is the same row
                 u32 new_col = run_start % screen_w;
                 generate_relative_cursor_move(&Terminal.frame_cmds, new_col - cursor.x);
-                array_append(&Terminal.frame_cmds, Terminal.backbuffer.items + run_start, run_len);
+                for (usize i = 0; i < run_len; ++i) {
+                    array_append(&Terminal.frame_cmds, back_items[run_start + i].raw, back_items[run_start + i].raw_len);
+                }
             }
 
             cursor.y = pos / screen_w;
             cursor.x = pos % screen_w;
 
             memcpy(
-                Terminal.frontbuffer.items + run_start,
-                Terminal.backbuffer.items + run_start,
-                run_len
+                front_items + run_start,
+                back_items + run_start,
+                run_len * sizeof(CodePoint)
             );
         }
     }
@@ -484,13 +529,13 @@ void poll_input() {
     }
 
     if (pfd[1].revents & POLLIN) {
-        isize n = read(STDIN_FILENO, e->buf, sizeof(e->buf) - 1);
+        isize n = read(STDIN_FILENO, e->buf, sizeof(e->buf));
         assert(n > 0);
         parse_event(e, n);
     }
 }
 
-static struct {byte str[4]; i32 k;} key_table[] = {
+static struct {byte str[4]; Key k;} key_table[] = {
     {"[A" , UP_KEY},
     {"[B" , DOWN_KEY},
     {"[C" , RIGHT_KEY},
@@ -512,10 +557,10 @@ void parse_event(Event *e, isize n) {
 
         #define DELETE 127
         if (str[0] == DELETE) {
-            e->parsed_key = BACKSPACE_KEY;
+            e->parsed_cp = cp_from_key(BACKSPACE_KEY);
         } else {
-            // maybe decode ut8 later
-            e->parsed_key = str[0];
+            // decode ut8 later
+            e->parsed_cp = cp_from_key(str[0]);
         }
 
         return;
@@ -545,7 +590,7 @@ void parse_event(Event *e, isize n) {
         for (usize i = 0; i < ARRAY_SIZE(key_table); i++) {
             if (memcmp(str + 1, key_table[i].str, n - 1) == EXIT_SUCCESS) {
                 e->type = EKey;
-                e->parsed_key  = key_table[i].k;
+                e->parsed_cp  = cp_from_key(key_table[i].k);
                 return;
             }
         }
@@ -559,16 +604,17 @@ void put_char(u32 x, u32 y, byte c) {
     Rectangle parent = peek_scope();
     if (!point_in_rect(x, y, parent)) return;
 
-    Terminal.backbuffer.items[x + y * Terminal.width] = c;
+    CodePoint *back_items = (CodePoint *)Terminal.backbuffer.items;
+    back_items[x + y * Terminal.width] = cp_from_key(c);
 }
 
-void put_str(u32 x, u32 y, byte *str, usize len) {
-    Rectangle parent = peek_scope();
-    if (!point_in_rect(x, y, parent)) return;
+// void put_str(u32 x, u32 y, byte *str, usize len) {
+//     Rectangle parent = peek_scope();
+//     if (!point_in_rect(x, y, parent)) return;
 
-    usize copy_len = MIN(len, parent.x + parent.w - x);
-    memcpy(Terminal.backbuffer.items + x + y * Terminal.width, str, copy_len);
-}
+//     usize copy_len = MIN(len, parent.x + parent.w - x);
+//     memcpy(Terminal.backbuffer.items + x + y * Terminal.width, str, copy_len);
+// }
 
 void push_scope(u32 x, u32 y, u32 w, u32 h) {
     Rectangle parent = peek_scope();
