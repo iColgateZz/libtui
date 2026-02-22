@@ -3,6 +3,8 @@
 #include "psh_build/psh_build.h"
 
 // public
+
+// TODO: find better name than Key
 typedef enum {
     BACKSPACE_KEY = 8,
     TAB_KEY       = 9,
@@ -53,7 +55,7 @@ b32 cp_equal(CodePoint a, CodePoint b) {
 typedef enum {
     ENone,
     EKey,
-    EText,
+    EText, // TODO: find better name than EText, Eutf8?
     EWinch,
     EMouseLeft,
     EMouseRight,
@@ -72,6 +74,7 @@ typedef struct {
     Key key;
 } Event;
 
+// TODO: get rid of useless methods
 EventType get_event_type();
 b32 is_event_type(EventType e);
 u32 get_mouse_x();
@@ -384,6 +387,8 @@ void end_frame() {
     calculate_dt();
 }
 
+// The code relies on the assumption that every cell has a codepoint
+// with a display_width = 1. If it is not the case, it breaks.
 void render() {
     struct {
         u32 x, y;
@@ -549,6 +554,7 @@ static struct {byte str[4]; Key k;} key_table[] = {
     {"[6~", PAGEDOWN_KEY},
 };
 
+// TODO: refactor this one
 void parse_event(Event *e, isize n) {
     byte *str = e->buf;
 
@@ -570,6 +576,7 @@ void parse_event(Event *e, isize n) {
 
     if (str[0] != ESCAPE_KEY && 1 <= n && n <= 4) { // utf-8
         e->type = EText;
+        // By default assumes the display_width of a cp is 1.
         e->parsed_cp = cp_new(str, n, 1);
         return;
     }
