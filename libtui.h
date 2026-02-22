@@ -566,6 +566,12 @@ void parse_event(Event *e, isize n) {
         return;
     }
 
+    if (str[0] != ESCAPE_KEY && 1 <= n && n <= 4) { // utf-8
+        e->type = EKey;
+        e->parsed_cp = cp_new(str, n, 1);
+        return;
+    }
+
     if (n >= 9 && memcmp(str, "\33[<", 3) == EXIT_SUCCESS) {
         // write_strf("%ld: '%.*s'\r\n", n, (i32)n - 3, str + 3);
         u32 btn = strtol(str + 3, &str, 10);
