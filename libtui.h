@@ -67,11 +67,15 @@ typedef enum {
 
 typedef struct {
     EventType type;
-    u32 x, y;
-    b32 mouse_pressed;
     byte buf[32];
-    CodePoint parsed_cp;
-    TermKey term_key;
+    union {
+        struct {
+            u32 x, y;
+            b32 pressed;
+        } mouse;
+        CodePoint parsed_cp;
+        TermKey term_key;
+    };
 } Event;
 
 b32 is_event(EventType e);
@@ -151,9 +155,9 @@ u64 get_delta_time() { return Terminal.dt; }
 u32 get_terminal_width() { return Terminal.width; }
 u32 get_terminal_height() { return Terminal.height; }
 b32 is_event(EventType e) { return Terminal.event.type == e; }
-u32 get_mouse_x() { return Terminal.event.x; }
-u32 get_mouse_y() { return Terminal.event.y; }
-b32 is_mouse_pressed() { return Terminal.event.mouse_pressed; }
+u32 get_mouse_x() { return Terminal.event.mouse.x; }
+u32 get_mouse_y() { return Terminal.event.mouse.y; }
+b32 is_mouse_pressed() { return Terminal.event.mouse.pressed; }
 b32 is_mouse_released() { return !is_mouse_pressed(); }
 b32 is_term_key(TermKey k) { return Terminal.event.term_key == k && Terminal.event.type == ETermKey; }
 b32 is_codepoint(CodePoint cp) { return cp_equal(cp, Terminal.event.parsed_cp); }
@@ -576,9 +580,9 @@ void parse_event(Event *e, isize n) {
     if (n >= 9 && memcmp(str, "\33[<", 3) == EXIT_SUCCESS) {
         // write_strf("%ld: '%.*s'\r\n", n, (i32)n - 3, str + 3);
         u32 btn = strtol(str + 3, &str, 10);
-        e->x    = strtol(str + 1, &str, 10) - 1;
-        e->y    = strtol(str + 1, &str, 10) - 1;
-        e->mouse_pressed = str[0] == 'M' ? true : false;
+        e->mouse.x       = strtol(str + 1, &str, 10) - 1;
+        e->mouse.y       = strtol(str + 1, &str, 10) - 1;
+        e->mouse.pressed = str[0] == 'M' ? true : false;
         // write_strf("btn: %d, x: %d, y: %d\r\n", btn, e->x, e->y);
         switch (btn) {
             case 0:  e->type = EMouseLeft;   break;
