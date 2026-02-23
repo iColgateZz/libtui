@@ -28,7 +28,7 @@ typedef struct {
     u8 display_width;
 } CodePoint;
 
-CodePoint cp_new(byte *raw, u8 raw_len, u8 display_width);
+CodePoint cp_from_raw(byte *raw, u8 raw_len, u8 display_width);
 CodePoint cp_from_byte(byte b);
 b32 cp_equal(CodePoint a, CodePoint b);
 
@@ -601,14 +601,14 @@ b32 try_parse_text(Event *e, byte *str, isize n) {
         // By default assumes the display_width of a cp is 1.
         // Never checks if input is correct utf-8.
         e->type = ECodePoint;
-        e->parsed_cp = cp_new(str, n, 1);
+        e->parsed_cp = cp_from_raw(str, n, 1);
         return true;
     }
 
     return false;
 }
 
-CodePoint cp_new(byte *raw, u8 raw_len, u8 display_width) {
+CodePoint cp_from_raw(byte *raw, u8 raw_len, u8 display_width) {
     CodePoint cp = {
         .raw_len = raw_len,
         .display_width = display_width,
