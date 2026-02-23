@@ -6,21 +6,22 @@
 
 // TODO: find better name than Key
 typedef enum {
-    BACKSPACE_KEY = 8,
-    TAB_KEY       = 9,
-    ENTER_KEY     = 13,
-    ESCAPE_KEY    = 27,
-    INSERT_KEY    = -1,
-    DELETE_KEY    = -2,
-    HOME_KEY      = -3,
-    END_KEY       = -4,
-    PAGEUP_KEY    = -5,
-    PAGEDOWN_KEY  = -6,
-    UP_KEY        = -7,
-    DOWN_KEY      = -8,
-    LEFT_KEY      = -9,
-    RIGHT_KEY     = -10,
-} Key;
+    TERMKEY_BACKSPACE = 8,
+    TERMKEY_TAB       = 9,
+    TERMKEY_ENTER     = 13,
+    TERMKEY_ESCAPE    = 27,
+
+    TERMKEY_INSERT    = -1,
+    TERMKEY_DELETE    = -2,
+    TERMKEY_HOME      = -3,
+    TERMKEY_END       = -4,
+    TERMKEY_PAGEUP    = -5,
+    TERMKEY_PAGEDOWN  = -6,
+    TERMKEY_UP        = -7,
+    TERMKEY_DOWN      = -8,
+    TERMKEY_LEFT      = -9,
+    TERMKEY_RIGHT     = -10,
+} TermKey;
 
 typedef struct {
     byte raw[4];
@@ -54,7 +55,7 @@ b32 cp_equal(CodePoint a, CodePoint b) {
 
 typedef enum {
     ENone,
-    EKey,
+    ETermKey,
     EText, // TODO: find better name than EText, Eutf8?
     EWinch,
     EMouseLeft,
@@ -71,7 +72,7 @@ typedef struct {
     b32 mouse_pressed;
     byte buf[32];
     CodePoint parsed_cp;
-    Key key;
+    TermKey term_key;
 } Event;
 
 // TODO: get rid of useless methods
@@ -82,8 +83,8 @@ u32 get_mouse_y();
 b32 is_mouse_pressed();
 b32 is_mouse_released();
 Event get_event();
-Key get_key();
-b32 is_key_pressed(Key k);
+TermKey get_key();
+b32 is_key_pressed(TermKey k);
 b32 is_codepoint(CodePoint cp);
 
 typedef struct {
@@ -161,9 +162,9 @@ u32 get_mouse_y() { return Terminal.event.y; }
 b32 is_mouse_pressed() { return Terminal.event.mouse_pressed; }
 b32 is_mouse_released() { return !is_mouse_pressed(); }
 Event get_event() { return Terminal.event; }
-Key get_key() { return Terminal.event.key; }
-b32 is_key_pressed(Key k) { return Terminal.event.key == k 
-                            && Terminal.event.type == EKey; }
+TermKey get_key() { return Terminal.event.term_key; }
+b32 is_key_pressed(TermKey k) { return Terminal.event.term_key == k 
+                            && Terminal.event.type == ETermKey; }
 b32 is_codepoint(CodePoint cp) { return cp_equal(cp, Terminal.event.parsed_cp); }
 
 // private
@@ -541,30 +542,30 @@ void poll_input() {
     }
 }
 
-static struct {byte str[4]; Key k;} key_table[] = {
-    {"[A" , UP_KEY},
-    {"[B" , DOWN_KEY},
-    {"[C" , RIGHT_KEY},
-    {"[D" , LEFT_KEY},
-    {"[2~", INSERT_KEY},
-    {"[3~", DELETE_KEY},
-    {"[H" , HOME_KEY},
-    {"[4~", END_KEY},
-    {"[5~", PAGEUP_KEY},
-    {"[6~", PAGEDOWN_KEY},
+static struct {byte str[4]; TermKey k;} term_key_table[] = {
+    {"[A" , TERMKEY_UP},
+    {"[B" , TERMKEY_DOWN},
+    {"[C" , TERMKEY_RIGHT},
+    {"[D" , TERMKEY_LEFT},
+    {"[2~", TERMKEY_INSERT},
+    {"[3~", TERMKEY_DELETE},
+    {"[H" , TERMKEY_HOME},
+    {"[4~", TERMKEY_END},
+    {"[5~", TERMKEY_PAGEUP},
+    {"[6~", TERMKEY_PAGEDOWN},
 };
 
 // TODO: refactor this one
 void parse_event(Event *e, isize n) {
     byte *str = e->buf;
 
-    if (n == 1 && str[0] != ESCAPE_KEY) { // regular key
+    if (n == 1 && str[0] != TERMKEY_ESCAPE) { // regular key
         // write_strf("%ld: '%.*s'\r\n", n, (i32)n, str);
         
         #define DELETE 127
         if (str[0] == DELETE) {
-            e->type = EKey;
-            e->key = BACKSPACE_KEY;
+            e->type = ETermKey;
+            e->term_key = TERMKEY_BACKSPACE;
         } else {
             // decode ut8 later
             e->type = EText;
@@ -574,7 +575,7 @@ void parse_event(Event *e, isize n) {
         return;
     }
 
-    if (str[0] != ESCAPE_KEY && 1 <= n && n <= 4) { // utf-8
+    if (str[0] != TERMKEY_ESCAPE && 1 <= n && n <= 4) { // utf-8
         e->type = EText;
         // By default assumes the display_width of a cp is 1.
         e->parsed_cp = cp_new(str, n, 1);
@@ -601,11 +602,11 @@ void parse_event(Event *e, isize n) {
         return;
     }
 
-    if ((n == 3 || n == 4) && str[0] == ESCAPE_KEY) { // longer escaped sequence
-        for (usize i = 0; i < ARRAY_SIZE(key_table); i++) {
-            if (memcmp(str + 1, key_table[i].str, n - 1) == EXIT_SUCCESS) {
-                e->type = EKey;
-                e->key  = key_table[i].k;
+    if ((n == 3 || n == 4) && str[0] == TERMKEY_ESCAPE) { // longer escaped sequence
+        for (usize i = 0; i < ARRAY_SIZE(term_key_table); i++) {
+            if (memcmp(str + 1, term_key_table[i].str, n - 1) == EXIT_SUCCESS) {
+                e->type = ETermKey;
+                e->term_key = term_key_table[i].k;
                 return;
             }
         }
