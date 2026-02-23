@@ -55,7 +55,7 @@ b32 cp_equal(CodePoint a, CodePoint b) {
 typedef enum {
     ENone,
     ETermKey,
-    EText,
+    ECodePoint,
     EWinch,
     EMouseLeft,
     EMouseRight,
@@ -567,7 +567,7 @@ void parse_event(Event *e, isize n) {
             e->term_key = TERMKEY_BACKSPACE;
         } else {
             // decode ut8 later
-            e->type = EText;
+            e->type = ECodePoint;
             e->parsed_cp = cp_from_byte(str[0]);
         }
 
@@ -575,7 +575,7 @@ void parse_event(Event *e, isize n) {
     }
 
     if (str[0] != TERMKEY_ESCAPE && 1 <= n && n <= 4) { // utf-8
-        e->type = EText;
+        e->type = ECodePoint;
         // By default assumes the display_width of a cp is 1.
         e->parsed_cp = cp_new(str, n, 1);
         return;
