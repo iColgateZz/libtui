@@ -189,7 +189,6 @@ b32 try_parse_text(Event *e, byte *str, isize n);
 
 // TODO: remove this array impl and use da_append
 //       and its friends
-// TODO: utf-8 handling
 
 Array array_init(usize reserve_size, usize item_size) {
     Arena arena = arena_init(GB(16));
@@ -617,7 +616,7 @@ b32 try_parse_term_key(Event *e, byte *str, isize n) {
 
 b32 try_parse_text(Event *e, byte *str, isize n) {
     if (1 <= n && n <= 4) {
-        // TODO:
+        // TODO: proper utf-8 handling
         // By default assumes the display_width of a cp is 1.
         // Never checks if input is correct utf-8.
         e->type = ECodePoint;
