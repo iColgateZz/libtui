@@ -117,6 +117,7 @@ u64 get_delta_time();
 u32 get_terminal_width();
 u32 get_terminal_height();
 
+void put_codepoint(u32 x, u32 y, CodePoint cp);
 void put_char(u32 x, u32 y, byte c);
 void put_str(u32 x, u32 y, byte *str, usize len);
 
@@ -627,12 +628,16 @@ b32 try_parse_text(Event *e, byte *str, isize n) {
     return false;
 }
 
-void put_char(u32 x, u32 y, byte c) {
+void put_codepoint(u32 x, u32 y, CodePoint cp) {
     Rectangle parent = peek_scope();
     if (!point_in_rect(x, y, parent)) return;
 
     CodePoint *back_items = (CodePoint *)Terminal.backbuffer.items;
-    back_items[x + y * Terminal.width] = cp_from_byte(c);
+    back_items[x + y * Terminal.width] = cp;
+}
+
+void put_char(u32 x, u32 y, byte c) {
+    put_codepoint(x, y, cp_from_byte(c));
 }
 
 // void put_str(u32 x, u32 y, byte *str, usize len) {
