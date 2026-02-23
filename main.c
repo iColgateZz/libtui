@@ -15,16 +15,16 @@ typedef struct {
 static i32 y_offset = 0;
 
 void draw(Widget *a) {
-    u8 ch;
+    CodePoint cp;
     if (a->state == 0) {
-        ch = '-';
+        cp = cp("Э");
     } else {
-        ch = '|';
+        cp = cp("Õ");
     }
 
     for (usize i = 0; i < a->h; i++) {
         for (usize j = 0; j < a->w; j++) {
-            put_char(a->x + j, a->y + i - y_offset, ch);
+            put_codepoint(a->x + j, a->y + i - y_offset, cp);
         }
     }
 }
