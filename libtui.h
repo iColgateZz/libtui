@@ -183,6 +183,9 @@ Rectangle peek_scope();
 void push_scope(u32 x, u32 y, u32 w, u32 h);
 void render();
 void update_terminal_scope();
+b32 try_parse_mouse(Event *e, byte *str, isize n);
+b32 try_parse_term_key(Event *e, byte *str, isize n);
+b32 try_parse_text(Event *e, byte *str, isize n);
 
 // TODO: remove this array impl and use da_append
 //       and its friends
@@ -537,6 +540,53 @@ void poll_input() {
     }
 }
 
+void parse_event(Event *e, isize n) {
+    byte *str = e->buf;
+
+    if (str[0] == TERMKEY_ESCAPE) {
+        if (try_parse_mouse(e, str, n))   return;
+        if (try_parse_term_key(e, str, n)) return;
+
+        // Unknown escape sequence
+        e->type = ENone;
+        return;
+    }
+
+    // special case
+    #define DELETE 127
+    if (n == 1 && str[0] == DELETE) {
+        e->type = ETermKey;
+        e->term_key = TERMKEY_BACKSPACE;
+        return;
+    }
+
+    if (try_parse_text(e, str, n)) return;
+
+    e->type = ENone;
+}
+
+b32 try_parse_mouse(Event *e, byte *str, isize n) {
+    if (n < 9 || memcmp(str, "\33[<", 3) != 0)
+        return false;
+
+    u32 btn          = strtol(str + 3, &str, 10);
+    e->mouse.x       = strtol(str + 1, &str, 10) - 1;
+    e->mouse.y       = strtol(str + 1, &str, 10) - 1;
+    e->mouse.pressed = (*str == 'M');
+
+    switch (btn) {
+        case 0:  e->type = EMouseLeft;   break;
+        case 1:  e->type = EMouseMiddle; break;
+        case 2:  e->type = EMouseRight;  break;
+        case 32: e->type = EMouseDrag;   break;
+        case 64: e->type = EScrollUp;    break;
+        case 65: e->type = EScrollDown;  break;
+        default: e->type = ENone;
+    }
+
+    return true;
+}
+
 static struct {byte str[4]; TermKey k;} term_key_table[] = {
     {"[A" , TERMKEY_UP},
     {"[B" , TERMKEY_DOWN},
@@ -550,65 +600,30 @@ static struct {byte str[4]; TermKey k;} term_key_table[] = {
     {"[6~", TERMKEY_PAGEDOWN},
 };
 
-// TODO: refactor this one
-void parse_event(Event *e, isize n) {
-    byte *str = e->buf;
+b32 try_parse_term_key(Event *e, byte *str, isize n) {
+    if (!(3 <= n && n <= 4))
+        return false;
 
-    if (n == 1 && str[0] != TERMKEY_ESCAPE) { // regular key
-        // write_strf("%ld: '%.*s'\r\n", n, (i32)n, str);
-        
-        #define DELETE 127
-        if (str[0] == DELETE) {
+    for (usize i = 0; i < ARRAY_SIZE(term_key_table); i++) {
+        if (memcmp(str + 1, term_key_table[i].str, n - 1) == 0) {
             e->type = ETermKey;
-            e->term_key = TERMKEY_BACKSPACE;
-        } else {
-            // decode ut8 later
-            e->type = ECodePoint;
-            e->parsed_cp = cp_from_byte(str[0]);
+            e->term_key = term_key_table[i].k;
+            return true;
         }
-
-        return;
     }
 
-    if (str[0] != TERMKEY_ESCAPE && 1 <= n && n <= 4) { // utf-8
-        e->type = ECodePoint;
+    return false;
+}
+
+b32 try_parse_text(Event *e, byte *str, isize n) {
+    if (1 <= n && n <= 4) {
         // By default assumes the display_width of a cp is 1.
+        e->type = ECodePoint;
         e->parsed_cp = cp_new(str, n, 1);
-        return;
+        return true;
     }
 
-    if (n >= 9 && memcmp(str, "\33[<", 3) == EXIT_SUCCESS) {
-        // write_strf("%ld: '%.*s'\r\n", n, (i32)n - 3, str + 3);
-        u32 btn = strtol(str + 3, &str, 10);
-        e->mouse.x       = strtol(str + 1, &str, 10) - 1;
-        e->mouse.y       = strtol(str + 1, &str, 10) - 1;
-        e->mouse.pressed = str[0] == 'M' ? true : false;
-        // write_strf("btn: %d, x: %d, y: %d\r\n", btn, e->x, e->y);
-        switch (btn) {
-            case 0:  e->type = EMouseLeft;   break;
-            case 1:  e->type = EMouseMiddle; break;
-            case 2:  e->type = EMouseRight;  break;
-            case 32: e->type = EMouseDrag;   break;
-            case 64: e->type = EScrollUp;    break;
-            case 65: e->type = EScrollDown;  break;
-            default: e->type = ENone;
-        }
-
-        return;
-    }
-
-    if ((n == 3 || n == 4) && str[0] == TERMKEY_ESCAPE) { // longer escaped sequence
-        for (usize i = 0; i < ARRAY_SIZE(term_key_table); i++) {
-            if (memcmp(str + 1, term_key_table[i].str, n - 1) == EXIT_SUCCESS) {
-                e->type = ETermKey;
-                e->term_key = term_key_table[i].k;
-                return;
-            }
-        }
-    }
-
-    e->type = ENone;
-    return;
+    return false;
 }
 
 void put_char(u32 x, u32 y, byte c) {

@@ -79,15 +79,15 @@ i32 main(i32 argc, byte *argv[]) {
         begin_frame();
 
         // application logic
-        if (get_event_type() == EWinch) {
+        if (is_event(EWinch)) {
             on_winch(&a);
             on_winch(&b);
         }
 
-        if (get_event_type() == EScrollDown) {
+        if (is_event(EScrollDown)) {
             y_offset++;
             // write_str("Here\r\n");
-        } else if (get_event_type() == EScrollUp) {
+        } else if (is_event(EScrollUp)) {
             y_offset--;
             // write_str("Here2\r\n");
         }
