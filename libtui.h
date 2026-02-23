@@ -74,15 +74,11 @@ typedef struct {
     TermKey term_key;
 } Event;
 
-// TODO: get rid of useless methods
-EventType get_event_type();
 b32 is_event_type(EventType e);
 u32 get_mouse_x();
 u32 get_mouse_y();
 b32 is_mouse_pressed();
 b32 is_mouse_released();
-Event get_event();
-TermKey get_key();
 b32 is_key_pressed(TermKey k);
 b32 is_codepoint(CodePoint cp);
 
@@ -154,14 +150,11 @@ struct {
 u64 get_delta_time() { return Terminal.dt; }
 u32 get_terminal_width() { return Terminal.width; }
 u32 get_terminal_height() { return Terminal.height; }
-EventType get_event_type() { return Terminal.event.type; }
 b32 is_event_type(EventType e) { return Terminal.event.type == e; }
 u32 get_mouse_x() { return Terminal.event.x; }
 u32 get_mouse_y() { return Terminal.event.y; }
 b32 is_mouse_pressed() { return Terminal.event.mouse_pressed; }
 b32 is_mouse_released() { return !is_mouse_pressed(); }
-Event get_event() { return Terminal.event; }
-TermKey get_key() { return Terminal.event.term_key; }
 b32 is_key_pressed(TermKey k) { return Terminal.event.term_key == k 
                             && Terminal.event.type == ETermKey; }
 b32 is_codepoint(CodePoint cp) { return cp_equal(cp, Terminal.event.parsed_cp); }
