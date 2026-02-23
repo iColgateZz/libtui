@@ -4,7 +4,6 @@
 
 // public
 
-// TODO: find better name than Key
 typedef enum {
     TERMKEY_BACKSPACE = 8,
     TERMKEY_TAB       = 9,
