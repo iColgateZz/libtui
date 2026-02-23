@@ -55,7 +55,7 @@ b32 cp_equal(CodePoint a, CodePoint b) {
 typedef enum {
     ENone,
     ETermKey,
-    EText, // TODO: find better name than EText, Eutf8?
+    EText,
     EWinch,
     EMouseLeft,
     EMouseRight,
