@@ -75,7 +75,7 @@ i32 main(i32 argc, byte *argv[]) {
     // push_scope(side - 1, 0, 1, 15);
     // push_scope(0, 0, 10, 10);
 
-    while (!is_codepoint(cp_from_byte('q'))) {
+    while (!is_codepoint(cp("q"))) {
         begin_frame();
 
         // application logic
