@@ -618,6 +618,7 @@ b32 try_parse_term_key(Event *e, byte *str, isize n) {
 b32 try_parse_text(Event *e, byte *str, isize n) {
     if (1 <= n && n <= 4) {
         // By default assumes the display_width of a cp is 1.
+        // Never checks if input is correct utf-8.
         e->type = ECodePoint;
         e->parsed_cp = cp_new(str, n, 1);
         return true;
