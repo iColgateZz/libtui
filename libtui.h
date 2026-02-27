@@ -646,13 +646,15 @@ void put_char(u32 x, u32 y, byte c) {
     put_codepoint(x, y, cp_from_byte(c));
 }
 
-// void put_str(u32 x, u32 y, byte *str, usize len) {
-//     Rectangle parent = peek_scope();
-//     if (!point_in_rect(x, y, parent)) return;
+void put_str(u32 x, u32 y, byte *str, usize len) {
+    Rectangle parent = peek_scope();
+    if (!point_in_rect(x, y, parent)) return;
 
-//     usize copy_len = MIN(len, parent.x + parent.w - x);
-//     memcpy(Terminal.backbuffer.items + x + y * Terminal.width, str, copy_len);
-// }
+    usize copy_len = MIN(len, parent.x + parent.w - x);
+    for (usize i = 0; i < copy_len; ++i) {
+        put_char(x + i, y, str[i]);
+    }
+}
 
 void push_scope(u32 x, u32 y, u32 w, u32 h) {
     Rectangle parent = peek_scope();
