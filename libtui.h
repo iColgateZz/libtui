@@ -100,8 +100,8 @@ u32 get_terminal_width();
 u32 get_terminal_height();
 
 void put_codepoint(u32 x, u32 y, CodePoint cp);
-void put_char(u32 x, u32 y, byte c);
-void put_str(u32 x, u32 y, byte *str, usize len);
+void put_ascii_char(u32 x, u32 y, byte c);
+void put_ascii_str(u32 x, u32 y, byte *str, usize len);
 
 #endif //LIBTUI_INCLUDE
 
@@ -642,17 +642,17 @@ void put_codepoint(u32 x, u32 y, CodePoint cp) {
     back_items[x + y * Terminal.width] = cp;
 }
 
-void put_char(u32 x, u32 y, byte c) {
+void put_ascii_char(u32 x, u32 y, byte c) {
     put_codepoint(x, y, cp_from_byte(c));
 }
 
-void put_str(u32 x, u32 y, byte *str, usize len) {
+void put_ascii_str(u32 x, u32 y, byte *str, usize len) {
     Rectangle parent = peek_scope();
     if (!point_in_rect(x, y, parent)) return;
 
     usize copy_len = MIN(len, parent.x + parent.w - x);
     for (usize i = 0; i < copy_len; ++i) {
-        put_char(x + i, y, str[i]);
+        put_ascii_char(x + i, y, str[i]);
     }
 }
 
