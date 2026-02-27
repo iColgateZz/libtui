@@ -78,7 +78,7 @@ Rectangle rect_union(Rectangle a, Rectangle b);
 
 typedef struct {
     Arena arena;
-    byte *items;
+    void *items;
     usize count;
     usize capacity;
     usize item_size;
@@ -292,7 +292,7 @@ void update_screen_dimensions() {
 }
 
 void update_terminal_scope() {
-    Rectangle *r = (Rectangle *)Terminal.scopes.items;
+    Rectangle *r = Terminal.scopes.items;
     *r = (Rectangle) {
         .w = Terminal.width,
         .h = Terminal.height,
@@ -332,7 +332,7 @@ void handle_sigwinch(i32 signo) {
     update_terminal_scope();
 
     // trigger full redraw
-    CodePoint *cps = (CodePoint *)Terminal.frontbuffer.items;
+    CodePoint *cps = Terminal.frontbuffer.items;
     for (usize i = 0; i < Terminal.frontbuffer.count; ++i) {
         cps[i] = cp_from_byte(0xFF);
     }
@@ -344,7 +344,7 @@ void set_max_timeout_ms(u32 timeout) { Terminal.timeout = timeout; }
 
 void begin_frame() {
     save_timestamp();
-    CodePoint *cps = (CodePoint *)Terminal.backbuffer.items;
+    CodePoint *cps = Terminal.backbuffer.items;
     for (usize i = 0; i < Terminal.backbuffer.count; ++i) {
         cps[i] = cp_from_byte(' ');
     }
@@ -385,8 +385,8 @@ void render() {
         usize gap = 0;
         b32 first_in_row = true;
 
-        CodePoint *back_items = (CodePoint *)Terminal.backbuffer.items;
-        CodePoint *front_items = (CodePoint *)Terminal.frontbuffer.items;
+        CodePoint *back_items = Terminal.backbuffer.items;
+        CodePoint *front_items = Terminal.frontbuffer.items;
 
         while (pos < row_end) {
 
@@ -638,7 +638,7 @@ void put_codepoint(u32 x, u32 y, CodePoint cp) {
     Rectangle parent = peek_scope();
     if (!point_in_rect(x, y, parent)) return;
 
-    CodePoint *back_items = (CodePoint *)Terminal.backbuffer.items;
+    CodePoint *back_items = Terminal.backbuffer.items;
     back_items[x + y * Terminal.width] = cp;
 }
 
