@@ -172,6 +172,8 @@ b32 try_parse_text(Event *e, byte *str, isize n);
 
 // TODO: remove this array impl and use da_append
 //       and its friends
+//       implement a separate arena_da_append
+//       allocators module
 
 Array array_init(usize reserve_size, usize item_size) {
     Arena arena = arena_init(GB(16));
@@ -526,7 +528,7 @@ void parse_event(Event *e, isize n) {
     byte *str = e->buf;
 
     if (str[0] == TERMKEY_ESCAPE) {
-        if (try_parse_mouse(e, str, n))   return;
+        if (try_parse_mouse(e, str, n))    return;
         if (try_parse_term_key(e, str, n)) return;
 
         // Unknown escape sequence
