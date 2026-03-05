@@ -2,3 +2,5 @@
 2. game of life or something simmilar
 3. something with mouse clicks and dragging
 4. picture/video to ascii
+5. math & coordinate transformation
+6. some 3D stuff in terminal
