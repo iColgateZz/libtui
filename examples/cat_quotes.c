@@ -1,7 +1,7 @@
 #define PSH_BUILD_IMPL
 #define LIBTUI_IMPL
 #define PSH_NO_ECHO
-    #include "libtui.h"
+    #include "../libtui.h"
 
 #define SEC(x)  x * 1000
 #define SEC_PER_QUOTE 10
