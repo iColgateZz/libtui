@@ -79,5 +79,16 @@ void reset_reader() {
 }
 
 void draw() {
-    put_ascii_str(0, 0, buffer.items, buffer.count);
+    u32 printed_lines = 0;
+    while (printed_lines * get_terminal_width() < buffer.count) {
+        u32 print_len = MIN(get_terminal_width(), buffer.count - printed_lines * get_terminal_width());
+        put_ascii_str(
+            0,
+            printed_lines,
+            buffer.items + printed_lines * get_terminal_width(),
+            print_len
+        );
+
+        printed_lines++;
+    }
 }
