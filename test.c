@@ -14,6 +14,7 @@ Sb buffer = {0};
 void main_loop();
 void parse_data();
 void reset_reader();
+void draw();
 
 i32 main(i32 argc, byte *argv[]) {
     PSH_REBUILD_UNITY_AUTO(argc, argv);
@@ -62,7 +63,7 @@ void main_loop() {
         reset_reader();
     }
 
-    put_ascii_str(0, 0, buffer.items, buffer.count);
+    draw();
 }
 
 void parse_data() {
@@ -75,4 +76,8 @@ void reset_reader() {
     reader.store.count = 0;
     reader.ready = false;
     reader.fd = INVALID_FD;
+}
+
+void draw() {
+    put_ascii_str(0, 0, buffer.items, buffer.count);
 }
