@@ -4,6 +4,7 @@
     #include "libtui.h"
 
 #define SEC(x)  x * 1000
+#define SEC_PER_QUOTE 10
 
 Cmd cmd = {0};
 u16 timer = 0;
@@ -21,7 +22,7 @@ i32 main(i32 argc, byte *argv[]) {
 
     init_terminal();
     set_max_timeout_ms(10);
-    timer = SEC(10);
+    timer = SEC(SEC_PER_QUOTE);
     cmd_append(&cmd, "curl", "-s", "https://meowfacts.herokuapp.com/");
 
     while (!is_codepoint(cp("q"))) {
@@ -37,7 +38,7 @@ i32 main(i32 argc, byte *argv[]) {
 
 void main_loop() {
     timer += get_delta_time();
-    if (timer >= SEC(5)) {
+    if (timer >= SEC(SEC_PER_QUOTE)) {
         timer = 0;
 
         Unix_Pipe pipe;
