@@ -420,7 +420,6 @@ void render() {
                 for (usize i = 0; i < run_len + gap; ++i) {
                     array_append(&Terminal.frame_cmds, back_items[run_start - gap + i].raw, back_items[run_start - gap + i].raw_len);
                 }
-                gap = 0;
             } else {
                 // I know it is the same row
                 u32 new_col = run_start % screen_w;
@@ -430,6 +429,7 @@ void render() {
                 }
             }
 
+            gap = 0;
             cursor.y = pos / screen_w;
             cursor.x = pos % screen_w;
 
