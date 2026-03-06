@@ -76,20 +76,9 @@ b32 point_in_rect(u32 x, u32 y, Rectangle r);
 Rectangle rect_intersect(Rectangle a, Rectangle b);
 Rectangle rect_union(Rectangle a, Rectangle b);
 
-typedef struct {
-    Arena arena;
-    void *items;
-    usize count;
-    usize capacity;
-    usize item_size;
-} Array;
-
-Array array_init(usize reserve_size, usize item_size);
-void  array_resize(Array *a, usize new_size);
-void  array_extend_to(Array *a, usize new_capacity);
-void  array_append(Array *a, void *item, usize n);
-void *array_get(Array *a, usize i);
-void  array_destroy(Array a);
+da_typedef(CP_Buffer, CodePoint);
+da_typedef(Scopes, Rectangle);
+da_typedef(ByteBuffer, byte);
 
 void init_terminal();
 void set_max_timeout_ms(u32 timeout);
@@ -127,10 +116,10 @@ struct {
     u32 timeout;
     Event event;
     u64 saved_time, dt;
-    Array frontbuffer;
-    Array backbuffer;
-    Array frame_cmds;
-    Array scopes;
+    CP_Buffer frontbuffer;
+    CP_Buffer backbuffer;
+    ByteBuffer frame_cmds;
+    Scopes scopes;
     u32 width, height;
 } Terminal = {0};
 
@@ -158,8 +147,8 @@ void write_str_len(byte *str, usize len);
 void write_strf_impl(byte *fmt, ...);
 #define write_str(s)        write_str_len(s, sizeof(s) - 1)
 #define write_strf(...)     write_strf_impl(__VA_ARGS__)
-void generate_absolute_cursor_move(Array *a, u32 row, u32 col);
-void generate_relative_cursor_move(Array *a, u32 step);
+void generate_absolute_cursor_move(ByteBuffer *a, u32 row, u32 col);
+void generate_relative_cursor_move(ByteBuffer *a, u32 step);
 usize u32_to_ascii(byte *dst, u32 value);
 void pop_scope();
 Rectangle peek_scope();
@@ -169,55 +158,6 @@ void update_terminal_scope();
 b32 try_parse_mouse(Event *e, byte *str, isize n);
 b32 try_parse_term_key(Event *e, byte *str, isize n);
 b32 try_parse_text(Event *e, byte *str, isize n);
-
-// TODO: remove this array impl and use da_append
-//       and its friends
-//       implement a separate arena_da_append
-//       allocators module
-
-Array array_init(usize reserve_size, usize item_size) {
-    Arena arena = arena_init(GB(16));
-
-    byte *arr = arena_push(&arena, byte, reserve_size * item_size);
-    assert(arr);
-    memset(arr, 0, reserve_size * item_size);
-
-    return (Array) {
-        .arena = arena,
-        .items = arr,
-        .count = 0,
-        .capacity = arena.committed_size,
-        .item_size = item_size
-    };
-}
-
-void array_resize(Array *a, usize new_size) {
-    arena_clear(&a->arena);
-    a->items = arena_push(&a->arena, byte, new_size * a->item_size);
-    assert(a->items);
-    a->capacity = a->arena.committed_size;
-}
-
-void array_extend_to(Array *a, usize new_capacity) {
-    if (new_capacity * a->item_size >= a->capacity) {
-        array_resize(a, new_capacity);
-    }
-}
-
-void array_append(Array *a, void *item, usize n) {
-    if ((a->count + n) * a->item_size >= a->capacity) {
-        array_resize(a, a->count + n);
-    }
-
-    memcpy(a->items + a->count * a->item_size, item, n * a->item_size);
-    a->count += n;
-}
-
-void *array_get(Array *a, usize i) {
-    return a->items + i * a->item_size;
-}
-
-void array_destroy(Array a) { arena_destroy(a.arena); }
 
 void write_str_len(byte *str, usize len) {
     write(STDOUT_FILENO, str, len);
@@ -271,18 +211,12 @@ void init_terminal() {
     sa.sa_flags = SA_RESTART;
     sigaction(SIGWINCH, &sa, NULL);
 
-    Terminal.backbuffer  = array_init(Terminal.width * Terminal.height, sizeof(CodePoint));
-    Terminal.backbuffer.count = Terminal.width * Terminal.height;
-
-    Terminal.frontbuffer = array_init(Terminal.width * Terminal.height, sizeof(CodePoint));
-    Terminal.frontbuffer.count = Terminal.width * Terminal.height;
-
-    Terminal.frame_cmds  = array_init(Terminal.width * Terminal.height, sizeof(byte));
-    Terminal.scopes      = array_init(256, sizeof(Rectangle));
+    da_resize(&Terminal.backbuffer, Terminal.width * Terminal.height);
+    da_resize(&Terminal.frontbuffer, Terminal.width * Terminal.height);
+    da_resize(&Terminal.frame_cmds, Terminal.width * Terminal.height);
 
     // manually add the terminal scope
-    Terminal.scopes.count = 1;
-    update_terminal_scope();
+    da_append(&Terminal.scopes, ((Rectangle) {.w = Terminal.width, .h = Terminal.height}));
 }
 
 void update_screen_dimensions() {
@@ -294,8 +228,7 @@ void update_screen_dimensions() {
 }
 
 void update_terminal_scope() {
-    Rectangle *r = Terminal.scopes.items;
-    *r = (Rectangle) {
+    Terminal.scopes.items[0] = (Rectangle) {
         .w = Terminal.width,
         .h = Terminal.height,
     };
@@ -316,28 +249,24 @@ void restore_term() {
     fd_close(Terminal.pipe.read_fd);
     fd_close(Terminal.pipe.write_fd);
 
-    array_destroy(Terminal.backbuffer);
-    array_destroy(Terminal.frontbuffer);
-    array_destroy(Terminal.frame_cmds);
-    array_destroy(Terminal.scopes);
+    da_free(Terminal.backbuffer);
+    da_free(Terminal.frontbuffer);
+    da_free(Terminal.frame_cmds);
+    da_free(Terminal.scopes);
 }
 
 void handle_sigwinch(i32 signo) {
     update_screen_dimensions();
 
     u32 new_size = Terminal.width * Terminal.height;
-    array_extend_to(&Terminal.backbuffer, new_size);
-    array_extend_to(&Terminal.frontbuffer, new_size);
-    Terminal.backbuffer.count  = new_size;
-    Terminal.frontbuffer.count = new_size;
+    da_resize(&Terminal.backbuffer, new_size);
+    da_resize(&Terminal.frontbuffer, new_size);
 
     update_terminal_scope();
 
     // trigger full redraw
-    CodePoint *cps = Terminal.frontbuffer.items;
-    for (usize i = 0; i < Terminal.frontbuffer.count; ++i) {
-        cps[i] = cp_from_byte(0xFF);
-    }
+    for (usize i = 0; i < Terminal.frontbuffer.count; ++i)
+        Terminal.frontbuffer.items[i] = cp_from_byte(0xFF);
 
     write(Terminal.pipe.write_fd, &signo, sizeof signo);
 }
@@ -346,10 +275,9 @@ void set_max_timeout_ms(u32 timeout) { Terminal.timeout = timeout; }
 
 void begin_frame() {
     save_timestamp();
-    CodePoint *cps = Terminal.backbuffer.items;
-    for (usize i = 0; i < Terminal.backbuffer.count; ++i) {
-        cps[i] = cp_from_byte(' ');
-    }
+    for (usize i = 0; i < Terminal.backbuffer.count; ++i)
+        Terminal.backbuffer.items[i] = cp_from_byte(' ');
+
     poll_input();
 }
 
@@ -412,20 +340,20 @@ void render() {
                 u32 new_col = run_start % screen_w;
                 generate_absolute_cursor_move(&Terminal.frame_cmds, new_row, new_col);
                 for (usize i = 0; i < run_len; ++i) {
-                    array_append(&Terminal.frame_cmds, back_items[run_start + i].raw, back_items[run_start + i].raw_len);
+                    da_append_many(&Terminal.frame_cmds, back_items[run_start + i].raw, back_items[run_start + i].raw_len);
                 }
             } else if (gap <= GAP_THRESHOLD) {
                 // instead of emitting cursor move, just copy the bytes
                 // that are the same in both buffers
                 for (usize i = 0; i < run_len + gap; ++i) {
-                    array_append(&Terminal.frame_cmds, back_items[run_start - gap + i].raw, back_items[run_start - gap + i].raw_len);
+                    da_append_many(&Terminal.frame_cmds, back_items[run_start - gap + i].raw, back_items[run_start - gap + i].raw_len);
                 }
             } else {
                 // I know it is the same row
                 u32 new_col = run_start % screen_w;
                 generate_relative_cursor_move(&Terminal.frame_cmds, new_col - cursor.x);
                 for (usize i = 0; i < run_len; ++i) {
-                    array_append(&Terminal.frame_cmds, back_items[run_start + i].raw, back_items[run_start + i].raw_len);
+                    da_append_many(&Terminal.frame_cmds, back_items[run_start + i].raw, back_items[run_start + i].raw_len);
                 }
             }
 
@@ -442,7 +370,7 @@ void render() {
     }
 }
 
-void generate_absolute_cursor_move(Array *a, u32 row, u32 col) {
+void generate_absolute_cursor_move(ByteBuffer *a, u32 row, u32 col) {
     byte tmp[64];
     byte *p = tmp;
 
@@ -453,10 +381,10 @@ void generate_absolute_cursor_move(Array *a, u32 row, u32 col) {
     p += u32_to_ascii(p, col + 1);
     *p++ = 'H';
 
-    array_append(a, tmp, (usize)(p - tmp));
+    da_append_many(a, tmp, (usize)(p - tmp));
 }
 
-void generate_relative_cursor_move(Array *a, u32 step) {
+void generate_relative_cursor_move(ByteBuffer *a, u32 step) {
     byte tmp[64];
     byte *p = tmp;
 
@@ -465,7 +393,7 @@ void generate_relative_cursor_move(Array *a, u32 step) {
     p += u32_to_ascii(p, step);
     *p++ = 'C';
 
-    array_append(a, tmp, (usize)(p - tmp));
+    da_append_many(a, tmp, (usize)(p - tmp));
 }
 
 usize u32_to_ascii(byte *dst, u32 value) {
@@ -661,7 +589,7 @@ void put_ascii_str(u32 x, u32 y, byte *str, usize len) {
 void push_scope(u32 x, u32 y, u32 w, u32 h) {
     Rectangle parent = peek_scope();
     Rectangle clipped = rect_intersect(parent, (Rectangle) {x, y, w, h});
-    array_append(&Terminal.scopes, &clipped, 1);
+    da_append(&Terminal.scopes, clipped);
 }
 
 void pop_scope() { 
@@ -670,7 +598,7 @@ void pop_scope() {
 }
 
 Rectangle peek_scope() {
-    return *(Rectangle *)array_get(&Terminal.scopes, Terminal.scopes.count - 1);
+    return da_last(&Terminal.scopes);
 }
 
 b32 point_in_rect(u32 x, u32 y, Rectangle r) {
