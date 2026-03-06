@@ -154,7 +154,7 @@ void pop_scope();
 Rectangle peek_scope();
 void push_scope(u32 x, u32 y, u32 w, u32 h);
 void render();
-void update_terminal_scope();
+void update_root_scope();
 b32 try_parse_mouse(Event *e, byte *str, isize n);
 b32 try_parse_term_key(Event *e, byte *str, isize n);
 b32 try_parse_text(Event *e, byte *str, isize n);
@@ -227,7 +227,7 @@ void update_screen_dimensions() {
     Terminal.height = ws.ws_row;
 }
 
-void update_terminal_scope() {
+void update_root_scope() {
     Terminal.scopes.items[0] = (Rectangle) {
         .w = Terminal.width,
         .h = Terminal.height,
@@ -262,7 +262,7 @@ void handle_sigwinch(i32 signo) {
     da_resize(&Terminal.backbuffer, new_size);
     da_resize(&Terminal.frontbuffer, new_size);
 
-    update_terminal_scope();
+    update_root_scope();
 
     // trigger full redraw
     for (usize i = 0; i < Terminal.frontbuffer.count; ++i)
