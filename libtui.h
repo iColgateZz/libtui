@@ -150,7 +150,7 @@ void write_strf_impl(byte *fmt, ...);
 void generate_absolute_cursor_move(ByteBuffer *a, u32 row, u32 col);
 void generate_relative_cursor_move(ByteBuffer *a, u32 step);
 usize u32_to_ascii(byte *dst, u32 value);
-void pop_scope();
+Rectangle pop_scope();
 Rectangle peek_scope();
 void push_scope(u32 x, u32 y, u32 w, u32 h);
 void render();
@@ -592,9 +592,8 @@ void push_scope(u32 x, u32 y, u32 w, u32 h) {
     da_append(&Terminal.scopes, clipped);
 }
 
-void pop_scope() { 
-    Terminal.scopes.count--;
-    assert(Terminal.scopes.count >= 1);
+Rectangle pop_scope() { 
+    return da_pop(&Terminal.scopes);
 }
 
 Rectangle peek_scope() {
