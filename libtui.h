@@ -632,13 +632,14 @@ Rectangle rect_union(Rectangle a, Rectangle b) {
     };
 }
 
-byte *fmt_u32(byte *p, byte *end, u32 v) {
-    byte tmp[16];
+byte *fmt_uint(byte *p, byte *end, u32 v, u8 base) {
+    byte tmp[32];
     usize n = 0;
 
     do {
-        tmp[n++] = '0' + (v % 10);
-        v /= 10;
+        u8 d = v % base;
+        tmp[n++] = (d < 10) ? '0' + d : 'a' + d - 10;
+        v /= base;
     } while (v);
 
     while (n--) {
@@ -688,16 +689,21 @@ byte *fmt(byte *p, byte *end, byte *f, ...) {
                     p++;
 
                     u32 u = (u32)(-(i64)v);
-                    p = fmt_u32(p, end, u);
+                    p = fmt_uint(p, end, u, 10);
                 } else {
-                    p = fmt_u32(p, end, (u32)v);
+                    p = fmt_uint(p, end, (u32)v, 10);
                 }
 
             } break;
 
             case 'u': {
                 u32 v = va_arg(args, u32);
-                p = fmt_u32(p, end, v);
+                p = fmt_uint(p, end, v, 10);
+            } break;
+
+            case 'x': {
+                u32 v = va_arg(args, u32);
+                p = fmt_uint(p, end, v, 16);
             } break;
 
             case 's': {
