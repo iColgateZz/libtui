@@ -3,9 +3,6 @@
 #define PSH_NO_ECHO
     #include "../libtui.h"
 
-
-//TODO: mv s8 to psh_core
-
 void main_loop();
 void print_dimensions();
 b32 check_min_dimensions();
