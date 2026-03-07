@@ -632,6 +632,8 @@ Rectangle rect_union(Rectangle a, Rectangle b) {
     };
 }
 
+//TODO: refactor functions, add public declarations
+//      replace u32_to_ascii with fmt_uint
 byte *fmt_uint(byte *p, byte *end, u64 v, u8 base) {
     byte tmp[32];
     usize n = 0;
