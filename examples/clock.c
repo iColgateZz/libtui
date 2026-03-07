@@ -4,15 +4,16 @@
     #include "../libtui.h"
 
 #include <time.h>
+#define buf_size 16
 
 void main_loop();
-u32 clock_str(byte buffer[16]);
+u32 clock_str(byte buffer[buf_size]);
 
 i32 main(i32 argc, byte *argv[]) {
     PSH_REBUILD_UNITY_AUTO(argc, argv);
 
     init_terminal();
-    set_max_timeout_ms(1000);
+    set_max_timeout_ms(10);
 
     while (!is_codepoint(cp("q"))) {
         begin_frame();
@@ -26,27 +27,26 @@ i32 main(i32 argc, byte *argv[]) {
 }
 
 void main_loop() {
-    byte buffer[16] = {0};
+    byte buffer[buf_size] = {0};
     u32 len = clock_str(buffer);
     put_ascii_str(0, 0, buffer, len);
 }
 
-u32 clock_str(byte buffer[16]) {
+u32 clock_str(byte buffer[buf_size]) {
     time_t now = time(NULL);
-    struct tm *t = gmtime(&now);
+    struct tm *t = localtime(&now);
 
     byte *p = buffer;
+    byte *end = buffer + buf_size;
 
     if (t->tm_hour < 10) *p++ = '0';
-    p += u32_to_ascii(p, t->tm_hour);
-    *p++ = ':';
+    p = fmt(p, end, "%u:", t->tm_hour);
 
     if (t->tm_min < 10) *p++ = '0';
-    p += u32_to_ascii(p, t->tm_min);
-    *p++ = ':';
+    p = fmt(p, end, "%u:", t->tm_min);
     
     if (t->tm_sec < 10) *p++ = '0';
-    p += u32_to_ascii(p, t->tm_sec);
+    p = fmt(p, end, "%u", t->tm_sec);
 
     return p - buffer;
 }
