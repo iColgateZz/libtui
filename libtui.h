@@ -632,7 +632,7 @@ Rectangle rect_union(Rectangle a, Rectangle b) {
     };
 }
 
-byte *fmt_uint(byte *p, byte *end, u32 v, u8 base) {
+byte *fmt_uint(byte *p, byte *end, u64 v, u8 base) {
     byte tmp[32];
     usize n = 0;
 
@@ -682,27 +682,27 @@ byte *fmt(byte *p, byte *end, byte *f, ...) {
         f++;
         switch (*f++) {
             case 'd': {
-                i32 v = va_arg(args, i32);
+                i64 v = va_arg(args, i64);
 
                 if (v < 0) {
                     if (p < end) *p = '-';
                     p++;
 
-                    u32 u = (u32)(-(i64)v);
+                    u64 u = (u64)(-v);
                     p = fmt_uint(p, end, u, 10);
                 } else {
-                    p = fmt_uint(p, end, (u32)v, 10);
+                    p = fmt_uint(p, end, (u64)v, 10);
                 }
 
             } break;
 
             case 'u': {
-                u32 v = va_arg(args, u32);
+                u64 v = va_arg(args, u64);
                 p = fmt_uint(p, end, v, 10);
             } break;
 
             case 'x': {
-                u32 v = va_arg(args, u32);
+                u64 v = va_arg(args, u64);
                 p = fmt_uint(p, end, v, 16);
             } break;
 
