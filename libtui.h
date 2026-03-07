@@ -154,7 +154,6 @@ void write_strf_impl(byte *fmt, ...);
 #define write_strf(...)     write_strf_impl(__VA_ARGS__)
 void generate_absolute_cursor_move(ByteBuffer *a, u32 row, u32 col);
 void generate_relative_cursor_move(ByteBuffer *a, u32 step);
-usize u32_to_ascii(byte *dst, u32 value);
 Rectangle pop_scope();
 Rectangle peek_scope();
 void push_scope(u32 x, u32 y, u32 w, u32 h);
@@ -378,42 +377,21 @@ void render() {
 void generate_absolute_cursor_move(ByteBuffer *a, u32 row, u32 col) {
     byte tmp[64];
     byte *p = tmp;
+    byte *end = tmp + sizeof tmp;
 
-    *p++ = '\33';
-    *p++ = '[';
-    p += u32_to_ascii(p, row + 1);
-    *p++ = ';';
-    p += u32_to_ascii(p, col + 1);
-    *p++ = 'H';
-
-    da_append_many(a, tmp, (usize)(p - tmp));
+    p = fmt(p, end, "\33[%u;%uH", row + 1, col + 1);
+    usize len = MIN((usize)(p - tmp), sizeof tmp);
+    da_append_many(a, tmp, len);
 }
 
 void generate_relative_cursor_move(ByteBuffer *a, u32 step) {
     byte tmp[64];
     byte *p = tmp;
+    byte *end = tmp + sizeof tmp;
 
-    *p++ = '\33';
-    *p++ = '[';
-    p += u32_to_ascii(p, step);
-    *p++ = 'C';
-
-    da_append_many(a, tmp, (usize)(p - tmp));
-}
-
-usize u32_to_ascii(byte *dst, u32 value) {
-    byte tmp[16];
-    usize len = 0;
-
-    do {
-        tmp[len++] = '0' + (value % 10);
-        value /= 10;
-    } while (value);
-
-    for (usize i = 0; i < len; i++)
-        dst[i] = tmp[len - 1 - i];
-
-    return len;
+    p = fmt(p, end, "\33[%uC", step);
+    usize len = MIN((usize)(p - tmp), sizeof tmp);
+    da_append_many(a, tmp, len);
 }
 
 void poll_input() {
