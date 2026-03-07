@@ -76,9 +76,9 @@ b32 point_in_rect(u32 x, u32 y, Rectangle r);
 Rectangle rect_intersect(Rectangle a, Rectangle b);
 Rectangle rect_union(Rectangle a, Rectangle b);
 
-da_typedef(CP_Buffer, CodePoint);
-da_typedef(Scopes, Rectangle);
-da_typedef(ByteBuffer, byte);
+Rectangle pop_scope();
+Rectangle peek_scope();
+void push_scope(u32 x, u32 y, u32 w, u32 h);
 
 void init_terminal();
 void set_max_timeout_ms(u32 timeout);
@@ -123,6 +123,10 @@ Utf8DecodeResult try_decode_utf8(byte *s, usize len);
 #define MIN(a, b)     ((a) < (b) ? (a) : (b))
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
 
+da_typedef(CP_Buffer, CodePoint);
+da_typedef(Scopes, Rectangle);
+da_typedef(ByteBuffer, byte);
+
 struct {
     struct termios orig_term;
     Unix_Pipe pipe;
@@ -162,9 +166,6 @@ void write_strf_impl(byte *fmt, ...);
 #define write_strf(...)     write_strf_impl(__VA_ARGS__)
 void generate_absolute_cursor_move(ByteBuffer *a, u32 row, u32 col);
 void generate_relative_cursor_move(ByteBuffer *a, u32 step);
-Rectangle pop_scope();
-Rectangle peek_scope();
-void push_scope(u32 x, u32 y, u32 w, u32 h);
 void render();
 void update_root_scope();
 b32 try_parse_mouse(Event *e, byte *str, isize n);
