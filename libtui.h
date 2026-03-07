@@ -521,39 +521,15 @@ b32 try_parse_term_key(Event *e, byte *str, isize n) {
 
 b32 try_parse_text(Event *e, byte *str, isize n) {
     if (1 <= n && n <= 4) {
-        // TODO: proper utf-8 handling
-        // By default assumes the display_width of a cp is 1.
-        // Never checks if input is correct utf-8.
+        // TODO: what if given 4 bytes, but only 1
+        //       is decoded due to an error?
         e->type = ECodePoint;
-        e->parsed_cp = cp_from_raw(str, n, CP_ASSUMED_WIDTH);
+        Utf8DecodeResult res = try_decode_utf8(str, n);
+        e->parsed_cp = res.cp;
         return true;
     }
 
     return false;
-}
-
-CodePoint cp_from_raw(byte *raw, u8 raw_len, u8 display_width) {
-    CodePoint cp = {
-        .raw_len = raw_len,
-        .display_width = display_width,
-    };
-
-    memcpy(cp.raw, raw, raw_len);
-    return cp;
-}
-
-CodePoint cp_from_byte(byte b) {
-    return (CodePoint) {
-        .raw = {b},
-        .display_width = 1,
-        .raw_len = 1,
-    };
-}
-
-b32 cp_equal(CodePoint a, CodePoint b) {
-    if (a.raw_len != b.raw_len) return false;
-    if (a.display_width != b.display_width) return false;
-    return memcmp(a.raw, b.raw, a.raw_len) == 0;
 }
 
 static CodePoint UTF8_REPLACEMENT = {
@@ -598,6 +574,30 @@ Utf8DecodeResult try_decode_utf8(byte *s, usize len) {
         .cp = cp_from_raw(s, expected_len, CP_ASSUMED_WIDTH),
         .consumed_bytes = expected_len,
     };
+}
+
+CodePoint cp_from_raw(byte *raw, u8 raw_len, u8 display_width) {
+    CodePoint cp = {
+        .raw_len = raw_len,
+        .display_width = display_width,
+    };
+
+    memcpy(cp.raw, raw, raw_len);
+    return cp;
+}
+
+CodePoint cp_from_byte(byte b) {
+    return (CodePoint) {
+        .raw = {b},
+        .display_width = 1,
+        .raw_len = 1,
+    };
+}
+
+b32 cp_equal(CodePoint a, CodePoint b) {
+    if (a.raw_len != b.raw_len) return false;
+    if (a.display_width != b.display_width) return false;
+    return memcmp(a.raw, b.raw, a.raw_len) == 0;
 }
 
 void put_str(u32 x, u32 y, byte *s, usize len) {
