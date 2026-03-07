@@ -38,21 +38,12 @@ void main_loop() {
 void print_dimensions() {
     byte buffer[64];
     byte *p = buffer;
+    byte *end = buffer + sizeof buffer;
 
-    //TODO: simplify formatting
-    s8 width_str = s8("Width: ");
-    memcpy(p, width_str.s, width_str.len);
-    p += width_str.len;
+    p = fmt(p, end, "Width: %u; Heigth: %u", get_terminal_width(), get_terminal_height());
+    usize len = MIN((usize)(p - buffer), sizeof buffer);
 
-    p += u32_to_ascii(p, get_terminal_width());
-
-    s8 height_str = s8("; height: ");
-    memcpy(p, height_str.s, height_str.len);
-    p += height_str.len;
-
-    p += u32_to_ascii(p, get_terminal_height());
-
-    put_ascii_str(0, 0, buffer, p - buffer);
+    put_ascii_str(0, 0, buffer, len);
 }
 
 b32 check_min_dimensions() {

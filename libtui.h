@@ -632,4 +632,93 @@ Rectangle rect_union(Rectangle a, Rectangle b) {
     };
 }
 
+byte *fmt_u32(byte *p, byte *end, u32 v) {
+    byte tmp[16];
+    usize n = 0;
+
+    do {
+        tmp[n++] = '0' + (v % 10);
+        v /= 10;
+    } while (v);
+
+    while (n--) {
+        if (p < end) *p = tmp[n];
+        p++;
+    }
+
+    return p;
+}
+
+byte *fmt_cstr(byte *p, byte *end, byte *s) {
+    while (*s) {
+        if (p < end) *p = *s;
+        p++;
+        s++;
+    }
+    return p;
+}
+
+byte *fmt_s8(byte *p, byte *end, s8 s) {
+    for (usize i = 0; i < s.len; i++) {
+        if (p < end) *p = s.s[i];
+        p++;
+    }
+    return p;
+}
+
+byte *fmt(byte *p, byte *end, byte *f, ...) {
+    va_list args;
+    va_start(args, f);
+
+    while (*f) {
+        if (*f != '%') {
+            if (p < end) *p = *f;
+            p++;
+            f++;
+            continue;
+        }
+
+        f++;
+        switch (*f++) {
+            case 'd': {
+                i32 v = va_arg(args, i32);
+
+                if (v < 0) {
+                    if (p < end) *p = '-';
+                    p++;
+
+                    u32 u = (u32)(-(i64)v);
+                    p = fmt_u32(p, end, u);
+                } else {
+                    p = fmt_u32(p, end, (u32)v);
+                }
+
+            } break;
+
+            case 'u': {
+                u32 v = va_arg(args, u32);
+                p = fmt_u32(p, end, v);
+            } break;
+
+            case 's': {
+                byte *s = va_arg(args, byte *);
+                p = fmt_cstr(p, end, s);
+            } break;
+
+            case 'S': {
+                s8 s = va_arg(args, s8);
+                p = fmt_s8(p, end, s);
+            } break;
+
+            case '%': {
+                if (p < end) *p = '%';
+                p++;
+            } break;
+        }
+    }
+
+    va_end(args);
+    return p;
+}
+
 #endif //LIBTUI_IMPL
