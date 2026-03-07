@@ -30,6 +30,7 @@ void main_loop() {
 
     s8 msg = s8("аоцуоадц лоаоцлуÄääääääää");
     put_str(0, 1, msg.s, msg.len);
+    // put_str(0, 1, "\xF8", 1);
 }
 
 void print_dimensions() {

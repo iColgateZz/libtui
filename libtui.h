@@ -98,6 +98,13 @@ byte *fmt_uint(byte *p, byte *end, u64 v, u8 base);
 byte *fmt_cstr(byte *p, byte *end, byte *s);
 byte *fmt_s8(byte *p, byte *end, s8 s);
 
+typedef struct {
+    CodePoint cp;
+    usize consumed_bytes;
+} Utf8DecodeResult;
+
+Utf8DecodeResult try_decode_utf8(byte *s, usize len);
+
 #endif //LIBTUI_INCLUDE
 
 #ifdef LIBTUI_IMPL
@@ -163,7 +170,6 @@ void update_root_scope();
 b32 try_parse_mouse(Event *e, byte *str, isize n);
 b32 try_parse_term_key(Event *e, byte *str, isize n);
 b32 try_parse_text(Event *e, byte *str, isize n);
-CodePoint try_decode_utf8(byte *s, usize len, usize *consumed);
 
 void write_str_len(byte *str, usize len) {
     write(STDOUT_FILENO, str, len);
@@ -555,13 +561,15 @@ static CodePoint UTF8_REPLACEMENT = {
     .display_width = 1,
 };
 
-CodePoint try_decode_utf8(byte *s, usize len, usize *consumed) {
+Utf8DecodeResult try_decode_utf8(byte *s, usize len) {
     assert(len > 0);
 
     u8 first = s[0];
     if (first < 0x80) {
-        *consumed = 1;
-        return cp_from_byte(first);
+        return (Utf8DecodeResult) {
+            .cp = cp_from_byte(first),
+            .consumed_bytes = 1,
+        };
     }
 
     usize expected_len = 0;
@@ -569,29 +577,35 @@ CodePoint try_decode_utf8(byte *s, usize len, usize *consumed) {
     else if ((first & 0xF0) == 0xE0) expected_len = 3;
     else if ((first & 0xF8) == 0xF0) expected_len = 4;
     else {
-        *consumed = 1;
-        return UTF8_REPLACEMENT;
+        return (Utf8DecodeResult) {
+            .cp = UTF8_REPLACEMENT,
+            .consumed_bytes = 1,
+        };
     }
 
     assert(expected_len <= len);
     for (usize i = 1; i < expected_len; i++) {
         if ((s[i] & 0xC0) != 0x80) {
-            *consumed = i;
-            return UTF8_REPLACEMENT;
+            return (Utf8DecodeResult) {
+                .cp = UTF8_REPLACEMENT,
+                .consumed_bytes = i,
+            };
         }
     }
 
-    *consumed = expected_len;
-    return cp_from_raw(s, expected_len, CP_ASSUMED_WIDTH);
+    return (Utf8DecodeResult) {
+        .cp = cp_from_raw(s, expected_len, CP_ASSUMED_WIDTH),
+        .consumed_bytes = expected_len,
+    };
 }
 
 void put_str(u32 x, u32 y, byte *s, usize len) {
     usize i = 0;
     while (i < len) {
-        usize consumed = 0;
-        CodePoint cp = try_decode_utf8(s + i, len - i, &consumed);
+        Utf8DecodeResult result = try_decode_utf8(s + i, len - i);
+        CodePoint cp = result.cp;
         put_codepoint(x, y, cp);
-        i += consumed;
+        i += result.consumed_bytes;
         x += cp.display_width;
     }
 }
