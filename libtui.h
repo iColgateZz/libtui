@@ -101,9 +101,9 @@ byte *fmt_s8(byte *p, byte *end, s8 s);
 typedef struct {
     CodePoint cp;
     usize consumed_bytes;
-} Utf8DecodeResult;
+} UTF8ParseResult;
 
-Utf8DecodeResult try_decode_utf8(byte *s, usize len);
+UTF8ParseResult try_parse_utf8(byte *s, usize len);
 
 #endif //LIBTUI_INCLUDE
 
@@ -524,7 +524,7 @@ b32 try_parse_text(Event *e, byte *str, isize n) {
         // TODO: what if given 4 bytes, but only 1
         //       is decoded due to an error?
         e->type = ECodePoint;
-        Utf8DecodeResult res = try_decode_utf8(str, n);
+        UTF8ParseResult res = try_parse_utf8(str, n);
         e->parsed_cp = res.cp;
         return true;
     }
@@ -538,12 +538,12 @@ static CodePoint UTF8_REPLACEMENT = {
     .display_width = 1,
 };
 
-Utf8DecodeResult try_decode_utf8(byte *s, usize len) {
+UTF8ParseResult try_parse_utf8(byte *s, usize len) {
     assert(len > 0);
 
     u8 first = s[0];
     if (first < 0x80) {
-        return (Utf8DecodeResult) {
+        return (UTF8ParseResult) {
             .cp = cp_from_byte(first),
             .consumed_bytes = 1,
         };
@@ -554,7 +554,7 @@ Utf8DecodeResult try_decode_utf8(byte *s, usize len) {
     else if ((first & 0xF0) == 0xE0) expected_len = 3;
     else if ((first & 0xF8) == 0xF0) expected_len = 4;
     else {
-        return (Utf8DecodeResult) {
+        return (UTF8ParseResult) {
             .cp = UTF8_REPLACEMENT,
             .consumed_bytes = 1,
         };
@@ -563,14 +563,14 @@ Utf8DecodeResult try_decode_utf8(byte *s, usize len) {
     assert(expected_len <= len);
     for (usize i = 1; i < expected_len; i++) {
         if ((s[i] & 0xC0) != 0x80) {
-            return (Utf8DecodeResult) {
+            return (UTF8ParseResult) {
                 .cp = UTF8_REPLACEMENT,
                 .consumed_bytes = i,
             };
         }
     }
 
-    return (Utf8DecodeResult) {
+    return (UTF8ParseResult) {
         .cp = cp_from_raw(s, expected_len, CP_ASSUMED_WIDTH),
         .consumed_bytes = expected_len,
     };
@@ -603,7 +603,7 @@ b32 cp_equal(CodePoint a, CodePoint b) {
 void put_str(u32 x, u32 y, byte *s, usize len) {
     usize i = 0;
     while (i < len) {
-        Utf8DecodeResult result = try_decode_utf8(s + i, len - i);
+        UTF8ParseResult result = try_parse_utf8(s + i, len - i);
         CodePoint cp = result.cp;
         put_codepoint(x, y, cp);
         i += result.consumed_bytes;
