@@ -28,8 +28,8 @@ void main_loop() {
     print_dimensions();
     if (!check_min_dimensions()) return;
 
-    s8 msg = s8("Абоба нахой");
-    put_utf8_str(0, 1, msg.s, msg.len);
+    s8 msg = s8("аоцуоадц лоаоцлуÄääääääää");
+    put_str(0, 1, msg.s, msg.len);
 }
 
 void print_dimensions() {

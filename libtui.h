@@ -558,10 +558,10 @@ static CodePoint UTF8_REPLACEMENT = {
 CodePoint try_decode_utf8(byte *s, usize len, usize *consumed) {
     assert(len > 0);
 
-    byte first = s[0];
+    u8 first = s[0];
     if (first < 0x80) {
         *consumed = 1;
-        return UTF8_REPLACEMENT;
+        return cp_from_byte(first);
     }
 
     usize expected_len = 0;
@@ -604,6 +604,8 @@ void put_codepoint(u32 x, u32 y, CodePoint cp) {
     back_items[x + y * Terminal.width] = cp;
 }
 
+//TODO: these 2 functions are not necessarily needed
+//      put_str may be used instead of put_ascii_str
 void put_ascii_char(u32 x, u32 y, byte c) {
     put_codepoint(x, y, cp_from_byte(c));
 }
