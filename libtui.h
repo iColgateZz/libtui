@@ -92,6 +92,11 @@ void put_codepoint(u32 x, u32 y, CodePoint cp);
 void put_ascii_char(u32 x, u32 y, byte c);
 void put_ascii_str(u32 x, u32 y, byte *str, usize len);
 
+byte *fmt(byte *p, byte *end, byte *f, ...);
+byte *fmt_uint(byte *p, byte *end, u64 v, u8 base);
+byte *fmt_cstr(byte *p, byte *end, byte *s);
+byte *fmt_s8(byte *p, byte *end, s8 s);
+
 #endif //LIBTUI_INCLUDE
 
 #ifdef LIBTUI_IMPL
@@ -632,43 +637,9 @@ Rectangle rect_union(Rectangle a, Rectangle b) {
     };
 }
 
-//TODO: refactor functions, add public declarations
-//      replace u32_to_ascii with fmt_uint
-byte *fmt_uint(byte *p, byte *end, u64 v, u8 base) {
-    byte tmp[32];
-    usize n = 0;
-
-    do {
-        u8 d = v % base;
-        tmp[n++] = (d < 10) ? '0' + d : 'a' + d - 10;
-        v /= base;
-    } while (v);
-
-    while (n--) {
-        if (p < end) *p = tmp[n];
-        p++;
-    }
-
-    return p;
-}
-
-byte *fmt_cstr(byte *p, byte *end, byte *s) {
-    while (*s) {
-        if (p < end) *p = *s;
-        p++;
-        s++;
-    }
-    return p;
-}
-
-byte *fmt_s8(byte *p, byte *end, s8 s) {
-    for (usize i = 0; i < s.len; i++) {
-        if (p < end) *p = s.s[i];
-        p++;
-    }
-    return p;
-}
-
+// Behaviour is similar to snprintf, in that it does not
+// write beyond the *end pointer, but the returned pointer
+// may point somewhere beyond the *end. 
 byte *fmt(byte *p, byte *end, byte *f, ...) {
     va_list args;
     va_start(args, f);
@@ -728,5 +699,41 @@ byte *fmt(byte *p, byte *end, byte *f, ...) {
     va_end(args);
     return p;
 }
+
+byte *fmt_uint(byte *p, byte *end, u64 v, u8 base) {
+    byte tmp[32];
+    usize n = 0;
+
+    do {
+        u8 d = v % base;
+        tmp[n++] = (d < 10) ? '0' + d : 'a' + d - 10;
+        v /= base;
+    } while (v);
+
+    while (n--) {
+        if (p < end) *p = tmp[n];
+        p++;
+    }
+
+    return p;
+}
+
+byte *fmt_cstr(byte *p, byte *end, byte *s) {
+    while (*s) {
+        if (p < end) *p = *s;
+        p++;
+        s++;
+    }
+    return p;
+}
+
+byte *fmt_s8(byte *p, byte *end, s8 s) {
+    for (usize i = 0; i < s.len; i++) {
+        if (p < end) *p = s.s[i];
+        p++;
+    }
+    return p;
+}
+
 
 #endif //LIBTUI_IMPL
