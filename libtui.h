@@ -67,6 +67,7 @@ b32 is_mouse_pressed();
 b32 is_mouse_released();
 b32 is_term_key(TermKey k);
 b32 is_codepoint(CodePoint cp);
+CodePoint get_codepoint();
 
 typedef struct {
     u32 x, y, w, h;
@@ -150,6 +151,7 @@ b32 is_mouse_pressed() { return Terminal.event.mouse.pressed; }
 b32 is_mouse_released() { return !is_mouse_pressed(); }
 b32 is_term_key(TermKey k) { return Terminal.event.term_key == k && Terminal.event.type == ETermKey; }
 b32 is_codepoint(CodePoint cp) { return cp_equal(cp, Terminal.event.parsed_cp); }
+CodePoint get_codepoint() { return Terminal.event.parsed_cp; }
 
 // private
 void restore_term();
