@@ -88,6 +88,7 @@ u64 get_delta_time();
 u32 get_terminal_width();
 u32 get_terminal_height();
 
+void put_str(u32 x, u32 y, byte *str, usize len);
 void put_codepoint(u32 x, u32 y, CodePoint cp);
 void put_ascii_char(u32 x, u32 y, byte c);
 void put_ascii_str(u32 x, u32 y, byte *str, usize len);
@@ -162,6 +163,7 @@ void update_root_scope();
 b32 try_parse_mouse(Event *e, byte *str, isize n);
 b32 try_parse_term_key(Event *e, byte *str, isize n);
 b32 try_parse_text(Event *e, byte *str, isize n);
+CodePoint try_decode_utf8(byte *s, usize len, usize *consumed);
 
 void write_str_len(byte *str, usize len) {
     write(STDOUT_FILENO, str, len);
@@ -545,6 +547,53 @@ b32 cp_equal(CodePoint a, CodePoint b) {
     if (a.raw_len != b.raw_len) return false;
     if (a.display_width != b.display_width) return false;
     return memcmp(a.raw, b.raw, a.raw_len) == 0;
+}
+
+static CodePoint UTF8_REPLACEMENT = {
+    .raw = {0xEF, 0xBF, 0xBD},
+    .raw_len = 3,
+    .display_width = 1,
+};
+
+CodePoint try_decode_utf8(byte *s, usize len, usize *consumed) {
+    assert(len > 0);
+
+    byte first = s[0];
+    if (first < 0x80) {
+        *consumed = 1;
+        return UTF8_REPLACEMENT;
+    }
+
+    usize expected_len = 0;
+    if ((first & 0xE0) == 0xC0) expected_len = 2;
+    else if ((first & 0xF0) == 0xE0) expected_len = 3;
+    else if ((first & 0xF8) == 0xF0) expected_len = 4;
+    else {
+        *consumed = 1;
+        return UTF8_REPLACEMENT;
+    }
+
+    assert(expected_len <= len);
+    for (usize i = 1; i < expected_len; i++) {
+        if ((s[i] & 0xC0) != 0x80) {
+            *consumed = i;
+            return UTF8_REPLACEMENT;
+        }
+    }
+
+    *consumed = expected_len;
+    return cp_from_raw(s, expected_len, CP_ASSUMED_WIDTH);
+}
+
+void put_str(u32 x, u32 y, byte *s, usize len) {
+    usize i = 0;
+    while (i < len) {
+        usize consumed = 0;
+        CodePoint cp = try_decode_utf8(s + i, len - i, &consumed);
+        put_codepoint(x, y, cp);
+        i += consumed;
+        x += cp.display_width;
+    }
 }
 
 void put_codepoint(u32 x, u32 y, CodePoint cp) {
