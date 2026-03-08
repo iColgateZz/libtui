@@ -412,6 +412,7 @@ void render() {
     }
 }
 
+//TODO: maybe add an arena for simpler writing?
 void generate_absolute_cursor_move(ByteBuffer *a, u32 row, u32 col) {
     byte tmp[64];
     byte *p = tmp;
