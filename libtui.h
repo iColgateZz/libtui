@@ -314,6 +314,7 @@ void set_max_timeout_ms(u32 timeout) { Terminal.timeout = timeout; }
 
 void begin_frame() {
     save_timestamp();
+    Terminal.frame_cmds.count = 0;
     for (usize i = 0; i < Terminal.backbuffer.count; ++i)
         Terminal.backbuffer.items[i] = cell_empty();
 
@@ -331,7 +332,6 @@ i64 time_ms() {
 
 #define GAP_THRESHOLD 8
 void end_frame() {
-    Terminal.frame_cmds.count = 0;
     render();
     write_str_len(Terminal.frame_cmds.items, Terminal.frame_cmds.count);
     calculate_dt();
