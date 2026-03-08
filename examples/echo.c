@@ -15,7 +15,7 @@ i32 main(i32 argc, byte *argv[]) {
 
     last_cp = cp("A");
 
-    while (!is_codepoint(cp("q"))) {
+    while (!is_codepoint(ctrl('x'))) {
         begin_frame();
         {
             main_loop();

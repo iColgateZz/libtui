@@ -18,6 +18,8 @@ CodePoint cp_from_raw(byte *raw, u8 raw_len, u8 display_width);
 CodePoint cp_from_byte(byte b);
 b32 cp_equal(CodePoint a, CodePoint b);
 
+#define ctrl(x) cp_from_byte((x) & 0x1F)
+
 #define CELL_REGULAR        0x00
 #define CELL_CONTINUATION   0x01
 #define CELL_WIDE_LEAD      0x02
