@@ -4,9 +4,6 @@
 
 // public
 
-//TODO: maybe add something to deal with the cursor on the user side
-//      so that the user can manipulate the cursor position maybe
-
 typedef enum {
     TERMKEY_BACKSPACE = 8,
     TERMKEY_TAB       = 9,
@@ -229,6 +226,8 @@ void init_terminal() {
     raw.c_cc[VTIME] = 0;
 
     assert(tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw) == 0);
+    //TODO: maybe add something to deal with the cursor on the user side
+    //      so that the user can manipulate the cursor position maybe
 
     write_str("\33[?2004l");                 // reset bracketed paste mode
     write_str("\33[?1049h");                 // use alternate buffer
