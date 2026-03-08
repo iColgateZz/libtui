@@ -22,6 +22,8 @@ typedef enum {
     TERMKEY_RIGHT     = -10,
 } TermKey;
 
+//TODO: make more memory efficient by encoding
+//      raw_len and d_width in 1 byte
 typedef struct {
     byte raw[4];
     u8 raw_len;
@@ -34,20 +36,15 @@ CodePoint cp_from_raw(byte *raw, u8 raw_len, u8 display_width);
 CodePoint cp_from_byte(byte b);
 b32 cp_equal(CodePoint a, CodePoint b);
 
-typedef enum {
-    CELL_NORMAL,
-    CELL_WIDE_LEAD,
-    CELL_WIDE_TRAIL,
-} CellType;
+#define CELL_CONTINUATION 1
 
 typedef struct {
     CodePoint cp;
-    CellType type;
+    u8 flags;
 } Cell;
 
 Cell cell(CodePoint cp);
-Cell cell_lead(CodePoint cp);
-Cell cell_trail();
+Cell cell_cont();
 Cell cell_empty();
 b32 cell_equal(Cell a, Cell b);
 
@@ -374,7 +371,7 @@ void render() {
                 generate_absolute_cursor_move(&Terminal.frame_cmds, new_row, new_col);
                 for (usize i = 0; i < run_len; ++i) {
                     Cell c = back_items[run_start + i];
-                    if (c.type == CELL_WIDE_TRAIL) continue;
+                    if (c.flags & CELL_CONTINUATION) continue;
 
                     da_append_many(&Terminal.frame_cmds, c.cp.raw, c.cp.raw_len);
                 }
@@ -383,7 +380,7 @@ void render() {
                 // that are the same in both buffers
                 for (usize i = 0; i < run_len + gap; ++i) {
                     Cell c = back_items[run_start - gap + i];
-                    if (c.type == CELL_WIDE_TRAIL) continue;
+                    if (c.flags & CELL_CONTINUATION) continue;
 
                     da_append_many(&Terminal.frame_cmds, c.cp.raw, c.cp.raw_len);
                 }
@@ -393,7 +390,7 @@ void render() {
                 generate_relative_cursor_move(&Terminal.frame_cmds, new_col - cursor.x);
                 for (usize i = 0; i < run_len; ++i) {
                     Cell c = back_items[run_start + i];
-                    if (c.type == CELL_WIDE_TRAIL) continue;
+                    if (c.flags & CELL_CONTINUATION) continue;
 
                     da_append_many(&Terminal.frame_cmds, c.cp.raw, c.cp.raw_len);
                 }
@@ -682,11 +679,10 @@ b32 cp_equal(CodePoint a, CodePoint b) {
     return memcmp(a.raw, b.raw, a.raw_len) == 0;
 }
 
-Cell cell(CodePoint cp) { return (Cell) { .cp = cp, .type = CELL_NORMAL }; }
-Cell cell_lead(CodePoint cp) { return (Cell) { .cp = cp, .type = CELL_WIDE_LEAD }; }
-Cell cell_trail() { return (Cell) { .cp = cp_from_byte(' '), .type = CELL_WIDE_TRAIL }; }
-Cell cell_empty() { return (Cell) { .cp = cp_from_byte(' '), .type = CELL_NORMAL }; }
-b32 cell_equal(Cell a, Cell b) { return a.type == b.type && cp_equal(a.cp, b.cp); }
+Cell cell(CodePoint cp) { return (Cell) { .cp = cp }; }
+Cell cell_cont() { return (Cell) { .flags = CELL_CONTINUATION }; }
+Cell cell_empty() { return (Cell) { .cp = cp_from_byte(' ') }; }
+b32 cell_equal(Cell a, Cell b) { return a.flags == b.flags && cp_equal(a.cp, b.cp); }
 
 void put_str(u32 x, u32 y, byte *s, usize len) {
     usize i = 0;
@@ -715,8 +711,8 @@ void put_codepoint(u32 x, u32 y, CodePoint cp) {
     if (cp.display_width == 2) {
         if (x + 1 >= w) return; // cannot fit
 
-        cells[x + y * w] = cell_lead(cp);
-        cells[(x + 1) + y * w] = cell_trail();
+        cells[x + y * w] = cell(cp);
+        cells[(x + 1) + y * w] = cell_cont();
     }
 
     // ignore other widths
