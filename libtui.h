@@ -332,9 +332,7 @@ void end_frame() {
     write_str_len(Terminal.frame_cmds.items, Terminal.frame_cmds.count);
     calculate_dt();
 }
-
-// The code relies on the assumption that every cell has a codepoint
-// with a display_width = 1. If it is not the case, it breaks.
+//TODO: refactor
 void render() {
     struct {
         u32 x, y;
