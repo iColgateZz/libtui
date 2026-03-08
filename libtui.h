@@ -4,6 +4,9 @@
 
 // public
 
+//TODO: maybe add something to deal with the cursor on the user side
+//      so that the user can manipulate the cursor position maybe
+
 typedef enum {
     TERMKEY_BACKSPACE = 8,
     TERMKEY_TAB       = 9,
