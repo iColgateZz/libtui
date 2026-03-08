@@ -304,7 +304,7 @@ void handle_sigwinch(i32 signo) {
 
     // trigger full redraw
     for (usize i = 0; i < Terminal.frontbuffer.count; ++i)
-        Terminal.frontbuffer.items[i] = cell(cp_from_raw("\xFF", 1, 1));
+        Terminal.frontbuffer.items[i] = cell(cp_from_byte(0xFF));
 
     write(Terminal.pipe.write_fd, &signo, sizeof signo);
 }
