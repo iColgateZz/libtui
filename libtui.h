@@ -122,6 +122,9 @@ typedef struct {
 } UTF8ParseResult;
 
 UTF8ParseResult try_parse_utf8(byte *s, usize len);
+typedef u32 Unicode;
+Unicode utf8_decode(byte *s, usize len);
+u8 unicode_width(Unicode ch);
 
 #endif //LIBTUI_INCLUDE
 
@@ -598,10 +601,62 @@ UTF8ParseResult try_parse_utf8(byte *s, usize len) {
         }
     }
 
+    Unicode decoded_char = utf8_decode(s, expected_len);
+    u8 width = unicode_width(decoded_char);
+
     return (UTF8ParseResult) {
-        .cp = cp_from_raw(s, expected_len, CP_ASSUMED_WIDTH),
+        .cp = cp_from_raw(s, expected_len, width),
         .consumed_bytes = expected_len,
     };
+}
+
+Unicode utf8_decode(byte *s, usize len) {
+    switch (len) {
+        case 1: return s[0];
+        case 2:
+            return ((s[0] & 0x1F) << 6) |
+                   (s[1] & 0x3F);
+        case 3:
+            return ((s[0] & 0x0F) << 12) |
+                   ((s[1] & 0x3F) << 6) |
+                   (s[2] & 0x3F);
+        case 4:
+            return ((s[0] & 0x07) << 18) |
+                   ((s[1] & 0x3F) << 12) |
+                   ((s[2] & 0x3F) << 6) |
+                   (s[3] & 0x3F);
+    }
+
+    return 0xFFFD; // decoded replacement character
+}
+
+u8 unicode_width(Unicode ch) {
+    if (ch < 32 || (ch >= 0x7F && ch < 0xA0))
+        return 0;
+
+    // combining marks
+    if ((ch >= 0x0300 && ch <= 0x036F) ||
+        (ch >= 0x1AB0 && ch <= 0x1AFF) ||
+        (ch >= 0x1DC0 && ch <= 0x1DFF) ||
+        (ch >= 0x20D0 && ch <= 0x20FF) ||
+        (ch >= 0xFE20 && ch <= 0xFE2F))
+        return 0;
+
+    // wide characters (CJK + emoji)
+    if ((ch >= 0x1100 && ch <= 0x115F) ||
+        (ch >= 0x2329 && ch <= 0x232A) ||
+        (ch >= 0x2E80 && ch <= 0xA4CF) ||
+        (ch >= 0xAC00 && ch <= 0xD7A3) ||
+        (ch >= 0xF900 && ch <= 0xFAFF) ||
+        (ch >= 0xFE10 && ch <= 0xFE19) ||
+        (ch >= 0xFE30 && ch <= 0xFE6F) ||
+        (ch >= 0xFF00 && ch <= 0xFF60) ||
+        (ch >= 0xFFE0 && ch <= 0xFFE6) ||
+        (ch >= 0x1F300 && ch <= 0x1F64F) ||
+        (ch >= 0x1F900 && ch <= 0x1F9FF))
+        return 2;
+
+    return 1;
 }
 
 CodePoint cp_from_raw(byte *raw, u8 raw_len, u8 display_width) {

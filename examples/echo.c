@@ -32,4 +32,15 @@ void main_loop() {
     }
 
     put_codepoint(0, 0, last_cp);
+
+    //TODO: Make this more ergonomic from a user perspective
+    Scratch s = scratch_get();
+    byte *buffer = arena_push(s.arena, byte, 256);
+    byte *p = buffer;
+
+    p = fmt(p, buffer + 256, "Width: %u; ", last_cp.display_width);
+    p = fmt(p, buffer + 256, "Raw len: %u", last_cp.raw_len);
+    put_str(0, 1, buffer, p - buffer);
+
+    scratch_end(s);
 }
