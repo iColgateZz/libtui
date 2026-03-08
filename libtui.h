@@ -196,6 +196,7 @@ b32 try_parse_mouse(Event *e, byte *str, isize n);
 b32 try_parse_term_key(Event *e, byte *str, isize n);
 b32 try_parse_text(Event *e, byte *str, isize n);
 void fix_wide_char(u32 x, u32 y);
+void emit_cells(ByteBuffer *out, Cell *cells, usize start, usize len);
 
 void write_str_len(byte *str, usize len) {
     write(STDOUT_FILENO, str, len);
@@ -335,74 +336,46 @@ void end_frame() {
     write_str_len(Terminal.frame_cmds.items, Terminal.frame_cmds.count);
     calculate_dt();
 }
-//TODO: refactor
+
 void render() {
     struct {
         u32 x, y;
     } cursor = {0};
     
+    Cell *back_items = Terminal.backbuffer.items;
+    Cell *front_items = Terminal.frontbuffer.items;
     u32 screen_w = Terminal.width;
-    for (u32 row = 0; row < Terminal.height; row++) {
 
+    for (u32 row = 0; row < Terminal.height; row++) {
         usize row_start = row * screen_w;
         usize row_end   = row_start + screen_w;
 
         usize pos = row_start;
-        usize gap = 0;
         b32 first_in_row = true;
 
-        Cell *back_items = Terminal.backbuffer.items;
-        Cell *front_items = Terminal.frontbuffer.items;
-
         while (pos < row_end) {
-
             if (cell_equal(back_items[pos], front_items[pos])) {
                 pos++;
-                gap++;
                 continue;
             }
 
             usize run_start = pos;
-
             while (pos < row_end && !cell_equal(back_items[pos], front_items[pos])) {
                 pos++;
             }
 
             usize run_len = pos - run_start;
+            u32 new_row = run_start / screen_w;
+            u32 new_col = run_start % screen_w;
 
             if (first_in_row) {
                 first_in_row = false;
-                u32 new_row = run_start / screen_w;
-                u32 new_col = run_start % screen_w;
                 generate_absolute_cursor_move(&Terminal.frame_cmds, new_row, new_col);
-                for (usize i = 0; i < run_len; ++i) {
-                    Cell c = back_items[run_start + i];
-                    if (c.flags & CELL_CONTINUATION) continue;
-
-                    da_append_many(&Terminal.frame_cmds, c.cp.raw, c.cp.raw_len);
-                }
-            } else if (gap <= GAP_THRESHOLD) {
-                // instead of emitting cursor move, just copy the bytes
-                // that are the same in both buffers
-                for (usize i = 0; i < run_len + gap; ++i) {
-                    Cell c = back_items[run_start - gap + i];
-                    if (c.flags & CELL_CONTINUATION) continue;
-
-                    da_append_many(&Terminal.frame_cmds, c.cp.raw, c.cp.raw_len);
-                }
             } else {
-                // I know it is the same row
-                u32 new_col = run_start % screen_w;
                 generate_relative_cursor_move(&Terminal.frame_cmds, new_col - cursor.x);
-                for (usize i = 0; i < run_len; ++i) {
-                    Cell c = back_items[run_start + i];
-                    if (c.flags & CELL_CONTINUATION) continue;
-
-                    da_append_many(&Terminal.frame_cmds, c.cp.raw, c.cp.raw_len);
-                }
             }
 
-            gap = 0;
+            emit_cells(&Terminal.frame_cmds, back_items, run_start, run_len);
             cursor.y = pos / screen_w;
             cursor.x = pos % screen_w;
 
@@ -412,6 +385,15 @@ void render() {
                 run_len * sizeof(Cell)
             );
         }
+    }
+}
+
+void emit_cells(ByteBuffer *out, Cell *cells, usize start, usize len) {
+    for (usize i = 0; i < len; i++) {
+        Cell c = cells[start + i];
+        if (c.flags & CELL_CONTINUATION) continue;
+
+        da_append_many(out, c.cp.raw, c.cp.raw_len);
     }
 }
 
