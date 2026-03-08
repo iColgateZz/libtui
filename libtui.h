@@ -313,7 +313,7 @@ void set_max_timeout_ms(u32 timeout) { Terminal.timeout = timeout; }
 
 void begin_frame() {
     save_timestamp();
-    Terminal.frame_cmds.count = 0;
+    da_clear(&Terminal.frame_cmds);
     for (usize i = 0; i < Terminal.backbuffer.count; ++i)
         Terminal.backbuffer.items[i] = cell_empty();
 
