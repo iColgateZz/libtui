@@ -36,7 +36,9 @@ CodePoint cp_from_raw(byte *raw, u8 raw_len, u8 display_width);
 CodePoint cp_from_byte(byte b);
 b32 cp_equal(CodePoint a, CodePoint b);
 
-#define CELL_CONTINUATION 1
+#define CELL_REGULAR        0x00
+#define CELL_CONTINUATION   0x01
+#define CELL_WIDE_LEAD      0x02
 
 typedef struct {
     CodePoint cp;
@@ -190,6 +192,7 @@ void update_root_scope();
 b32 try_parse_mouse(Event *e, byte *str, isize n);
 b32 try_parse_term_key(Event *e, byte *str, isize n);
 b32 try_parse_text(Event *e, byte *str, isize n);
+void fix_wide_char(u32 x, u32 y);
 
 void write_str_len(byte *str, usize len) {
     write(STDOUT_FILENO, str, len);
@@ -680,6 +683,7 @@ b32 cp_equal(CodePoint a, CodePoint b) {
 }
 
 Cell cell(CodePoint cp) { return (Cell) { .cp = cp }; }
+Cell cell_lead(CodePoint cp) { return (Cell) { .cp = cp, .flags = CELL_WIDE_LEAD }; }
 Cell cell_cont() { return (Cell) { .flags = CELL_CONTINUATION }; }
 Cell cell_empty() { return (Cell) { .cp = cp_from_byte(' ') }; }
 b32 cell_equal(Cell a, Cell b) { return a.flags == b.flags && cp_equal(a.cp, b.cp); }
@@ -702,8 +706,8 @@ void put_codepoint(u32 x, u32 y, CodePoint cp) {
     u32 w = Terminal.width;
     Cell *cells = Terminal.backbuffer.items;
 
-    //TODO: check for wide char overwriting
     if (cp.display_width == 1) {
+        fix_wide_char(x, y);
         cells[x + y * w] = cell(cp);
         return;
     }
@@ -711,11 +715,28 @@ void put_codepoint(u32 x, u32 y, CodePoint cp) {
     if (cp.display_width == 2) {
         if (x + 1 >= w) return; // cannot fit
 
-        cells[x + y * w] = cell(cp);
+        fix_wide_char(x, y);
+        fix_wide_char(x + 1, y);
+
+        cells[x + y * w] = cell_lead(cp);
         cells[(x + 1) + y * w] = cell_cont();
     }
 
     // ignore other widths
+}
+
+void fix_wide_char(u32 x, u32 y) {
+    u32 w = Terminal.width;
+    Cell *cells = Terminal.backbuffer.items;
+    Cell c = cells[x + y * w];
+
+    if ((c.flags & CELL_WIDE_LEAD) && x + 1 < w) {
+        cells[(x + 1) + y * w] = cell_empty();
+    }
+
+    if ((c.flags & CELL_CONTINUATION) && x > 0) {
+        cells[(x - 1) + y * w] = cell_empty();
+    }
 }
 
 //TODO: these 2 functions are not necessarily needed
