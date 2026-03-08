@@ -45,11 +45,11 @@ typedef struct {
     CellType type;
 } Cell;
 
-Cell cell(CodePoint cp) { return (Cell) { .cp = cp, .type = CELL_NORMAL }; }
-Cell cell_lead(CodePoint cp) { return (Cell) { .cp = cp, .type = CELL_WIDE_LEAD }; }
-Cell cell_trail() { return (Cell) { .cp = cp_from_byte(' '), .type = CELL_WIDE_TRAIL }; }
-Cell cell_empty() { return (Cell) { .cp = cp_from_byte(' '), .type = CELL_NORMAL }; }
-b32 cell_equal(Cell a, Cell b) { return a.type == b.type && cp_equal(a.cp, b.cp); }
+Cell cell(CodePoint cp);
+Cell cell_lead(CodePoint cp);
+Cell cell_trail();
+Cell cell_empty();
+b32 cell_equal(Cell a, Cell b);
 
 typedef enum {
     ENone,
@@ -627,6 +627,12 @@ b32 cp_equal(CodePoint a, CodePoint b) {
     if (a.display_width != b.display_width) return false;
     return memcmp(a.raw, b.raw, a.raw_len) == 0;
 }
+
+Cell cell(CodePoint cp) { return (Cell) { .cp = cp, .type = CELL_NORMAL }; }
+Cell cell_lead(CodePoint cp) { return (Cell) { .cp = cp, .type = CELL_WIDE_LEAD }; }
+Cell cell_trail() { return (Cell) { .cp = cp_from_byte(' '), .type = CELL_WIDE_TRAIL }; }
+Cell cell_empty() { return (Cell) { .cp = cp_from_byte(' '), .type = CELL_NORMAL }; }
+b32 cell_equal(Cell a, Cell b) { return a.type == b.type && cp_equal(a.cp, b.cp); }
 
 void put_str(u32 x, u32 y, byte *s, usize len) {
     usize i = 0;
