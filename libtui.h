@@ -4,24 +4,6 @@
 
 // public
 
-typedef enum {
-    TERMKEY_BACKSPACE = 8,
-    TERMKEY_TAB       = 9,
-    TERMKEY_ENTER     = 13,
-    TERMKEY_ESCAPE    = 27,
-
-    TERMKEY_INSERT    = -1,
-    TERMKEY_DELETE    = -2,
-    TERMKEY_HOME      = -3,
-    TERMKEY_END       = -4,
-    TERMKEY_PAGEUP    = -5,
-    TERMKEY_PAGEDOWN  = -6,
-    TERMKEY_UP        = -7,
-    TERMKEY_DOWN      = -8,
-    TERMKEY_LEFT      = -9,
-    TERMKEY_RIGHT     = -10,
-} TermKey;
-
 //TODO: make more memory efficient by encoding
 //      raw_len and d_width in 1 byte
 typedef struct {
@@ -49,6 +31,24 @@ Cell cell(CodePoint cp);
 Cell cell_cont();
 Cell cell_empty();
 b32 cell_equal(Cell a, Cell b);
+
+typedef enum {
+    TERMKEY_BACKSPACE = 8,
+    TERMKEY_TAB       = 9,
+    TERMKEY_ENTER     = 13,
+    TERMKEY_ESCAPE    = 27,
+
+    TERMKEY_INSERT    = -1,
+    TERMKEY_DELETE    = -2,
+    TERMKEY_HOME      = -3,
+    TERMKEY_END       = -4,
+    TERMKEY_PAGEUP    = -5,
+    TERMKEY_PAGEDOWN  = -6,
+    TERMKEY_UP        = -7,
+    TERMKEY_DOWN      = -8,
+    TERMKEY_LEFT      = -9,
+    TERMKEY_RIGHT     = -10,
+} TermKey;
 
 typedef enum {
     ENone,
@@ -304,7 +304,7 @@ void handle_sigwinch(i32 signo) {
 
     // trigger full redraw
     for (usize i = 0; i < Terminal.frontbuffer.count; ++i)
-        Terminal.frontbuffer.items[i] = cell(cp("\xFF"));
+        Terminal.frontbuffer.items[i] = cell(cp_from_raw("\xFF", 1, 1));
 
     write(Terminal.pipe.write_fd, &signo, sizeof signo);
 }
