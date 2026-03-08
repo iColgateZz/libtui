@@ -337,6 +337,7 @@ void end_frame() {
     calculate_dt();
 }
 
+//TODO: maybe hash each row and compare hashes?
 void render() {
     struct {
         u32 x, y;
