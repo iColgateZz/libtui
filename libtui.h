@@ -30,8 +30,8 @@ typedef struct {
     u8 display_width;
 } CodePoint;
 
-#define CP_ASSUMED_WIDTH 1
-#define cp(cp)      cp_from_raw(cp, sizeof(cp) - 1, CP_ASSUMED_WIDTH)
+#define cp(s)      cp_from_utf8(s, sizeof(s) - 1)
+CodePoint cp_from_utf8(byte *s, u8 len);
 CodePoint cp_from_raw(byte *raw, u8 raw_len, u8 display_width);
 CodePoint cp_from_byte(byte b);
 b32 cp_equal(CodePoint a, CodePoint b);
@@ -658,6 +658,11 @@ u8 unicode_width(Unicode ch) {
     return 1;
 }
 
+CodePoint cp_from_utf8(byte *s, u8 len) {
+    Unicode value = utf8_decode(s, len);
+    return cp_from_raw(s, len, unicode_width(value));
+}
+
 CodePoint cp_from_raw(byte *raw, u8 raw_len, u8 display_width) {
     CodePoint cp = {
         .raw_len = raw_len,
@@ -671,8 +676,8 @@ CodePoint cp_from_raw(byte *raw, u8 raw_len, u8 display_width) {
 CodePoint cp_from_byte(byte b) {
     return (CodePoint) {
         .raw = {b},
-        .display_width = 1,
         .raw_len = 1,
+        .display_width = 1,
     };
 }
 

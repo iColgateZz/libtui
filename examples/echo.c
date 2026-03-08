@@ -31,7 +31,11 @@ void main_loop() {
         last_cp = get_codepoint();
     }
 
-    put_codepoint(0, 0, last_cp);
+    // put_codepoint(0, 0, last_cp);
+    // put_codepoint(1, 0, cp("p"));
+
+    put_codepoint(0, 0, cp("😂"));
+    put_codepoint(1, 0, last_cp);
 
     //TODO: Make this more ergonomic from a user perspective
     Scratch s = scratch_get();
