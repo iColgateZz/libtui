@@ -35,6 +35,23 @@ CodePoint cp_from_byte(byte b);
 b32 cp_equal(CodePoint a, CodePoint b);
 
 typedef enum {
+    CELL_NORMAL,
+    CELL_WIDE_LEAD,
+    CELL_WIDE_TRAIL,
+} CellType;
+
+typedef struct {
+    CodePoint cp;
+    CellType type;
+} Cell;
+
+Cell cell(CodePoint cp) { return (Cell) { .cp = cp, .type = CELL_NORMAL }; }
+Cell cell_lead(CodePoint cp) { return (Cell) { .cp = cp, .type = CELL_WIDE_LEAD }; }
+Cell cell_trail() { return (Cell) { .cp = cp_from_byte(' '), .type = CELL_WIDE_TRAIL }; }
+Cell cell_empty() { return (Cell) { .cp = cp_from_byte(' '), .type = CELL_NORMAL }; }
+b32 cell_equal(Cell a, Cell b) { return a.type == b.type && cp_equal(a.cp, b.cp); }
+
+typedef enum {
     ENone,
     ETermKey,
     ECodePoint,
@@ -124,7 +141,7 @@ UTF8ParseResult try_parse_utf8(byte *s, usize len);
 #define MIN(a, b)     ((a) < (b) ? (a) : (b))
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
 
-da_typedef(CP_Buffer, CodePoint);
+da_typedef(CellBuffer, Cell);
 da_typedef(Scopes, Rectangle);
 da_typedef(ByteBuffer, byte);
 
@@ -134,8 +151,8 @@ struct {
     u32 timeout;
     Event event;
     u64 saved_time, dt;
-    CP_Buffer frontbuffer;
-    CP_Buffer backbuffer;
+    CellBuffer frontbuffer;
+    CellBuffer backbuffer;
     ByteBuffer frame_cmds;
     Scopes scopes;
     u32 width, height;
@@ -281,7 +298,7 @@ void handle_sigwinch(i32 signo) {
 
     // trigger full redraw
     for (usize i = 0; i < Terminal.frontbuffer.count; ++i)
-        Terminal.frontbuffer.items[i] = cp_from_byte(0xFF);
+        Terminal.frontbuffer.items[i] = cell(cp("\xFF"));
 
     write(Terminal.pipe.write_fd, &signo, sizeof signo);
 }
@@ -291,7 +308,7 @@ void set_max_timeout_ms(u32 timeout) { Terminal.timeout = timeout; }
 void begin_frame() {
     save_timestamp();
     for (usize i = 0; i < Terminal.backbuffer.count; ++i)
-        Terminal.backbuffer.items[i] = cp_from_byte(' ');
+        Terminal.backbuffer.items[i] = cell_empty();
 
     poll_input();
 }
@@ -330,12 +347,12 @@ void render() {
         usize gap = 0;
         b32 first_in_row = true;
 
-        CodePoint *back_items = Terminal.backbuffer.items;
-        CodePoint *front_items = Terminal.frontbuffer.items;
+        Cell *back_items = Terminal.backbuffer.items;
+        Cell *front_items = Terminal.frontbuffer.items;
 
         while (pos < row_end) {
 
-            if (cp_equal(back_items[pos], front_items[pos])) {
+            if (cell_equal(back_items[pos], front_items[pos])) {
                 pos++;
                 gap++;
                 continue;
@@ -343,7 +360,7 @@ void render() {
 
             usize run_start = pos;
 
-            while (pos < row_end && !cp_equal(back_items[pos], front_items[pos])) {
+            while (pos < row_end && !cell_equal(back_items[pos], front_items[pos])) {
                 pos++;
             }
 
@@ -355,20 +372,29 @@ void render() {
                 u32 new_col = run_start % screen_w;
                 generate_absolute_cursor_move(&Terminal.frame_cmds, new_row, new_col);
                 for (usize i = 0; i < run_len; ++i) {
-                    da_append_many(&Terminal.frame_cmds, back_items[run_start + i].raw, back_items[run_start + i].raw_len);
+                    Cell c = back_items[run_start + i];
+                    if (c.type == CELL_WIDE_TRAIL) continue;
+
+                    da_append_many(&Terminal.frame_cmds, c.cp.raw, c.cp.raw_len);
                 }
             } else if (gap <= GAP_THRESHOLD) {
                 // instead of emitting cursor move, just copy the bytes
                 // that are the same in both buffers
                 for (usize i = 0; i < run_len + gap; ++i) {
-                    da_append_many(&Terminal.frame_cmds, back_items[run_start - gap + i].raw, back_items[run_start - gap + i].raw_len);
+                    Cell c = back_items[run_start - gap + i];
+                    if (c.type == CELL_WIDE_TRAIL) continue;
+
+                    da_append_many(&Terminal.frame_cmds, c.cp.raw, c.cp.raw_len);
                 }
             } else {
                 // I know it is the same row
                 u32 new_col = run_start % screen_w;
                 generate_relative_cursor_move(&Terminal.frame_cmds, new_col - cursor.x);
                 for (usize i = 0; i < run_len; ++i) {
-                    da_append_many(&Terminal.frame_cmds, back_items[run_start + i].raw, back_items[run_start + i].raw_len);
+                    Cell c = back_items[run_start + i];
+                    if (c.type == CELL_WIDE_TRAIL) continue;
+
+                    da_append_many(&Terminal.frame_cmds, c.cp.raw, c.cp.raw_len);
                 }
             }
 
@@ -379,7 +405,7 @@ void render() {
             memcpy(
                 front_items + run_start,
                 back_items + run_start,
-                run_len * sizeof(CodePoint)
+                run_len * sizeof(Cell)
             );
         }
     }
@@ -617,8 +643,23 @@ void put_codepoint(u32 x, u32 y, CodePoint cp) {
     Rectangle parent = peek_scope();
     if (!point_in_rect(x, y, parent)) return;
 
-    CodePoint *back_items = Terminal.backbuffer.items;
-    back_items[x + y * Terminal.width] = cp;
+    u32 w = Terminal.width;
+    Cell *cells = Terminal.backbuffer.items;
+
+    //TODO: check for wide char overwriting
+    if (cp.display_width == 1) {
+        cells[x + y * w] = cell(cp);
+        return;
+    }
+
+    if (cp.display_width == 2) {
+        if (x + 1 >= w) return; // cannot fit
+
+        cells[x + y * w] = cell_lead(cp);
+        cells[(x + 1) + y * w] = cell_trail();
+    }
+
+    // ignore other widths
 }
 
 //TODO: these 2 functions are not necessarily needed
