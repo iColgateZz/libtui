@@ -35,13 +35,12 @@ void main_loop() {
 
 void print_dimensions() {
     byte buffer[64];
-    byte *p = buffer;
-    byte *end = buffer + sizeof buffer;
+    Stream s = stream_start(buffer, 64);
 
-    p = fmt(p, end, "Width: %u; Heigth: %u", get_terminal_width(), get_terminal_height());
-    usize len = MIN((usize)(p - buffer), sizeof buffer);
+    stream_fmt(&s, "Width: %u; Heigth: %u", get_terminal_width(), get_terminal_height());
+    s8 res = stream_end(s);
 
-    put_ascii_str(0, 0, buffer, len);
+    put_ascii_str(0, 0, res.s, res.len);
 }
 
 b32 check_min_dimensions() {
