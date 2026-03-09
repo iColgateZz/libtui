@@ -410,25 +410,25 @@ void emit_cells(ByteBuffer *out, Cell *cells, usize start, usize len) {
     }
 }
 
-//TODO: maybe add an arena for simpler writing?
+//TODO: maybe add an arena for temporary allocations?
 void generate_absolute_cursor_move(ByteBuffer *a, u32 row, u32 col) {
     byte tmp[64];
-    byte *p = tmp;
-    byte *end = tmp + sizeof tmp;
+    Stream s = stream_start(tmp, 64);
 
-    p = fmt(p, end, "\33[%u;%uH", row + 1, col + 1);
-    usize len = MIN((usize)(p - tmp), sizeof tmp);
-    da_append_many(a, tmp, len);
+    stream_fmt(&s, "\33[%u;%uH", row + 1, col + 1);
+    s8 result = stream_end(s);
+
+    da_append_many(a, result.s, result.len);
 }
 
 void generate_relative_cursor_move(ByteBuffer *a, u32 step) {
     byte tmp[64];
-    byte *p = tmp;
-    byte *end = tmp + sizeof tmp;
+    Stream s = stream_start(tmp, 64);
 
-    p = fmt(p, end, "\33[%uC", step);
-    usize len = MIN((usize)(p - tmp), sizeof tmp);
-    da_append_many(a, tmp, len);
+    stream_fmt(&s, "\33[%uC", step);
+    s8 result = stream_end(s);
+
+    da_append_many(a, result.s, result.len);
 }
 
 void poll_input() {
@@ -922,7 +922,8 @@ void stream_fmt(Stream *s, byte *f, ...) {
 }
 
 s8 stream_end(Stream s) {
-    return s8(s.start, s.p - s.start);
+    usize len = MIN(s.p - s.start, s.end - s.start);
+    return s8(s.start, len);
 }
 
 Stream arena_stream_start(Arena *arena, usize size) {
