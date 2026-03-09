@@ -112,6 +112,7 @@ void put_codepoint(u32 x, u32 y, CodePoint cp);
 void put_ascii_char(u32 x, u32 y, byte c);
 void put_ascii_str(u32 x, u32 y, byte *str, usize len);
 
+byte *vfmt(byte *p, byte *end, byte *f, va_list args);
 byte *fmt(byte *p, byte *end, byte *f, ...);
 byte *fmt_uint(byte *p, byte *end, u64 v, u8 base);
 byte *fmt_cstr(byte *p, byte *end, byte *s);
@@ -792,13 +793,18 @@ Rectangle rect_union(Rectangle a, Rectangle b) {
     };
 }
 
-// Behaviour is similar to snprintf, in that it does not
-// write beyond the *end pointer, but the returned pointer
-// may point somewhere beyond the *end. 
 byte *fmt(byte *p, byte *end, byte *f, ...) {
     va_list args;
     va_start(args, f);
+    p = vfmt(p, end, f, args);
+    va_end(args);
+    return p;
+}
 
+// Behaviour is similar to snprintf, in that it does not
+// write beyond the *end pointer, but the returned pointer
+// may point somewhere beyond the *end. 
+byte *vfmt(byte *p, byte *end, byte *f, va_list args) {
     while (*f) {
         if (*f != '%') {
             if (p < end) *p = *f;
@@ -851,7 +857,6 @@ byte *fmt(byte *p, byte *end, byte *f, ...) {
         }
     }
 
-    va_end(args);
     return p;
 }
 
