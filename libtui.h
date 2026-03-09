@@ -107,6 +107,10 @@ u64 get_delta_time();
 u32 get_terminal_width();
 u32 get_terminal_height();
 
+typedef u32 Unicode;
+Unicode utf8_decode(byte *s, usize len);
+u8 unicode_width(Unicode ch);
+
 void put_str(u32 x, u32 y, byte *str, usize len);
 void put_codepoint(u32 x, u32 y, CodePoint cp);
 void put_ascii_char(u32 x, u32 y, byte c);
@@ -119,14 +123,15 @@ byte *fmt_cstr(byte *p, byte *end, byte *s);
 byte *fmt_s8(byte *p, byte *end, s8 s);
 
 typedef struct {
-    CodePoint cp;
-    usize consumed_bytes;
-} UTF8ParseResult;
+    byte *start;
+    byte *p;
+    byte *end;
+} Stream;
 
-UTF8ParseResult try_parse_utf8(byte *s, usize len);
-typedef u32 Unicode;
-Unicode utf8_decode(byte *s, usize len);
-u8 unicode_width(Unicode ch);
+Stream stream_start(byte *buffer, usize size);
+void stream_fmt(Stream *s, byte *f, ...);
+s8 stream_end(Stream s);
+Stream arena_stream_start(Arena *arena, usize size);
 
 #endif //LIBTUI_INCLUDE
 
@@ -197,6 +202,12 @@ b32 try_parse_term_key(Event *e, byte *str, isize n);
 b32 try_parse_text(Event *e, byte *str, isize n);
 void fix_wide_char(u32 x, u32 y);
 void emit_cells(ByteBuffer *out, Cell *cells, usize start, usize len);
+
+typedef struct {
+    CodePoint cp;
+    usize consumed_bytes;
+} UTF8ParseResult;
+UTF8ParseResult try_parse_utf8(byte *s, usize len);
 
 void write_str_len(byte *str, usize len) {
     write(STDOUT_FILENO, str, len);
@@ -895,5 +906,29 @@ byte *fmt_s8(byte *p, byte *end, s8 s) {
     return p;
 }
 
+Stream stream_start(byte *buffer, usize size) {
+    return (Stream) {
+        .start = buffer,
+        .p = buffer,
+        .end = buffer + size
+    };
+}
+
+void stream_fmt(Stream *s, byte *f, ...) {
+    va_list args;
+    va_start(args, f);
+    s->p = vfmt(s->p, s->end, f, args);
+    va_end(args);
+}
+
+s8 stream_end(Stream s) {
+    return s8(s.start, s.p - s.start);
+}
+
+Stream arena_stream_start(Arena *arena, usize size) {
+    byte *buffer = arena_push(arena, byte, size);
+    assert(buffer);
+    return stream_start(buffer, size);
+}
 
 #endif //LIBTUI_IMPL
