@@ -37,7 +37,6 @@ void main_loop() {
     put_codepoint(0, 0, cp("😂"));
     put_codepoint(1, 0, last_cp);
 
-    //TODO: Make this more ergonomic from a user perspective
     Scratch scratch = scratch_get();
 
     Stream s = arena_stream_start(scratch.arena, 256);
