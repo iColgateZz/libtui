@@ -11,6 +11,7 @@ u16 timer = 0;
 Procs procs = {0};
 Fd_Reader reader;
 Sb buffer = {0};
+i32 result = 0;
 
 void main_loop();
 void parse_data();
@@ -54,10 +55,7 @@ void main_loop() {
         // closes read fd when done reading
         fd_read(&reader, .nonblocking = true);
 
-    if (reader.ready) {
-        // asserting this to one failed.
-        //TODO: need to investigate!!!
-        psh__proc_wait_async(procs.items[0]);
+    if (reader.ready && psh__proc_wait_async(procs.items[0]) > 0) {
         procs.count = 0;
 
         parse_data();
@@ -92,4 +90,6 @@ void draw() {
 
         printed_lines++;
     }
+
+    put_ascii_char(0, 7, '0' + result);
 }
