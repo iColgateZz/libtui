@@ -296,7 +296,8 @@ void restore_term() {
     write_str("\33[?1049l");                     // exit alternate buffer
 
     //TODO: If I print an error and the return to the original buffer,
-    // the error will not be visible to the user.
+    //      the error will not be visible to the user.
+    //      Global state error like errno?
 
     fd_close(Terminal.pipe.read_fd);
     fd_close(Terminal.pipe.write_fd);
