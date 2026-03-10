@@ -6,6 +6,18 @@
 void main_loop();
 void print_dimensions();
 b32 check_min_dimensions();
+void print_house();
+
+static const byte house[] = {
+"        `'::.\n"
+"    _________H ,%%&%,\n"
+"   /\\     _   \\%&&%%&%\n"
+"  /  \\___/^\\___\\%&%%&&\n"
+"  |  | []   [] |%\\Y&%'\n"
+"  |  |   .-.   | ||\n"
+"~~@._|@@_|||_@@|~||~~~~~~~~~~~~~\n"
+"     `\"\"\") )\"\"\"`\n"
+};
 
 i32 main(i32 argc, byte *argv[]) {
     PSH_REBUILD_UNITY_AUTO(argc, argv);
@@ -26,11 +38,13 @@ i32 main(i32 argc, byte *argv[]) {
 
 void main_loop() {
     print_dimensions();
-    if (!check_min_dimensions()) return;
+    // if (!check_min_dimensions()) return;
 
     s8 msg = s8("аоцуоадц лоаоцлуÄääääääää");
     put_str(0, 1, msg.s, msg.len);
     // put_str(0, 1, "\xF8", 1);
+
+    print_house();
 }
 
 void print_dimensions() {
@@ -52,4 +66,19 @@ b32 check_min_dimensions() {
     s8 msg = s8("Something went wrong!");
     put_ascii_str(0, 1, msg.s, msg.len);
     return false;
+}
+
+void print_house() {
+    usize y = 5;
+
+    byte *p = house;
+    byte *line = p;
+
+    while (*p) {
+        if (*p == '\n') {
+            put_str(0, y++, line, p - line);
+            line = p + 1;
+        }
+        p++;
+    }
 }
