@@ -8,6 +8,17 @@ void print_dimensions();
 b32 check_min_dimensions();
 void print_house();
 
+typedef struct {
+    usize counter;
+    u32 x, y;
+} Bird;
+
+Bird bird = {
+    .y = 5,
+};
+
+void print_bird();
+
 // 20 x 8
 static const byte house[] = {
 "      `'::.\n"
@@ -46,6 +57,7 @@ void main_loop() {
     // put_str(0, 1, "\xF8", 1);
 
     print_house();
+    print_bird();
 }
 
 void print_dimensions() {
@@ -71,11 +83,15 @@ b32 check_min_dimensions() {
 
 void print_house() {
     usize x = (get_terminal_width() - 20) / 2;
-    usize y = (get_terminal_height() - 8) / 2;;
+    usize y = (get_terminal_height() - 8) / 2;
+
+    usize ground_level = y + 6;
+    for (usize i = 0; i < get_terminal_width(); i++) {
+        put_ascii_char(i, ground_level, '~');
+    }
 
     byte *p = (byte *)house;
     byte *line = p;
-
     while (*p) {
         if (*p == '\n') {
             put_str(x, y++, line, p - line);
@@ -83,4 +99,19 @@ void print_house() {
         }
         p++;
     }
+}
+
+void print_bird() {
+    bird.counter += get_delta_time();
+
+    if (bird.counter > 100) {
+        bird.counter -= 100;
+        bird.x++;
+
+        if (bird.x >= get_terminal_width()) {
+            bird.x = 0;
+        }
+    }
+
+    put_ascii_char(bird.x, bird.y, '>');
 }
