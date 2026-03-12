@@ -8,15 +8,16 @@ void print_dimensions();
 b32 check_min_dimensions();
 void print_house();
 
+// 20 x 8
 static const byte house[] = {
-"        `'::.\n"
-"    _________H ,%%&%,\n"
-"   /\\     _   \\%&&%%&%\n"
-"  /  \\___/^\\___\\%&%%&&\n"
-"  |  | []   [] |%\\Y&%'\n"
-"  |  |   .-.   | ||\n"
-"~~@._|@@_|||_@@|~||~~~~~~~~~~~~~\n"
-"     `\"\"\") )\"\"\"`\n"
+"      `'::.\n"
+"  _________H ,%%&%,\n"
+" /\\     _   \\%&&%%&%\n"
+"/  \\___/^\\___\\%&%%&&\n"
+"|  | []   [] |%\\Y&%'\n"
+"|  |   .-.   | ||\n"
+"@._|@@_|||_@@|~||\n"
+"   `\"\"\") )\"\"\"`\n"
 };
 
 i32 main(i32 argc, byte *argv[]) {
@@ -38,9 +39,9 @@ i32 main(i32 argc, byte *argv[]) {
 
 void main_loop() {
     print_dimensions();
-    // if (!check_min_dimensions()) return;
+    if (!check_min_dimensions()) return;
 
-    s8 msg = s8("аоцуоадц лоаоцлуÄääääääää");
+    s8 msg = s8("Normal weather");
     put_str(0, 1, msg.s, msg.len);
     // put_str(0, 1, "\xF8", 1);
 
@@ -63,20 +64,21 @@ b32 check_min_dimensions() {
 
     if (w >= 60 && h >= 20) return true;
 
-    s8 msg = s8("Something went wrong!");
+    s8 msg = s8("Terminal size is too small");
     put_ascii_str(0, 1, msg.s, msg.len);
     return false;
 }
 
 void print_house() {
-    usize y = 5;
+    usize x = (get_terminal_width() - 20) / 2;
+    usize y = (get_terminal_height() - 8) / 2;;
 
-    byte *p = house;
+    byte *p = (byte *)house;
     byte *line = p;
 
     while (*p) {
         if (*p == '\n') {
-            put_str(0, y++, line, p - line);
+            put_str(x, y++, line, p - line);
             line = p + 1;
         }
         p++;
