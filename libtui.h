@@ -156,6 +156,8 @@ da_typedef(CellBuffer, Cell);
 da_typedef(Scopes, Rectangle);
 da_typedef(ByteBuffer, byte);
 
+//TODO: add some inner state that will be 
+//      rendered to the screen for debugging
 struct {
     struct termios orig_term;
     Unix_Pipe pipe;
