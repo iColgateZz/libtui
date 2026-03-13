@@ -6,3 +6,4 @@
 6. some 3D stuff in terminal
 7. something like btop
 8. simple text editor
+9. infinite map/pattern, can go up, down, left, right
