@@ -7,3 +7,4 @@
 7. something like btop
 8. simple text editor
 9. infinite map/pattern, can go up, down, left, right
+10. UI framework
