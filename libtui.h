@@ -24,6 +24,7 @@ b32 cp_equal(CodePoint a, CodePoint b);
 #define CELL_CONTINUATION   0x01
 #define CELL_WIDE_LEAD      0x02
 
+//TODO: add color support
 typedef struct {
     CodePoint cp;
     u8 flags;
