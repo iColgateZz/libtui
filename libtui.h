@@ -158,6 +158,10 @@ da_typedef(ByteBuffer, byte);
 
 //TODO: add some inner state that will be 
 //      rendered to the screen for debugging
+
+//TODO: add an event queue, store multiple events,
+//      keep one frame -> one event philosophy,
+//      if !empty(queue) do not poll, drain the queue
 struct {
     struct termios orig_term;
     Unix_Pipe pipe;
