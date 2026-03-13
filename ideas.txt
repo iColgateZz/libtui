@@ -5,3 +5,4 @@
 5. math & coordinate transformation
 6. some 3D stuff in terminal
 7. something like btop
+8. simple text editor
