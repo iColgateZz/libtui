@@ -4,3 +4,4 @@
 4. picture/video to ascii
 5. math & coordinate transformation
 6. some 3D stuff in terminal
+7. something like btop
