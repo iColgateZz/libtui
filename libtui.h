@@ -244,6 +244,8 @@ void init_terminal() {
     //TODO: maybe add something to deal with the cursor on the user side
     //      so that the user can manipulate the cursor position maybe
 
+    //TODO: handle copy/paste
+
     write_str("\33[?2004l");                 // reset bracketed paste mode
     write_str("\33[?1049h");                 // use alternate buffer
     write_str("\33[?25l");                   // hide cursor
