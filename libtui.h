@@ -480,6 +480,13 @@ void poll_input() {
 
 void parse_event(Event *e, isize n) {
     byte *str = e->buf;
+    
+    byte buffer[256];
+    Stream s = stream_start(buffer, 256);
+    stream_fmt(&s, "Len: %u, Input: %S", n, s8(str, n));
+    s8 res = stream_end(s);
+
+    put_str(get_terminal_width() - res.len, get_terminal_height() - 1, res.s, res.len);
 
     if (str[0] == TERMKEY_ESCAPE) {
         if (try_parse_mouse(e, str, n))    return;
@@ -554,6 +561,8 @@ b32 try_parse_term_key(Event *e, byte *str, isize n) {
 }
 
 b32 try_parse_text(Event *e, byte *str, isize n) {
+    //TODO: the design is limited to parsing only 1
+    //      codepoint. What if the user pastes more?
     if (1 <= n && n <= 4) {
         // TODO: what if given 4 bytes, but only 1
         //       is decoded due to an error?
