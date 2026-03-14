@@ -211,7 +211,7 @@ i64  time_ms();
 void save_timestamp();
 void calculate_dt();
 void parse_event(byte *str, isize n);
-void poll_input();
+void poll_events();
 void write_str_len(byte *str, usize len);
 void write_strf_impl(byte *fmt, ...);
 #define write_str(s)        write_str_len(s, sizeof(s) - 1)
@@ -360,7 +360,7 @@ void begin_frame() {
         for (usize i = 0; i < Terminal.backbuffer.count; ++i)
             Terminal.backbuffer.items[i] = cell_empty();
 
-        poll_input();
+        poll_events();
     }
     
     Terminal.event = equeue_poll(&Terminal.eq);
@@ -467,7 +467,7 @@ void generate_relative_cursor_move(ByteBuffer *a, u32 step) {
     da_append_many(a, result.s, result.len);
 }
 
-void poll_input() {
+void poll_events() {
     #define PFD_SIZE 2
     struct pollfd pfd[PFD_SIZE] = {
         {.fd = Terminal.pipe.read_fd, .events = POLLIN},
@@ -479,7 +479,7 @@ void poll_input() {
 
     if (rval < 0) {
         if (errno == EAGAIN || errno == EINTR) {
-            poll_input();
+            poll_events();
             return;
         }
 
