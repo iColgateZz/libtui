@@ -356,9 +356,9 @@ void begin_frame() {
             Terminal.backbuffer.items[i] = cell_empty();
 
         poll_input();
-    } else {
-        Terminal.event = equeue_poll(&Terminal.eq);
     }
+    
+    Terminal.event = equeue_poll(&Terminal.eq);
 }
 
 void save_timestamp()  { Terminal.saved_time = time_ms(); }
@@ -482,6 +482,7 @@ void poll_input() {
     }
 
     else if (rval == 0) { // timeout
+        equeue_push(&Terminal.eq, (Event) { .type = ENone });
         return;
     }
 
