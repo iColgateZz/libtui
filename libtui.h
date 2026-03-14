@@ -156,6 +156,18 @@ da_typedef(CellBuffer, Cell);
 da_typedef(Scopes, Rectangle);
 da_typedef(ByteBuffer, byte);
 
+typedef struct {
+    Event *items;
+    usize count;
+    usize capacity;
+    usize head;
+} EventQueue;
+
+b32 equeue_empty(EventQueue *q) { return q->head == q->count; }
+void equeue_push(EventQueue *q, Event e) { da_append(q, e); }
+Event equeue_poll(EventQueue *q) { return q->items[q->head++]; }
+void equeue_reset(EventQueue *q) { q->head = q->count = 0; }
+
 //TODO: add some inner state that will be 
 //      rendered to the screen for debugging
 
@@ -167,6 +179,7 @@ struct {
     Unix_Pipe pipe;
     u32 timeout;
     Event event;
+    EventQueue eq;
     u64 saved_time, dt;
     CellBuffer frontbuffer;
     CellBuffer backbuffer;
