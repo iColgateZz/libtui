@@ -225,6 +225,7 @@ b32 try_parse_term_key(byte *str, isize n);
 b32 try_parse_text(byte *str, isize n);
 void fix_wide_char(u32 x, u32 y);
 void emit_cells(ByteBuffer *out, Cell *cells, usize start, usize len);
+void read_and_parse_input();
 
 typedef struct {
     CodePoint cp;
@@ -285,6 +286,9 @@ void init_terminal() {
     sa.sa_handler = handle_sigwinch;
     sa.sa_flags = SA_RESTART;
     sigaction(SIGWINCH, &sa, NULL);
+
+    //TODO: set back to blocking when exiting?
+    assert(psh__fd_set_nonblocking(STDIN_FILENO));
 
     da_resize(&Terminal.backbuffer, Terminal.width * Terminal.height);
     da_resize(&Terminal.frontbuffer, Terminal.width * Terminal.height);
@@ -499,13 +503,16 @@ void poll_events() {
     }
 
     if (pfd[1].revents & POLLIN) {
-        //TODO: what if the buffer is not big enough
-        //      to hold the whole input
-        static byte buffer[1024];
-        isize n = read(STDIN_FILENO, buffer, sizeof(buffer));
-        assert(n > 0);
-        parse_event(buffer, n);
+        read_and_parse_input();
+        return;
     }
+}
+
+void read_and_parse_input() {
+    static byte buffer[1024];
+    isize n = read(STDIN_FILENO, buffer, sizeof(buffer));
+    assert(n > 0);
+    parse_event(buffer, n);
 }
 
 void parse_event(byte *str, isize n) {
