@@ -264,7 +264,7 @@ void init_terminal() {
 
     //TODO: handle copy/paste
 
-    write_str("\33[?2004l");                 // reset bracketed paste mode
+    write_str("\33[?2004l");                 // disable bracketed paste mode
     write_str("\33[?1049h");                 // use alternate buffer
     write_str("\33[?25l");                   // hide cursor
     write_str("\33[?1000h");                 // enable mouse press/release
