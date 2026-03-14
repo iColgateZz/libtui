@@ -349,11 +349,16 @@ void set_max_timeout_ms(u32 timeout) { Terminal.timeout = timeout; }
 
 void begin_frame() {
     save_timestamp();
-    da_clear(&Terminal.frame_cmds);
-    for (usize i = 0; i < Terminal.backbuffer.count; ++i)
-        Terminal.backbuffer.items[i] = cell_empty();
 
-    poll_input();
+    if (equeue_empty(&Terminal.eq)) {
+        da_clear(&Terminal.frame_cmds);
+        for (usize i = 0; i < Terminal.backbuffer.count; ++i)
+            Terminal.backbuffer.items[i] = cell_empty();
+
+        poll_input();
+    } else {
+        Terminal.event = equeue_poll(&Terminal.eq);
+    }
 }
 
 void save_timestamp()  { Terminal.saved_time = time_ms(); }
@@ -366,8 +371,12 @@ i64 time_ms() {
 }
 
 void end_frame() {
-    render();
-    write_str_len(Terminal.frame_cmds.items, Terminal.frame_cmds.count);
+    if (equeue_empty(&Terminal.eq)) {
+        equeue_reset(&Terminal.eq);
+        render();
+        write_str_len(Terminal.frame_cmds.items, Terminal.frame_cmds.count);
+    }
+
     calculate_dt();
 }
 
@@ -525,7 +534,7 @@ b32 try_parse_mouse(byte *str, isize n) {
         return false;
 
     Event e = {0};
-    u32 btn          = strtol(str + 3, &str, 10);
+    u32 btn         = strtol(str + 3, &str, 10);
     e.mouse.x       = strtol(str + 1, &str, 10) - 1;
     e.mouse.y       = strtol(str + 1, &str, 10) - 1;
     e.mouse.pressed = (*str == 'M');
