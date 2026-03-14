@@ -498,12 +498,6 @@ void poll_input() {
 }
 
 void parse_event(byte *str, isize n) {
-    byte buffer[256];
-    Stream s = stream_start(buffer, 256);
-    stream_fmt(&s, "Len: %u, Input: %S", n, s8(str, n));
-    s8 res = stream_end(s);
-    put_str(get_terminal_width() - res.len, get_terminal_height() - 1, res.s, res.len);
-
     if (str[0] == TERMKEY_ESCAPE) {
         if (try_parse_mouse(str, n))    return;
         if (try_parse_term_key(str, n)) return;
