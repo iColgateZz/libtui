@@ -167,6 +167,13 @@ void equeue_push(EventQueue *q, Event e) { da_append(q, e); }
 Event equeue_poll(EventQueue *q) { return q->items[q->head++]; }
 void equeue_reset(EventQueue *q) { q->head = q->count = 0; }
 
+typedef struct {
+    byte *items;
+    usize count;
+    usize capacity;
+    usize head;
+} InputBuffer;
+
 //TODO: add some inner state that will be 
 //      rendered to the screen for debugging
 struct {
@@ -179,6 +186,7 @@ struct {
     CellBuffer frontbuffer;
     CellBuffer backbuffer;
     ByteBuffer frame_cmds;
+    InputBuffer input_buffer;
     Scopes scopes;
     u32 width, height;
 } Terminal = {0};
@@ -281,6 +289,7 @@ void init_terminal() {
     da_resize(&Terminal.backbuffer, Terminal.width * Terminal.height);
     da_resize(&Terminal.frontbuffer, Terminal.width * Terminal.height);
     da_resize(&Terminal.frame_cmds, Terminal.width * Terminal.height);
+    da_resize(&Terminal.input_buffer, KB(16));
 
     // manually add the terminal scope
     da_append(&Terminal.scopes, ((Rectangle) {.w = Terminal.width, .h = Terminal.height}));
@@ -321,6 +330,8 @@ void restore_term() {
     da_free(Terminal.frontbuffer);
     da_free(Terminal.frame_cmds);
     da_free(Terminal.scopes);
+    da_free(Terminal.eq);
+    da_free(Terminal.input_buffer);
 }
 
 void handle_sigwinch(i32 signo) {
