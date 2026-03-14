@@ -68,7 +68,6 @@ typedef enum {
 
 typedef struct {
     EventType type;
-    byte buf[32];
     union {
         struct {
             u32 x, y;
@@ -207,7 +206,7 @@ void handle_sigwinch(i32 signo);
 i64  time_ms();
 void save_timestamp();
 void calculate_dt();
-void parse_event(Event *e, isize n);
+void parse_event(byte *str, isize n);
 void poll_input();
 void write_str_len(byte *str, usize len);
 void write_strf_impl(byte *fmt, ...);
@@ -217,9 +216,9 @@ void generate_absolute_cursor_move(ByteBuffer *a, u32 row, u32 col);
 void generate_relative_cursor_move(ByteBuffer *a, u32 step);
 void render();
 void update_root_scope();
-b32 try_parse_mouse(Event *e, byte *str, isize n);
-b32 try_parse_term_key(Event *e, byte *str, isize n);
-b32 try_parse_text(Event *e, byte *str, isize n);
+b32 try_parse_mouse(byte *str, isize n);
+b32 try_parse_term_key(byte *str, isize n);
+b32 try_parse_text(byte *str, isize n);
 void fix_wide_char(u32 x, u32 y);
 void emit_cells(ByteBuffer *out, Cell *cells, usize start, usize len);
 
@@ -461,9 +460,6 @@ void poll_input() {
         {.fd = STDIN_FILENO,          .events = POLLIN},
     };
 
-    Event *e = &Terminal.event;
-    *e = (Event) {0};
-
     i32 timeout_ms = Terminal.timeout > 0 ? Terminal.timeout : -1;
     i32 rval = poll(pfd, PFD_SIZE, timeout_ms);
 
@@ -477,75 +473,74 @@ void poll_input() {
     }
 
     else if (rval == 0) { // timeout
-        e->type = ENone;
         return;
     }
 
     if (pfd[0].revents & POLLIN) { // window resize
         i32 sig;
         read(Terminal.pipe.read_fd, &sig, sizeof sig);
-        e->type = EWinch;
+        equeue_push(&Terminal.eq, (Event) { .type = EWinch });
         return;
     }
 
     if (pfd[1].revents & POLLIN) {
-        isize n = read(STDIN_FILENO, e->buf, sizeof(e->buf));
+        //TODO: what if the buffer is not big enough
+        //      to hold the whole input
+        static byte buffer[1024];
+        isize n = read(STDIN_FILENO, buffer, sizeof(buffer));
         assert(n > 0);
-        parse_event(e, n);
+        parse_event(buffer, n);
     }
 }
 
-void parse_event(Event *e, isize n) {
-    byte *str = e->buf;
-    
+void parse_event(byte *str, isize n) {
     byte buffer[256];
     Stream s = stream_start(buffer, 256);
     stream_fmt(&s, "Len: %u, Input: %S", n, s8(str, n));
     s8 res = stream_end(s);
-
     put_str(get_terminal_width() - res.len, get_terminal_height() - 1, res.s, res.len);
 
     if (str[0] == TERMKEY_ESCAPE) {
-        if (try_parse_mouse(e, str, n))    return;
-        if (try_parse_term_key(e, str, n)) return;
-
+        if (try_parse_mouse(str, n))    return;
+        if (try_parse_term_key(str, n)) return;
         // Unknown escape sequence
-        e->type = ENone;
         return;
     }
 
     // special case
     #define DELETE 127
     if (n == 1 && str[0] == DELETE) {
-        e->type = ETermKey;
-        e->term_key = TERMKEY_BACKSPACE;
+        equeue_push(&Terminal.eq, (Event) {
+            .type = ETermKey,
+            .term_key = TERMKEY_BACKSPACE,
+        });
         return;
     }
 
-    if (try_parse_text(e, str, n)) return;
-
-    e->type = ENone;
+    try_parse_text(str, n);
 }
 
-b32 try_parse_mouse(Event *e, byte *str, isize n) {
+b32 try_parse_mouse(byte *str, isize n) {
     if (n < 9 || memcmp(str, "\33[<", 3) != 0)
         return false;
 
+    Event e = {0};
     u32 btn          = strtol(str + 3, &str, 10);
-    e->mouse.x       = strtol(str + 1, &str, 10) - 1;
-    e->mouse.y       = strtol(str + 1, &str, 10) - 1;
-    e->mouse.pressed = (*str == 'M');
+    e.mouse.x       = strtol(str + 1, &str, 10) - 1;
+    e.mouse.y       = strtol(str + 1, &str, 10) - 1;
+    e.mouse.pressed = (*str == 'M');
 
     switch (btn) {
-        case 0:  e->type = EMouseLeft;   break;
-        case 1:  e->type = EMouseMiddle; break;
-        case 2:  e->type = EMouseRight;  break;
-        case 32: e->type = EMouseDrag;   break;
-        case 64: e->type = EScrollUp;    break;
-        case 65: e->type = EScrollDown;  break;
-        default: e->type = ENone;
+        case 0:  e.type = EMouseLeft;   break;
+        case 1:  e.type = EMouseMiddle; break;
+        case 2:  e.type = EMouseRight;  break;
+        case 32: e.type = EMouseDrag;   break;
+        case 64: e.type = EScrollUp;    break;
+        case 65: e.type = EScrollDown;  break;
+        default: e.type = ENone;
     }
 
+    equeue_push(&Terminal.eq, e);
     return true;
 }
 
@@ -562,14 +557,16 @@ static struct {byte str[4]; TermKey k;} term_key_table[] = {
     {"[6~", TERMKEY_PAGEDOWN},
 };
 
-b32 try_parse_term_key(Event *e, byte *str, isize n) {
+b32 try_parse_term_key(byte *str, isize n) {
     if (!(3 <= n && n <= 4))
         return false;
 
     for (usize i = 0; i < ARRAY_SIZE(term_key_table); i++) {
         if (memcmp(str + 1, term_key_table[i].str, n - 1) == 0) {
-            e->type = ETermKey;
-            e->term_key = term_key_table[i].k;
+            equeue_push(&Terminal.eq, (Event) {
+                .type = ETermKey,
+                .term_key = term_key_table[i].k,
+            });
             return true;
         }
     }
@@ -577,19 +574,19 @@ b32 try_parse_term_key(Event *e, byte *str, isize n) {
     return false;
 }
 
-b32 try_parse_text(Event *e, byte *str, isize n) {
-    //TODO: the design is limited to parsing only 1
-    //      codepoint. What if the user pastes more?
-    if (1 <= n && n <= 4) {
-        // TODO: what if given 4 bytes, but only 1
-        //       is decoded due to an error?
-        e->type = ECodePoint;
-        UTF8ParseResult res = try_parse_utf8(str, n);
-        e->parsed_cp = res.cp;
-        return true;
+b32 try_parse_text(byte *str, isize n) {
+    // TODO: what if given 4 bytes, but only 1
+    //       is decoded due to an error?
+    //       Maybe the given buffer did not read the input fully
+    usize i = 0;
+    while (i < n) {
+        UTF8ParseResult res = try_parse_utf8(str + i, n - i);
+        Event e = {.type = ECodePoint, .parsed_cp = res.cp};
+        equeue_push(&Terminal.eq, e);
+        i += res.consumed_bytes;
     }
 
-    return false;
+    return true;
 }
 
 static CodePoint UTF8_REPLACEMENT = {
