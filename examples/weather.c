@@ -14,7 +14,7 @@ typedef struct {
 } Bird;
 
 Bird bird = {
-    .y = 5,
+    .y = 10,
 };
 
 void print_bird();

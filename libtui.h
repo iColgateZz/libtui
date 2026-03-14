@@ -174,6 +174,16 @@ typedef struct {
     usize head;
 } InputBuffer;
 
+void compact_input_buffer(InputBuffer *b) {
+    if (b->head > 0) {
+        usize remaining = b->count - b->head;
+
+        memmove(b->items, b->items + b->head, remaining);
+        b->count = remaining;
+        b->head = 0;
+    }
+}
+
 //TODO: add some inner state that will be 
 //      rendered to the screen for debugging
 struct {
@@ -220,18 +230,39 @@ void generate_absolute_cursor_move(ByteBuffer *a, u32 row, u32 col);
 void generate_relative_cursor_move(ByteBuffer *a, u32 step);
 void render();
 void update_root_scope();
-b32 try_parse_mouse(byte *str, isize n);
-b32 try_parse_term_key(byte *str, isize n);
-b32 try_parse_text(byte *str, isize n);
+
+typedef enum {
+    PARSE_OK = 0,
+    PARSE_NEED_MORE,
+    PARSE_FAIL
+} ParseStatus;
+
+typedef struct {
+    ParseStatus status;
+    usize consumed_bytes;
+} ParseResult;
+
+ParseResult try_parse_mouse(byte *str, isize n);
+ParseResult try_parse_term_key(byte *str, isize n);
+ParseResult try_parse_text(byte *str, isize n);
 void fix_wide_char(u32 x, u32 y);
 void emit_cells(ByteBuffer *out, Cell *cells, usize start, usize len);
 void read_and_parse_input();
+void parse_input();
 
 typedef struct {
     CodePoint cp;
+    ParseStatus status;
     usize consumed_bytes;
 } UTF8ParseResult;
+
 UTF8ParseResult try_parse_utf8(byte *s, usize len);
+
+static CodePoint UTF8_REPLACEMENT = {
+    .raw = {0xEF, 0xBF, 0xBD},
+    .raw_len = 3,
+    .display_width = 1,
+};
 
 void write_str_len(byte *str, usize len) {
     write(STDOUT_FILENO, str, len);
@@ -366,8 +397,12 @@ void begin_frame() {
 
         poll_events();
     }
-    
-    Terminal.event = equeue_poll(&Terminal.eq);
+
+    if (!equeue_empty(&Terminal.eq)) {
+        Terminal.event = equeue_poll(&Terminal.eq);
+    } else {
+        Terminal.event = (Event) {.type = ENone };
+    }
 }
 
 void save_timestamp()  { Terminal.saved_time = time_ms(); }
@@ -380,10 +415,11 @@ i64 time_ms() {
 }
 
 void end_frame() {
+    render();
+    write_str_len(Terminal.frame_cmds.items, Terminal.frame_cmds.count);
+
     if (equeue_empty(&Terminal.eq)) {
         equeue_reset(&Terminal.eq);
-        render();
-        write_str_len(Terminal.frame_cmds.items, Terminal.frame_cmds.count);
     }
 
     calculate_dt();
@@ -491,7 +527,6 @@ void poll_events() {
     }
 
     else if (rval == 0) { // timeout
-        equeue_push(&Terminal.eq, (Event) { .type = ENone });
         return;
     }
 
@@ -509,43 +544,74 @@ void poll_events() {
 }
 
 void read_and_parse_input() {
-    static byte buffer[1024];
-    isize n = read(STDIN_FILENO, buffer, sizeof(buffer));
-    assert(n > 0);
-    parse_event(buffer, n);
+    isize n;
+    static byte buffer[4096];
+    n = read(STDIN_FILENO, buffer, sizeof(buffer));
+    // while ((n = read(STDIN_FILENO, buffer, sizeof(buffer))) > 0) {
+        da_append_many(&Terminal.input_buffer, buffer, n);
+        parse_input();
+        compact_input_buffer(&Terminal.input_buffer);
+    // }
 }
 
-void parse_event(byte *str, isize n) {
-    if (str[0] == TERMKEY_ESCAPE) {
-        if (try_parse_mouse(str, n))    return;
-        if (try_parse_term_key(str, n)) return;
-        // Unknown escape sequence
-        equeue_push(&Terminal.eq, (Event) { .type = ENone });
-        return;
-    }
+void parse_input() {
+    InputBuffer *b = &Terminal.input_buffer;
 
-    // special case
-    #define DELETE 127
-    if (n == 1 && str[0] == DELETE) {
-        equeue_push(&Terminal.eq, (Event) {
-            .type = ETermKey,
-            .term_key = TERMKEY_BACKSPACE,
-        });
-        return;
-    }
+    while (b->head < b->count) {
+        byte *data = b->items + b->head;
+        usize len  = b->count - b->head;
+        
+        ParseResult r = {0};
+        if (data[0] == TERMKEY_ESCAPE) {
 
-    try_parse_text(str, n);
+            r = try_parse_mouse(data, len);
+            if (r.status == PARSE_OK) {
+                b->head += r.consumed_bytes;
+                continue;
+            } else if (r.status == PARSE_NEED_MORE) {
+                break;
+            }
+
+            r = try_parse_term_key(data, len);
+            if (r.status == PARSE_OK) {
+                b->head += r.consumed_bytes;
+                continue;
+            } else if (r.status == PARSE_NEED_MORE) {
+                break;
+            }
+
+            // Unknown escape sequence
+            // Skip over ESC
+            b->head += 1;
+            Event e = { .type = ECodePoint, .parsed_cp = UTF8_REPLACEMENT };
+            equeue_push(&Terminal.eq, e);
+            continue;
+        }
+
+        r = try_parse_text(data, len);
+        if (r.status == PARSE_OK) {
+            b->head += r.consumed_bytes;
+            continue;
+        } else if (r.status == PARSE_NEED_MORE) {
+            b->head += r.consumed_bytes;
+            break;
+        }
+    }
 }
 
-b32 try_parse_mouse(byte *str, isize n) {
-    if (n < 9 || memcmp(str, "\33[<", 3) != 0)
-        return false;
+ParseResult try_parse_mouse(byte *str, isize n) {
+    if (memcmp(str, "\33[<", 3) != 0)
+        return (ParseResult) { .status = PARSE_FAIL };
+
+    if (n < 9) return (ParseResult) { .status = PARSE_NEED_MORE };
 
     Event e = {0};
-    u32 btn         = strtol(str + 3, &str, 10);
-    e.mouse.x       = strtol(str + 1, &str, 10) - 1;
-    e.mouse.y       = strtol(str + 1, &str, 10) - 1;
-    e.mouse.pressed = (*str == 'M');
+    byte *p = str;
+    u32 btn         = strtol(p + 3, &p, 10);
+    e.mouse.x       = strtol(p + 1, &p, 10) - 1;
+    e.mouse.y       = strtol(p + 1, &p, 10) - 1;
+    e.mouse.pressed = (*p == 'M');
+    p++; // step over M or m
 
     switch (btn) {
         case 0:  e.type = EMouseLeft;   break;
@@ -558,7 +624,7 @@ b32 try_parse_mouse(byte *str, isize n) {
     }
 
     equeue_push(&Terminal.eq, e);
-    return true;
+    return (ParseResult) { .consumed_bytes = p - str };
 }
 
 static struct {byte str[4]; TermKey k;} term_key_table[] = {
@@ -574,43 +640,53 @@ static struct {byte str[4]; TermKey k;} term_key_table[] = {
     {"[6~", TERMKEY_PAGEDOWN},
 };
 
-b32 try_parse_term_key(byte *str, isize n) {
-    if (!(3 <= n && n <= 4))
-        return false;
+ParseResult try_parse_term_key(byte *str, isize n) {
+    if (n < 3) return (ParseResult) { .status = PARSE_NEED_MORE };
 
     for (usize i = 0; i < ARRAY_SIZE(term_key_table); i++) {
-        if (memcmp(str + 1, term_key_table[i].str, n - 1) == 0) {
+        byte *key = term_key_table[i].str;
+        if (memcmp(str + 1, key, strlen(key)) == 0) {
             equeue_push(&Terminal.eq, (Event) {
                 .type = ETermKey,
                 .term_key = term_key_table[i].k,
             });
-            return true;
+
+            return (ParseResult) { .consumed_bytes = strlen(key) + 1 }; // add ESC
         }
     }
 
-    return false;
+    return (ParseResult) { .status = PARSE_FAIL };
 }
 
-b32 try_parse_text(byte *str, isize n) {
-    // TODO: what if given 4 bytes, but only 1
-    //       is decoded due to an error?
-    //       Maybe the given buffer did not read the input fully
+ParseResult try_parse_text(byte *str, isize n) {
     isize i = 0;
+
     while (i < n) {
         UTF8ParseResult res = try_parse_utf8(str + i, n - i);
-        Event e = {.type = ECodePoint, .parsed_cp = res.cp};
+        Event e = { .type = ECodePoint };
+
+        if (res.status == PARSE_OK) {
+            e.parsed_cp = res.cp;
+        } 
+        else if (res.status == PARSE_FAIL) {
+            e.parsed_cp = UTF8_REPLACEMENT;
+        } 
+        else if (res.status == PARSE_NEED_MORE) {
+            return (ParseResult) {
+                .status = PARSE_NEED_MORE,
+                .consumed_bytes = i,
+            };
+        }
+
         equeue_push(&Terminal.eq, e);
         i += res.consumed_bytes;
     }
 
-    return true;
+    return (ParseResult) {
+        .status = PARSE_OK,
+        .consumed_bytes = i,
+    };
 }
-
-static CodePoint UTF8_REPLACEMENT = {
-    .raw = {0xEF, 0xBF, 0xBD},
-    .raw_len = 3,
-    .display_width = 1,
-};
 
 UTF8ParseResult try_parse_utf8(byte *s, usize len) {
     assert(len > 0);
@@ -629,17 +705,23 @@ UTF8ParseResult try_parse_utf8(byte *s, usize len) {
     else if ((first & 0xF8) == 0xF0) expected_len = 4;
     else {
         return (UTF8ParseResult) {
-            .cp = UTF8_REPLACEMENT,
             .consumed_bytes = 1,
+            .status = PARSE_FAIL,
         };
     }
 
-    assert(expected_len <= len);
+    if (expected_len > len) {
+        return (UTF8ParseResult) { 
+            .consumed_bytes = 0,
+            .status = PARSE_NEED_MORE,
+        };
+    }
+
     for (usize i = 1; i < expected_len; i++) {
         if ((s[i] & 0xC0) != 0x80) {
             return (UTF8ParseResult) {
-                .cp = UTF8_REPLACEMENT,
                 .consumed_bytes = i,
+                .status = PARSE_FAIL,
             };
         }
     }
@@ -741,8 +823,20 @@ void put_str(u32 x, u32 y, byte *s, usize len) {
     usize i = 0;
     while (i < len) {
         UTF8ParseResult result = try_parse_utf8(s + i, len - i);
+
         CodePoint cp = result.cp;
+        if (result.status == PARSE_OK) {
+            cp = result.cp;
+        } else if (result.status == PARSE_FAIL) {
+            cp = UTF8_REPLACEMENT;
+        } else { // PARSE_NEED_MORE
+            // should not happen
+            cp = UTF8_REPLACEMENT;
+            assert(false);
+        }
+
         put_codepoint(x, y, cp);
+
         i += result.consumed_bytes;
         x += cp.display_width;
     }
