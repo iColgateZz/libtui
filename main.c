@@ -1,8 +1,7 @@
-#define LIBTUI_IMPL
-    #include "libtui.h"
-
 #define PSH_BUILD_IMPL
-    #include "psh_build/psh_build.h"
+#define LIBTUI_IMPL
+#define PSH_NO_ECHO
+    #include "libtui.h"
 
 typedef struct {
     u32 x, y;
