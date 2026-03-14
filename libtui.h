@@ -588,7 +588,7 @@ b32 try_parse_text(byte *str, isize n) {
     // TODO: what if given 4 bytes, but only 1
     //       is decoded due to an error?
     //       Maybe the given buffer did not read the input fully
-    usize i = 0;
+    isize i = 0;
     while (i < n) {
         UTF8ParseResult res = try_parse_utf8(str + i, n - i);
         Event e = {.type = ECodePoint, .parsed_cp = res.cp};
