@@ -390,18 +390,18 @@ void set_max_timeout_ms(u32 timeout) { Terminal.timeout = timeout; }
 void begin_frame() {
     save_timestamp();
 
-    if (equeue_empty(&Terminal.eq)) {
-        da_clear(&Terminal.frame_cmds);
-        for (usize i = 0; i < Terminal.backbuffer.count; ++i)
-            Terminal.backbuffer.items[i] = cell_empty();
+    da_clear(&Terminal.frame_cmds);
+    for (usize i = 0; i < Terminal.backbuffer.count; ++i)
+        Terminal.backbuffer.items[i] = cell_empty();
 
+    if (equeue_empty(&Terminal.eq)) {
         poll_events();
     }
 
     if (!equeue_empty(&Terminal.eq)) {
         Terminal.event = equeue_poll(&Terminal.eq);
     } else {
-        Terminal.event = (Event) {.type = ENone };
+        Terminal.event.type = ENone;
     }
 }
 
@@ -546,12 +546,15 @@ void poll_events() {
 void read_and_parse_input() {
     isize n;
     static byte buffer[4096];
-    n = read(STDIN_FILENO, buffer, sizeof(buffer));
-    // while ((n = read(STDIN_FILENO, buffer, sizeof(buffer))) > 0) {
+
+    while ((n = read(STDIN_FILENO, buffer, sizeof(buffer))) > 0) {
         da_append_many(&Terminal.input_buffer, buffer, n);
+    }
+
+    if (Terminal.input_buffer.count > 0) {
         parse_input();
         compact_input_buffer(&Terminal.input_buffer);
-    // }
+    }
 }
 
 void parse_input() {
