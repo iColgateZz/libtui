@@ -207,13 +207,13 @@ void fix_wide_char(u32 x, u32 y);
 void emit_cells(ByteBuffer *out, Cell *cells, usize start, usize len);
 
 typedef enum {
-    OK = 0,
-    INCOMPLETE,
-    FAIL,
-} ValidationStatus;
+    UTF8_OK = 0,
+    UTF8_INCOMPLETE,
+    UTF8_FAIL,
+} Utf8Status;
 
 typedef struct {
-    ValidationStatus status;
+    Utf8Status status;
     usize consumed_bytes;
 } Utf8ValidationResult;
 
@@ -564,11 +564,11 @@ b32 try_parse_text(byte *str, isize n, Event *e) {
         e->type = ECodePoint;
 
         Utf8ValidationResult res = utf8_validate(str, n);
-        if (res.status != OK) {
+        if (res.status != UTF8_OK) {
             e->parsed_cp = UTF8_REPLACEMENT;
 
             // Infinite loop may happen
-            if (res.status == INCOMPLETE) {
+            if (res.status == UTF8_INCOMPLETE) {
                 res.consumed_bytes++;
             }
         }
@@ -586,7 +586,7 @@ Utf8ValidationResult utf8_validate(byte *s, usize len) {
     u8 first = s[0];
     if (first < 0x80) {
         return (Utf8ValidationResult) {
-            .status = OK,
+            .status = UTF8_OK,
             .consumed_bytes = 1,
         };
     }
@@ -598,14 +598,14 @@ Utf8ValidationResult utf8_validate(byte *s, usize len) {
     else {
         return (Utf8ValidationResult) {
             .consumed_bytes = 1,
-            .status = FAIL,
+            .status = UTF8_FAIL,
         };
     }
 
     if (expected_len > len) {
         return (Utf8ValidationResult) { 
             .consumed_bytes = 0,
-            .status = INCOMPLETE,
+            .status = UTF8_INCOMPLETE,
         };
     }
 
@@ -613,14 +613,14 @@ Utf8ValidationResult utf8_validate(byte *s, usize len) {
         if ((s[i] & 0xC0) != 0x80) {
             return (Utf8ValidationResult) {
                 .consumed_bytes = i,
-                .status = FAIL,
+                .status = UTF8_FAIL,
             };
         }
     }
 
     return (Utf8ValidationResult) {
         .consumed_bytes = expected_len,
-        .status = OK,
+        .status = UTF8_OK,
     };
 }
 
@@ -714,11 +714,11 @@ void put_str(u32 x, u32 y, byte *s, usize len) {
     while (i < len) {
         Utf8ValidationResult result = utf8_validate(s + i, len - i);
 
-        if (result.status != OK) {
+        if (result.status != UTF8_OK) {
             cp = UTF8_REPLACEMENT;
 
             // Infinite loop may happen
-            if (result.status == INCOMPLETE) {
+            if (result.status == UTF8_INCOMPLETE) {
                 result.consumed_bytes++;
             }
         } else {
