@@ -207,18 +207,17 @@ void fix_wide_char(u32 x, u32 y);
 void emit_cells(ByteBuffer *out, Cell *cells, usize start, usize len);
 
 typedef enum {
-    PARSE_OK = 0,
-    PARSE_NEED_MORE,
-    PARSE_FAIL
-} ParseStatus;
+    OK = 0,
+    INCOMPLETE,
+    FAIL,
+} ValidationStatus;
 
 typedef struct {
-    CodePoint cp;
-    ParseStatus status;
+    ValidationStatus status;
     usize consumed_bytes;
-} UTF8ParseResult;
+} Utf8ValidationResult;
 
-UTF8ParseResult utf8_try_from(byte *s, usize len);
+Utf8ValidationResult utf8_validate(byte *s, usize len);
 
 static CodePoint UTF8_REPLACEMENT = {
     .raw = {0xEF, 0xBF, 0xBD},
@@ -562,24 +561,32 @@ b32 try_parse_term_key(byte *str, isize n, Event *e) {
 
 b32 try_parse_text(byte *str, isize n, Event *e) {
     if (1 <= n && n <= 4) {
-        // TODO: what if given 4 bytes, but only 1
-        //       is decoded due to an error?
         e->type = ECodePoint;
-        UTF8ParseResult res = utf8_try_from(str, n);
-        e->parsed_cp = res.cp;
+
+        Utf8ValidationResult res = utf8_validate(str, n);
+        if (res.status != OK) {
+            e->parsed_cp = UTF8_REPLACEMENT;
+
+            // Infinite loop may happen
+            if (res.status == INCOMPLETE) {
+                res.consumed_bytes++;
+            }
+        }
+
+        e->parsed_cp = cp_from_utf8(str, res.consumed_bytes);
         return true;
     }
 
     return false;
 }
 
-UTF8ParseResult utf8_try_from(byte *s, usize len) {
+Utf8ValidationResult utf8_validate(byte *s, usize len) {
     assert(len > 0);
 
     u8 first = s[0];
     if (first < 0x80) {
-        return (UTF8ParseResult) {
-            .cp = cp_from_byte(first),
+        return (Utf8ValidationResult) {
+            .status = OK,
             .consumed_bytes = 1,
         };
     }
@@ -589,34 +596,31 @@ UTF8ParseResult utf8_try_from(byte *s, usize len) {
     else if ((first & 0xF0) == 0xE0) expected_len = 3;
     else if ((first & 0xF8) == 0xF0) expected_len = 4;
     else {
-        return (UTF8ParseResult) {
+        return (Utf8ValidationResult) {
             .consumed_bytes = 1,
-            .status = PARSE_FAIL,
+            .status = FAIL,
         };
     }
 
     if (expected_len > len) {
-        return (UTF8ParseResult) { 
+        return (Utf8ValidationResult) { 
             .consumed_bytes = 0,
-            .status = PARSE_NEED_MORE,
+            .status = INCOMPLETE,
         };
     }
 
     for (usize i = 1; i < expected_len; i++) {
         if ((s[i] & 0xC0) != 0x80) {
-            return (UTF8ParseResult) {
+            return (Utf8ValidationResult) {
                 .consumed_bytes = i,
-                .status = PARSE_FAIL,
+                .status = FAIL,
             };
         }
     }
 
-    Unicode decoded_char = utf8_decode(s, expected_len);
-    u8 width = unicode_width(decoded_char);
-
-    return (UTF8ParseResult) {
-        .cp = cp_from_raw(s, expected_len, width),
+    return (Utf8ValidationResult) {
         .consumed_bytes = expected_len,
+        .status = OK,
     };
 }
 
@@ -706,18 +710,19 @@ b32 cell_equal(Cell a, Cell b) { return a.flags == b.flags && cp_equal(a.cp, b.c
 
 void put_str(u32 x, u32 y, byte *s, usize len) {
     usize i = 0;
+    CodePoint cp;
     while (i < len) {
-        UTF8ParseResult result = utf8_try_from(s + i, len - i);
+        Utf8ValidationResult result = utf8_validate(s + i, len - i);
 
-        CodePoint cp = result.cp;
-        if (result.status == PARSE_OK) {
-            cp = result.cp;
-        } else if (result.status == PARSE_FAIL) {
+        if (result.status != OK) {
             cp = UTF8_REPLACEMENT;
-        } else { // PARSE_NEED_MORE
-            // should not happen
-            cp = UTF8_REPLACEMENT;
-            assert(false);
+
+            // Infinite loop may happen
+            if (result.status == INCOMPLETE) {
+                result.consumed_bytes++;
+            }
+        } else {
+            cp = cp_from_utf8(s + i, result.consumed_bytes);
         }
 
         put_codepoint(x, y, cp);
