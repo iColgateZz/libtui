@@ -200,22 +200,17 @@ void generate_relative_cursor_move(ByteBuffer *a, u32 step);
 void render();
 void update_root_scope();
 
-typedef enum {
-    PARSE_OK = 0,
-    PARSE_NEED_MORE,
-    PARSE_FAIL
-} ParseStatus;
-
-typedef struct {
-    ParseStatus status;
-    usize consumed_bytes;
-} ParseResult;
-
 b32 try_parse_mouse(byte *str, isize n, Event *e);
 b32 try_parse_term_key(byte *str, isize n, Event *e);
 b32 try_parse_text(byte *str, isize n, Event *e);
 void fix_wide_char(u32 x, u32 y);
 void emit_cells(ByteBuffer *out, Cell *cells, usize start, usize len);
+
+typedef enum {
+    PARSE_OK = 0,
+    PARSE_NEED_MORE,
+    PARSE_FAIL
+} ParseStatus;
 
 typedef struct {
     CodePoint cp;
