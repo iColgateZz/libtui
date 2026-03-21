@@ -514,7 +514,7 @@ b32 try_parse_mouse(byte *str, isize n, Event *e) {
     if (n < 9 || memcmp(str, "\33[<", 3) != 0) return false;
 
     byte *p = str;
-    u32 btn         = strtol(p + 3, &p, 10);
+    u32 btn          = strtol(p + 3, &p, 10);
     e->mouse.x       = strtol(p + 1, &p, 10) - 1;
     e->mouse.y       = strtol(p + 1, &p, 10) - 1;
     e->mouse.pressed = (*p == 'M');
@@ -744,6 +744,7 @@ void put_codepoint(u32 x, u32 y, CodePoint cp) {
     }
 
     // ignore other widths
+    assert(false);
 }
 
 void fix_wide_char(u32 x, u32 y) {
@@ -760,8 +761,6 @@ void fix_wide_char(u32 x, u32 y) {
     }
 }
 
-//TODO: these 2 functions are not necessarily needed
-//      put_str may be used instead of put_ascii_str
 void put_ascii_char(u32 x, u32 y, byte c) {
     put_codepoint(x, y, cp_from_byte(c));
 }
