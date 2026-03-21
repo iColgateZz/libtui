@@ -215,9 +215,10 @@ typedef enum {
 typedef struct {
     Utf8Status status;
     usize consumed_bytes;
-} Utf8ValidationResult;
+    CodePoint cp;
+} Utf8Result;
 
-Utf8ValidationResult utf8_validate(byte *s, usize len);
+Utf8Result utf8_next(byte *s, usize len);
 
 static CodePoint UTF8_REPLACEMENT = {
     .raw = {0xEF, 0xBF, 0xBD},
@@ -561,33 +562,26 @@ b32 try_parse_term_key(byte *str, isize n, Event *e) {
 
 b32 try_parse_text(byte *str, isize n, Event *e) {
     if (1 <= n && n <= 4) {
+        Utf8Result res = utf8_next(str, n);
+        if (res.status == UTF8_INCOMPLETE) return false;
+        
         e->type = ECodePoint;
-
-        Utf8ValidationResult res = utf8_validate(str, n);
-        if (res.status != UTF8_OK) {
-            e->parsed_cp = UTF8_REPLACEMENT;
-
-            // Infinite loop may happen
-            if (res.status == UTF8_INCOMPLETE) {
-                res.consumed_bytes++;
-            }
-        }
-
-        e->parsed_cp = cp_from_utf8(str, res.consumed_bytes);
+        e->parsed_cp = res.cp;
         return true;
     }
 
     return false;
 }
 
-Utf8ValidationResult utf8_validate(byte *s, usize len) {
+Utf8Result utf8_next(byte *s, usize len) {
     assert(len > 0);
 
     u8 first = s[0];
     if (first < 0x80) {
-        return (Utf8ValidationResult) {
+        return (Utf8Result) {
             .status = UTF8_OK,
             .consumed_bytes = 1,
+            .cp = cp_from_byte(first),
         };
     }
 
@@ -596,31 +590,35 @@ Utf8ValidationResult utf8_validate(byte *s, usize len) {
     else if ((first & 0xF0) == 0xE0) expected_len = 3;
     else if ((first & 0xF8) == 0xF0) expected_len = 4;
     else {
-        return (Utf8ValidationResult) {
+        return (Utf8Result) {
             .consumed_bytes = 1,
             .status = UTF8_FAIL,
+            .cp = UTF8_REPLACEMENT,
         };
     }
 
     if (expected_len > len) {
-        return (Utf8ValidationResult) { 
+        return (Utf8Result) { 
             .consumed_bytes = 0,
             .status = UTF8_INCOMPLETE,
+            .cp = UTF8_REPLACEMENT,
         };
     }
 
     for (usize i = 1; i < expected_len; i++) {
         if ((s[i] & 0xC0) != 0x80) {
-            return (Utf8ValidationResult) {
+            return (Utf8Result) {
                 .consumed_bytes = i,
                 .status = UTF8_FAIL,
+                .cp = UTF8_REPLACEMENT,
             };
         }
     }
 
-    return (Utf8ValidationResult) {
+    return (Utf8Result) {
         .consumed_bytes = expected_len,
         .status = UTF8_OK,
+        .cp = cp_from_utf8(s, expected_len),
     };
 }
 
@@ -710,25 +708,15 @@ b32 cell_equal(Cell a, Cell b) { return a.flags == b.flags && cp_equal(a.cp, b.c
 
 void put_str(u32 x, u32 y, byte *s, usize len) {
     usize i = 0;
-    CodePoint cp;
     while (i < len) {
-        Utf8ValidationResult result = utf8_validate(s + i, len - i);
+        Utf8Result res = utf8_next(s + i, len - i);
 
-        if (result.status != UTF8_OK) {
-            cp = UTF8_REPLACEMENT;
+        if (res.status == UTF8_INCOMPLETE) break;
 
-            // Infinite loop may happen
-            if (result.status == UTF8_INCOMPLETE) {
-                result.consumed_bytes++;
-            }
-        } else {
-            cp = cp_from_utf8(s + i, result.consumed_bytes);
-        }
+        put_codepoint(x, y, res.cp);
 
-        put_codepoint(x, y, cp);
-
-        i += result.consumed_bytes;
-        x += cp.display_width;
+        i += res.consumed_bytes;
+        x += res.cp.display_width;
     }
 }
 
