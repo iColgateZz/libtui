@@ -100,7 +100,7 @@ Rectangle peek_scope();
 void push_scope(u32 x, u32 y, u32 w, u32 h);
 
 void init_terminal();
-void set_max_timeout_ms(u32 timeout);
+void set_max_timeout_ms(i32 timeout);
 void begin_frame();
 void end_frame();
 u64 get_delta_time();
@@ -160,7 +160,7 @@ da_typedef(ByteBuffer, byte);
 struct {
     struct termios orig_term;
     Unix_Pipe pipe;
-    u32 timeout;
+    i32 timeout;
     Event event;
     u64 saved_time, dt;
     CellBuffer frontbuffer;
@@ -338,7 +338,7 @@ void handle_sigwinch(i32 signo) {
     write(Terminal.pipe.write_fd, &signo, sizeof signo);
 }
 
-void set_max_timeout_ms(u32 timeout) { Terminal.timeout = timeout; }
+void set_max_timeout_ms(i32 timeout) { Terminal.timeout = timeout; }
 
 void begin_frame() {
     save_timestamp();
@@ -455,7 +455,7 @@ void poll_event(Event *e) {
         {.fd = STDIN_FILENO,          .events = POLLIN},
     };
 
-    i32 timeout_ms = Terminal.timeout > 0 ? Terminal.timeout : -1;
+    i32 timeout_ms = Terminal.timeout >= 0 ? Terminal.timeout : -1;
     i32 rval = poll(pfd, PFD_SIZE, timeout_ms);
 
     if (rval < 0) {
