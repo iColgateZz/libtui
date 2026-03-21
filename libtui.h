@@ -465,7 +465,7 @@ void poll_event(Event *e) {
             return;
         }
 
-        assert(false);
+        assert(false && "call to 'poll' failed");
     }
 
     else if (rval == 0) { // timeout
@@ -485,7 +485,7 @@ void poll_event(Event *e) {
         static byte buffer[256];
         n = read(STDIN_FILENO, buffer, sizeof buffer);
 
-        assert(n > 0);
+        assert(n > 0 && "read non-positive amount of bytes from STDIN");
 
         parse_input(buffer, n, e);
         return;
@@ -571,7 +571,7 @@ b32 try_parse_text(byte *str, isize n, Event *e) {
 }
 
 Utf8Result utf8_next(byte *s, usize len) {
-    assert(len > 0);
+    assert(len > 0 && "invalid length");
 
     u8 first = s[0];
     if (first < 0x80) {
@@ -741,7 +741,7 @@ void put_codepoint(u32 x, u32 y, CodePoint cp) {
     }
 
     // ignore other widths
-    assert(false);
+    assert(false && "a codepoint with invalid width");
 }
 
 void fix_wide_char(u32 x, u32 y) {
@@ -942,7 +942,7 @@ s8 stream_end(Stream s) {
 
 Stream arena_stream_start(Arena *arena, usize size) {
     byte *buffer = arena_push(arena, byte, size);
-    assert(buffer);
+    assert(buffer && "arena does not have enough memory");
     return stream_start(buffer, size);
 }
 
