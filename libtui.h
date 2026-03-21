@@ -166,6 +166,7 @@ struct {
     CellBuffer frontbuffer;
     CellBuffer backbuffer;
     ByteBuffer frame_cmds;
+    Arena tmp;
     Scopes scopes;
     u32 width, height;
 } Terminal = {0};
@@ -287,6 +288,8 @@ void init_terminal() {
 
     // manually add the terminal scope
     da_append(&Terminal.scopes, ((Rectangle) {.w = Terminal.width, .h = Terminal.height}));
+
+    Terminal.tmp = arena_init(MB(16));
 }
 
 void update_screen_dimensions() {
@@ -320,6 +323,8 @@ void restore_term() {
     da_free(Terminal.frontbuffer);
     da_free(Terminal.frame_cmds);
     da_free(Terminal.scopes);
+
+    arena_destroy(Terminal.tmp);
 }
 
 void handle_sigwinch(i32 signo) {
@@ -343,6 +348,7 @@ void set_max_timeout_ms(i32 timeout) { Terminal.timeout = timeout; }
 void begin_frame() {
     save_timestamp();
 
+    arena_clear(&Terminal.tmp);
     da_clear(&Terminal.frame_cmds);
     for (usize i = 0; i < Terminal.backbuffer.count; ++i)
         Terminal.backbuffer.items[i] = cell_empty();
@@ -427,11 +433,8 @@ void emit_cells(ByteBuffer *out, Cell *cells, usize start, usize len) {
     }
 }
 
-//TODO: maybe add an arena for temporary allocations?
 void generate_absolute_cursor_move(ByteBuffer *a, u32 row, u32 col) {
-    byte tmp[64];
-    Stream s = stream_start(tmp, 64);
-
+    Stream s = arena_stream_start(&Terminal.tmp, 64);
     stream_fmt(&s, "\33[%u;%uH", row + 1, col + 1);
     s8 result = stream_end(s);
 
@@ -439,9 +442,7 @@ void generate_absolute_cursor_move(ByteBuffer *a, u32 row, u32 col) {
 }
 
 void generate_relative_cursor_move(ByteBuffer *a, u32 step) {
-    byte tmp[64];
-    Stream s = stream_start(tmp, 64);
-
+    Stream s = arena_stream_start(&Terminal.tmp, 64);
     stream_fmt(&s, "\33[%uC", step);
     s8 result = stream_end(s);
 
