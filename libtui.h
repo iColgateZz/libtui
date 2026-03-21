@@ -218,7 +218,7 @@ typedef struct {
     usize consumed_bytes;
 } UTF8ParseResult;
 
-UTF8ParseResult try_parse_utf8(byte *s, usize len);
+UTF8ParseResult utf8_try_from(byte *s, usize len);
 
 static CodePoint UTF8_REPLACEMENT = {
     .raw = {0xEF, 0xBF, 0xBD},
@@ -565,7 +565,7 @@ b32 try_parse_text(byte *str, isize n, Event *e) {
         // TODO: what if given 4 bytes, but only 1
         //       is decoded due to an error?
         e->type = ECodePoint;
-        UTF8ParseResult res = try_parse_utf8(str, n);
+        UTF8ParseResult res = utf8_try_from(str, n);
         e->parsed_cp = res.cp;
         return true;
     }
@@ -573,7 +573,7 @@ b32 try_parse_text(byte *str, isize n, Event *e) {
     return false;
 }
 
-UTF8ParseResult try_parse_utf8(byte *s, usize len) {
+UTF8ParseResult utf8_try_from(byte *s, usize len) {
     assert(len > 0);
 
     u8 first = s[0];
@@ -707,7 +707,7 @@ b32 cell_equal(Cell a, Cell b) { return a.flags == b.flags && cp_equal(a.cp, b.c
 void put_str(u32 x, u32 y, byte *s, usize len) {
     usize i = 0;
     while (i < len) {
-        UTF8ParseResult result = try_parse_utf8(s + i, len - i);
+        UTF8ParseResult result = utf8_try_from(s + i, len - i);
 
         CodePoint cp = result.cp;
         if (result.status == PARSE_OK) {
