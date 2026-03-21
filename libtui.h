@@ -54,7 +54,7 @@ typedef enum {
 } TermKey;
 
 typedef enum {
-    ENone,
+    ENone = 0,
     ETermKey,
     ECodePoint,
     EWinch,
@@ -155,35 +155,6 @@ da_typedef(CellBuffer, Cell);
 da_typedef(Scopes, Rectangle);
 da_typedef(ByteBuffer, byte);
 
-typedef struct {
-    Event *items;
-    usize count;
-    usize capacity;
-    usize head;
-} EventQueue;
-
-b32 equeue_empty(EventQueue *q) { return q->head == q->count; }
-void equeue_push(EventQueue *q, Event e) { da_append(q, e); }
-Event equeue_poll(EventQueue *q) { return q->items[q->head++]; }
-void equeue_reset(EventQueue *q) { q->head = q->count = 0; }
-
-typedef struct {
-    byte *items;
-    usize count;
-    usize capacity;
-    usize head;
-} InputBuffer;
-
-void compact_input_buffer(InputBuffer *b) {
-    if (b->head > 0) {
-        usize remaining = b->count - b->head;
-
-        memmove(b->items, b->items + b->head, remaining);
-        b->count = remaining;
-        b->head = 0;
-    }
-}
-
 //TODO: add some inner state that will be 
 //      rendered to the screen for debugging
 struct {
@@ -191,12 +162,10 @@ struct {
     Unix_Pipe pipe;
     u32 timeout;
     Event event;
-    EventQueue eq;
     u64 saved_time, dt;
     CellBuffer frontbuffer;
     CellBuffer backbuffer;
     ByteBuffer frame_cmds;
-    InputBuffer input_buffer;
     Scopes scopes;
     u32 width, height;
 } Terminal = {0};
@@ -220,8 +189,8 @@ void handle_sigwinch(i32 signo);
 i64  time_ms();
 void save_timestamp();
 void calculate_dt();
-void parse_event(byte *str, isize n);
-void poll_events();
+void poll_event(Event *e);
+void parse_input(byte *str, isize n, Event *e);
 void write_str_len(byte *str, usize len);
 void write_strf_impl(byte *fmt, ...);
 #define write_str(s)        write_str_len(s, sizeof(s) - 1)
@@ -242,13 +211,11 @@ typedef struct {
     usize consumed_bytes;
 } ParseResult;
 
-ParseResult try_parse_mouse(byte *str, isize n);
-ParseResult try_parse_term_key(byte *str, isize n);
-ParseResult try_parse_text(byte *str, isize n);
+b32 try_parse_mouse(byte *str, isize n, Event *e);
+b32 try_parse_term_key(byte *str, isize n, Event *e);
+b32 try_parse_text(byte *str, isize n, Event *e);
 void fix_wide_char(u32 x, u32 y);
 void emit_cells(ByteBuffer *out, Cell *cells, usize start, usize len);
-void read_and_parse_input();
-void parse_input();
 
 typedef struct {
     CodePoint cp;
@@ -297,6 +264,7 @@ void init_terminal() {
     assert(tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw) == 0);
     //TODO: maybe add something to deal with the cursor on the user side
     //      so that the user can manipulate the cursor position maybe
+    //TODO: handle pasting into the terminal?
 
     write_str("\33[?2004l");                 // disable bracketed paste mode
     write_str("\33[?1049h");                 // use alternate buffer
@@ -318,13 +286,9 @@ void init_terminal() {
     sa.sa_flags = SA_RESTART;
     sigaction(SIGWINCH, &sa, NULL);
 
-    //TODO: set back to blocking when exiting?
-    assert(psh__fd_set_nonblocking(STDIN_FILENO));
-
     da_resize(&Terminal.backbuffer, Terminal.width * Terminal.height);
     da_resize(&Terminal.frontbuffer, Terminal.width * Terminal.height);
     da_resize(&Terminal.frame_cmds, Terminal.width * Terminal.height);
-    da_resize(&Terminal.input_buffer, KB(16));
 
     // manually add the terminal scope
     da_append(&Terminal.scopes, ((Rectangle) {.w = Terminal.width, .h = Terminal.height}));
@@ -365,8 +329,6 @@ void restore_term() {
     da_free(Terminal.frontbuffer);
     da_free(Terminal.frame_cmds);
     da_free(Terminal.scopes);
-    da_free(Terminal.eq);
-    da_free(Terminal.input_buffer);
 }
 
 void handle_sigwinch(i32 signo) {
@@ -394,15 +356,8 @@ void begin_frame() {
     for (usize i = 0; i < Terminal.backbuffer.count; ++i)
         Terminal.backbuffer.items[i] = cell_empty();
 
-    if (equeue_empty(&Terminal.eq)) {
-        poll_events();
-    }
-
-    if (!equeue_empty(&Terminal.eq)) {
-        Terminal.event = equeue_poll(&Terminal.eq);
-    } else {
-        Terminal.event.type = ENone;
-    }
+    Terminal.event = (Event) {0};
+    poll_event(&Terminal.event);
 }
 
 void save_timestamp()  { Terminal.saved_time = time_ms(); }
@@ -417,11 +372,6 @@ i64 time_ms() {
 void end_frame() {
     render();
     write_str_len(Terminal.frame_cmds.items, Terminal.frame_cmds.count);
-
-    if (equeue_empty(&Terminal.eq)) {
-        equeue_reset(&Terminal.eq);
-    }
-
     calculate_dt();
 }
 
@@ -507,7 +457,7 @@ void generate_relative_cursor_move(ByteBuffer *a, u32 step) {
     da_append_many(a, result.s, result.len);
 }
 
-void poll_events() {
+void poll_event(Event *e) {
     #define PFD_SIZE 2
     struct pollfd pfd[PFD_SIZE] = {
         {.fd = Terminal.pipe.read_fd, .events = POLLIN},
@@ -519,7 +469,7 @@ void poll_events() {
 
     if (rval < 0) {
         if (errno == EAGAIN || errno == EINTR) {
-            poll_events();
+            poll_event(e);
             return;
         }
 
@@ -527,107 +477,64 @@ void poll_events() {
     }
 
     else if (rval == 0) { // timeout
+        e->type = ENone;
         return;
     }
 
     if (pfd[0].revents & POLLIN) { // window resize
         i32 sig;
         read(Terminal.pipe.read_fd, &sig, sizeof sig);
-        equeue_push(&Terminal.eq, (Event) { .type = EWinch });
+        e->type = EWinch;
         return;
     }
 
     if (pfd[1].revents & POLLIN) {
-        read_and_parse_input();
+        isize n = 0;
+        static byte buffer[256];
+        n = read(STDIN_FILENO, buffer, sizeof buffer);
+
+        assert(n > 0);
+
+        parse_input(buffer, n, e);
         return;
     }
 }
 
-void read_and_parse_input() {
-    isize n;
-    static byte buffer[4096];
+void parse_input(byte *str, isize n, Event *e) {
+    if (str[0] == TERMKEY_ESCAPE) {
+        if (try_parse_mouse(str, n, e)) return;
+        if (try_parse_term_key(str, n, e)) return;
 
-    while ((n = read(STDIN_FILENO, buffer, sizeof(buffer))) > 0) {
-        da_append_many(&Terminal.input_buffer, buffer, n);
+        // Unknown escape sequence
+        e->type = ENone;
+        return;
     }
 
-    if (Terminal.input_buffer.count > 0) {
-        parse_input();
-        compact_input_buffer(&Terminal.input_buffer);
-    }
+    if (try_parse_text(str, n, e)) return;
+
+    e->type = ENone;
 }
 
-void parse_input() {
-    InputBuffer *b = &Terminal.input_buffer;
+b32 try_parse_mouse(byte *str, isize n, Event *e) {
+    if (n < 9 || memcmp(str, "\33[<", 3) != 0) return false;
 
-    while (b->head < b->count) {
-        byte *data = b->items + b->head;
-        usize len  = b->count - b->head;
-        
-        ParseResult r = {0};
-        if (data[0] == TERMKEY_ESCAPE) {
-
-            r = try_parse_mouse(data, len);
-            if (r.status == PARSE_OK) {
-                b->head += r.consumed_bytes;
-                continue;
-            } else if (r.status == PARSE_NEED_MORE) {
-                break;
-            }
-
-            r = try_parse_term_key(data, len);
-            if (r.status == PARSE_OK) {
-                b->head += r.consumed_bytes;
-                continue;
-            } else if (r.status == PARSE_NEED_MORE) {
-                break;
-            }
-
-            // Unknown escape sequence
-            // Skip over ESC
-            b->head += 1;
-            Event e = { .type = ECodePoint, .parsed_cp = UTF8_REPLACEMENT };
-            equeue_push(&Terminal.eq, e);
-            continue;
-        }
-
-        r = try_parse_text(data, len);
-        if (r.status == PARSE_OK) {
-            b->head += r.consumed_bytes;
-            continue;
-        } else if (r.status == PARSE_NEED_MORE) {
-            b->head += r.consumed_bytes;
-            break;
-        }
-    }
-}
-
-ParseResult try_parse_mouse(byte *str, isize n) {
-    if (memcmp(str, "\33[<", 3) != 0)
-        return (ParseResult) { .status = PARSE_FAIL };
-
-    if (n < 9) return (ParseResult) { .status = PARSE_NEED_MORE };
-
-    Event e = {0};
     byte *p = str;
     u32 btn         = strtol(p + 3, &p, 10);
-    e.mouse.x       = strtol(p + 1, &p, 10) - 1;
-    e.mouse.y       = strtol(p + 1, &p, 10) - 1;
-    e.mouse.pressed = (*p == 'M');
-    p++; // step over M or m
+    e->mouse.x       = strtol(p + 1, &p, 10) - 1;
+    e->mouse.y       = strtol(p + 1, &p, 10) - 1;
+    e->mouse.pressed = (*p == 'M');
 
     switch (btn) {
-        case 0:  e.type = EMouseLeft;   break;
-        case 1:  e.type = EMouseMiddle; break;
-        case 2:  e.type = EMouseRight;  break;
-        case 32: e.type = EMouseDrag;   break;
-        case 64: e.type = EScrollUp;    break;
-        case 65: e.type = EScrollDown;  break;
-        default: e.type = ENone;
+        case 0:  e->type = EMouseLeft;   break;
+        case 1:  e->type = EMouseMiddle; break;
+        case 2:  e->type = EMouseRight;  break;
+        case 32: e->type = EMouseDrag;   break;
+        case 64: e->type = EScrollUp;    break;
+        case 65: e->type = EScrollDown;  break;
+        default: e->type = ENone;
     }
 
-    equeue_push(&Terminal.eq, e);
-    return (ParseResult) { .consumed_bytes = p - str };
+    return true;
 }
 
 static struct {byte str[4]; TermKey k;} term_key_table[] = {
@@ -643,52 +550,32 @@ static struct {byte str[4]; TermKey k;} term_key_table[] = {
     {"[6~", TERMKEY_PAGEDOWN},
 };
 
-ParseResult try_parse_term_key(byte *str, isize n) {
-    if (n < 3) return (ParseResult) { .status = PARSE_NEED_MORE };
+b32 try_parse_term_key(byte *str, isize n, Event *e) {
+    if (n < 3 || n > 4) return false;
 
     for (usize i = 0; i < ARRAY_SIZE(term_key_table); i++) {
         byte *key = term_key_table[i].str;
-        if (memcmp(str + 1, key, strlen(key)) == 0) {
-            equeue_push(&Terminal.eq, (Event) {
-                .type = ETermKey,
-                .term_key = term_key_table[i].k,
-            });
-
-            return (ParseResult) { .consumed_bytes = strlen(key) + 1 }; // add ESC
+        if (memcmp(str + 1, key, n - 1) == 0) {
+            e->type = ETermKey;
+            e->term_key = term_key_table[i].k;
+            return true;
         }
     }
 
-    return (ParseResult) { .status = PARSE_FAIL };
+    return false;
 }
 
-ParseResult try_parse_text(byte *str, isize n) {
-    isize i = 0;
-
-    while (i < n) {
-        UTF8ParseResult res = try_parse_utf8(str + i, n - i);
-        Event e = { .type = ECodePoint };
-
-        if (res.status == PARSE_OK) {
-            e.parsed_cp = res.cp;
-        } 
-        else if (res.status == PARSE_FAIL) {
-            e.parsed_cp = UTF8_REPLACEMENT;
-        } 
-        else if (res.status == PARSE_NEED_MORE) {
-            return (ParseResult) {
-                .status = PARSE_NEED_MORE,
-                .consumed_bytes = i,
-            };
-        }
-
-        equeue_push(&Terminal.eq, e);
-        i += res.consumed_bytes;
+b32 try_parse_text(byte *str, isize n, Event *e) {
+    if (1 <= n && n <= 4) {
+        // TODO: what if given 4 bytes, but only 1
+        //       is decoded due to an error?
+        e->type = ECodePoint;
+        UTF8ParseResult res = try_parse_utf8(str, n);
+        e->parsed_cp = res.cp;
+        return true;
     }
 
-    return (ParseResult) {
-        .status = PARSE_OK,
-        .consumed_bytes = i,
-    };
+    return false;
 }
 
 UTF8ParseResult try_parse_utf8(byte *s, usize len) {
