@@ -946,4 +946,87 @@ Stream arena_stream_start(Arena *arena, usize size) {
     return stream_start(buffer, size);
 }
 
+// TUI
+
+void draw_line(u32 x0, u32 y0, u32 x1, u32 y1, CodePoint cp) {
+    if (x0 == x1) { // vertical
+        if (y1 < y0) {
+            u32 tmp = y0;
+            y0 = y1;
+            y1 = tmp;
+        }
+
+        for (u32 y = y0; y <= y1; y++) {
+            put_codepoint(x0, y, cp);
+        }
+    }
+    else if (y0 == y1) { // horizontal
+        if (x1 < x0) {
+            u32 tmp = x0;
+            x0 = x1;
+            x1 = tmp;
+        }
+
+        for (u32 x = x0; x <= x1; x++) {
+            put_codepoint(x, y0, cp);
+        }
+    }
+}
+
+void draw_box(Rectangle r) {
+    if (r.w < 2 || r.h < 2) return;
+
+    u32 x0 = r.x;
+    u32 y0 = r.y;
+    u32 x1 = r.x + r.w - 1;
+    u32 y1 = r.y + r.h - 1;
+
+    put_codepoint(x0, y0, cp("┌"));
+    put_codepoint(x1, y0, cp("┐"));
+    put_codepoint(x0, y1, cp("└"));
+    put_codepoint(x1, y1, cp("┘"));
+
+    draw_line(x0 + 1, y0, x1 - 1, y0, cp("─"));
+    draw_line(x0 + 1, y1, x1 - 1, y1, cp("─"));
+    draw_line(x0, y0 + 1, x0, y1 - 1, cp("│"));
+    draw_line(x1, y0 + 1, x1, y1 - 1, cp("│"));
+}
+
+typedef struct Drawable Drawable;
+
+struct Drawable {
+    void (*draw)(Drawable *);
+};
+
+typedef struct {
+    Rectangle rect;
+    Drawable draw_interface;
+} Widget;
+
+typedef struct {
+    Widget widget;
+    s8 label;
+} Button;
+
+void widget_draw(Widget *w) {
+    w->draw_interface.draw(&w->draw_interface);
+}
+
+void button_draw(Drawable *d) {
+    Widget *w = container_of(d, Widget, draw_interface);
+    Button *b = container_of(w, Button, widget);
+
+    Rectangle r = w->rect;
+    draw_box(r);
+    push_scope(r.x + 1, r.y + 1, r.w - 2, r.h - 2);
+    put_str(r.x + 1, r.y + 1, b->label.s, b->label.len);
+    pop_scope();
+}
+
+Button button_new(u32 x, u32 y, u32 w, u32 h, s8 label) {
+    Rectangle r = {x, y, w, h};
+    Widget wid = {r, {button_draw}};
+    return (Button) { .label = label, .widget = wid};
+}
+
 #endif //LIBTUI_IMPL
