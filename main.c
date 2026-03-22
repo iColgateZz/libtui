@@ -9,11 +9,11 @@ typedef struct {
     i32 state;
     u32 counter;
     u32 len;
-} Widget;
+} TestWidget;
 
 static i32 y_offset = 0;
 
-void draw(Widget *a) {
+void draw(TestWidget *a) {
     CodePoint cp;
     if (a->state == 0) {
         cp = cp("Э");
@@ -28,7 +28,7 @@ void draw(Widget *a) {
     }
 }
 
-void update(Widget *a) {
+void update(TestWidget *a) {
     a->counter += get_delta_time();
     if (a->counter > 1000) {
         a->counter = 0;
@@ -37,7 +37,7 @@ void update(Widget *a) {
     }
 }
 
-void on_winch(Widget *a) {
+void on_winch(TestWidget *a) {
     a->x = get_terminal_width() / 2 - a->len / 2;
     a->y = get_terminal_height() / 2 - a->len / 2;
 }
@@ -49,7 +49,7 @@ i32 main(i32 argc, byte *argv[]) {
     set_max_timeout_ms(1);
 
     u32 len = 6;
-    Widget a = {
+    TestWidget a = {
         .x = get_terminal_width() / 4 - len / 2,
         .y = get_terminal_height() / 2 - len / 2,
         .w = len,
@@ -59,7 +59,7 @@ i32 main(i32 argc, byte *argv[]) {
         .counter = 0,
     };
 
-    Widget b = {
+    TestWidget b = {
         .x = get_terminal_width() / 4 * 3 - len / 2,
         .y = get_terminal_height() / 2 - len / 2,
         .w = len,
