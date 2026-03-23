@@ -992,16 +992,12 @@ void draw_box(Rectangle r) {
     draw_line(x1, y0 + 1, x1, y1 - 1, cp("│"));
 }
 
-typedef struct Drawable Drawable;
+typedef struct Widget Widget;
 
-struct Drawable {
-    void (*draw)(Drawable *);
-};
-
-typedef struct {
+struct Widget {
     Rectangle rect;
-    Drawable draw_interface;
-} Widget;
+    void (*draw)(Widget *self);
+};
 
 typedef struct {
     Widget widget;
@@ -1009,15 +1005,15 @@ typedef struct {
 } Button;
 
 void widget_draw(Widget *w) {
-    w->draw_interface.draw(&w->draw_interface);
+   w->draw(w);
 }
 
-void button_draw(Drawable *d) {
-    Widget *w = container_of(d, Widget, draw_interface);
+void button_draw(Widget *w) {
     Button *b = container_of(w, Button, widget);
 
     Rectangle r = w->rect;
     draw_box(r);
+
     push_scope(r.x + 1, r.y + 1, r.w - 2, r.h - 2);
     put_str(r.x + 1, r.y + 1, b->label.s, b->label.len);
     pop_scope();
@@ -1025,7 +1021,7 @@ void button_draw(Drawable *d) {
 
 Button button_new(u32 x, u32 y, u32 w, u32 h, s8 label) {
     Rectangle r = {x, y, w, h};
-    Widget wid = {r, {button_draw}};
+    Widget wid = {r, button_draw};
     return (Button) { .label = label, .widget = wid};
 }
 
