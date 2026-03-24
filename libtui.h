@@ -1048,7 +1048,7 @@ void button_update(Widget *w) {
         u32 x = get_mouse_x();
         u32 y = get_mouse_y();
 
-        if (point_in_rect(x, y, r))
+        if (point_in_rect(x, y, r) && is_mouse_pressed())
             b->state = !b->state;
     }
 }
