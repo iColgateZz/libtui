@@ -994,9 +994,13 @@ void draw_box(Rectangle r) {
 
 typedef struct Widget Widget;
 
+typedef struct {
+    void (*draw)(Widget *self);
+} WidgetVTable;
+
 struct Widget {
     Rectangle rect;
-    void (*draw)(Widget *self);
+    WidgetVTable *vtable;
 };
 
 typedef struct {
@@ -1005,7 +1009,7 @@ typedef struct {
 } Button;
 
 void widget_draw(Widget *w) {
-   w->draw(w);
+   w->vtable->draw(w);
 }
 
 void button_draw(Widget *w) {
@@ -1019,9 +1023,13 @@ void button_draw(Widget *w) {
     pop_scope();
 }
 
+static WidgetVTable button_methods = {
+    .draw = button_draw,
+};
+
 Button button_new(u32 x, u32 y, u32 w, u32 h, s8 label) {
     Rectangle r = {x, y, w, h};
-    Widget wid = {r, button_draw};
+    Widget wid = {r, &button_methods};
     return (Button) { .label = label, .widget = wid};
 }
 
