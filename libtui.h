@@ -996,6 +996,7 @@ typedef struct Widget Widget;
 
 typedef struct {
     void (*draw)(Widget *self);
+    void (*update)(Widget *self);
 } WidgetVTable;
 
 struct Widget {
@@ -1003,14 +1004,19 @@ struct Widget {
     WidgetVTable *vtable;
 };
 
-typedef struct {
-    Widget widget;
-    s8 label;
-} Button;
-
 void widget_draw(Widget *w) {
    w->vtable->draw(w);
 }
+
+void widget_update(Widget *w) {
+    w->vtable->update(w);
+}
+
+typedef struct {
+    Widget widget;
+    s8 label;
+    b32 state;
+} Button;
 
 void button_draw(Widget *w) {
     Button *b = container_of(w, Button, widget);
@@ -1019,12 +1025,37 @@ void button_draw(Widget *w) {
     draw_box(r);
 
     push_scope(r.x + 1, r.y + 1, r.w - 2, r.h - 2);
-    put_str(r.x + 1, r.y + 1, b->label.s, b->label.len);
+    {
+        if (b->state)
+            put_str(r.x + 1, r.y + 1, b->label.s, b->label.len);
+    }
     pop_scope();
+
+    byte buffer[256];
+    Stream s = stream_start(&buffer, sizeof buffer);
+    stream_fmt(&s, "state: %u, ", b->state);
+    stream_fmt(&s, "event: %u", Terminal.event.type);
+    s8 str = stream_end(s);
+
+    put_str(0, 0, str.s, str.len);
+}
+
+void button_update(Widget *w) {
+    Button *b = container_of(w, Button, widget);
+
+    Rectangle r = w->rect;
+    if (is_event(EMouseLeft)) {
+        u32 x = get_mouse_x();
+        u32 y = get_mouse_y();
+
+        if (point_in_rect(x, y, r))
+            b->state = !b->state;
+    }
 }
 
 static WidgetVTable button_methods = {
     .draw = button_draw,
+    .update = button_update,
 };
 
 Button button_new(u32 x, u32 y, u32 w, u32 h, s8 label) {

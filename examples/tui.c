@@ -28,5 +28,6 @@ i32 main(i32 argc, byte *argv[]) {
 }
 
 void main_loop() {
+    widget_update(&b.widget);
     widget_draw(&b.widget);
 }
