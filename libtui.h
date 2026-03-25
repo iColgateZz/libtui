@@ -155,8 +155,6 @@ da_typedef(CellBuffer, Cell);
 da_typedef(Scopes, Rectangle);
 da_typedef(ByteBuffer, byte);
 
-//TODO: add some inner state that will be 
-//      rendered to the screen for debugging
 struct {
     struct termios orig_term;
     Unix_Pipe pipe;
@@ -946,6 +944,18 @@ Stream arena_stream_start(Arena *arena, usize size) {
     return stream_start(buffer, size);
 }
 
+void debug(u32 x, u32 y, byte *fmt, ...) {
+    Stream s = arena_stream_start(&Terminal.tmp, 256);
+
+    va_list args;
+    va_start(args, fmt);
+    s.p = vfmt(s.p, s.end, fmt, args);
+    va_end(args);
+
+    s8 str = stream_end(s);
+    put_str(x, y, str.s, str.len);
+}
+
 // TUI
 
 void draw_line(u32 x0, u32 y0, u32 x1, u32 y1, CodePoint cp) {
@@ -1031,13 +1041,7 @@ void button_draw(Widget *w) {
     }
     pop_scope();
 
-    byte buffer[256];
-    Stream s = stream_start(&buffer, sizeof buffer);
-    stream_fmt(&s, "state: %u, ", b->state);
-    stream_fmt(&s, "event: %u", Terminal.event.type);
-    s8 str = stream_end(s);
-
-    put_str(0, 0, str.s, str.len);
+    debug(0, 0, "state: %u, event: %u", b->state, Terminal.event.type);
 }
 
 void button_update(Widget *w) {
