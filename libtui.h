@@ -1011,7 +1011,7 @@ typedef struct {
 
 struct Widget {
     Rectangle rect;
-    WidgetVTable *vtable;
+    const WidgetVTable *vtable;
 };
 
 void widget_draw(Widget *w) {
@@ -1057,7 +1057,7 @@ void button_update(Widget *w) {
     }
 }
 
-static WidgetVTable button_methods = {
+static const WidgetVTable button_methods = {
     .draw = button_draw,
     .update = button_update,
 };
