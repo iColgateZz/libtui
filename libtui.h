@@ -1002,24 +1002,106 @@ void draw_box(Rectangle r) {
     draw_line(x1, y0 + 1, x1, y1 - 1, cp("│"));
 }
 
+typedef struct {} Style;
+
 typedef struct Widget Widget;
 
 typedef struct {
-    void (*draw)(Widget *self);
+    void (*measure)(Widget *self);
+    void (*layout)(Widget *self);
     void (*update)(Widget *self);
+    void (*draw)(Widget *self);
 } WidgetVTable;
 
 struct Widget {
     Rectangle rect;
     const WidgetVTable *vtable;
+
+    Widget *parent;
+    Widget *first_child;
+    Widget *next_sibling;
+
+    Style style;
+    u32 measured_w;
+    u32 measured_h;
 };
 
 void widget_draw(Widget *w) {
    w->vtable->draw(w);
 }
 
+void widget_draw_tree(Widget *w) {
+    widget_draw(w);
+
+    for (Widget *c = w->first_child; c; c = c->next_sibling)
+        widget_draw_tree(c);
+}
+
 void widget_update(Widget *w) {
     w->vtable->update(w);
+}
+
+void widget_update_tree(Widget *w) {
+    widget_update(w);
+
+    for (Widget *c = w->first_child; c; c = c->next_sibling)
+        widget_update_tree(c);
+}
+
+void widget_measure(Widget *w) {
+    w->vtable->measure(w);
+}
+
+void widget_measure_tree(Widget *w) {
+    for (Widget *c = w->first_child; c; c = c->next_sibling)
+        widget_measure_tree(c);
+
+    widget_measure(w);
+}
+
+void widget_layout(Widget *w) {
+    w->vtable->layout(w);
+}
+
+void widget_layout_tree(Widget *w) {
+    widget_layout(w);
+
+    for (Widget *c = w->first_child; c; c = c->next_sibling)
+        widget_layout_tree(c);
+}
+
+void widget_add_child(Widget *parent, Widget *child) {
+    child->parent = parent;
+    child->next_sibling = parent->first_child;
+    parent->first_child = child;
+}
+
+typedef struct {
+    Widget widget;
+} Root;
+
+void root_draw(Widget *w) {}
+void root_update(Widget *w) {}
+void root_measure(Widget *w) {}
+void root_layout(Widget *w) {
+    Rectangle *r = &w->rect;
+    r->w = get_terminal_width();
+    r->h = get_terminal_height();
+    r->x = 0;
+    r->y = 0;
+}
+
+static const WidgetVTable root_methods = {
+    .draw = root_draw,
+    .update = root_update,
+    .measure = root_measure,
+    .layout = root_layout,
+};
+
+Root root_new() {
+    Root r = {0};
+    r.widget.vtable = &root_methods;
+    return r;
 }
 
 typedef struct {
@@ -1034,14 +1116,10 @@ void button_draw(Widget *w) {
     Rectangle r = w->rect;
     draw_box(r);
 
-    push_scope(r.x + 1, r.y + 1, r.w - 2, r.h - 2);
-    {
-        if (b->state)
-            put_str(r.x + 1, r.y + 1, b->label.s, b->label.len);
-    }
-    pop_scope();
+    if (b->state)
+        put_str(r.x + 1, r.y + 1, b->label.s, b->label.len);
 
-    debug(0, 0, "state: %u, event: %u", b->state, Terminal.event.type);
+    // debug(0, 0, "state: %u, event: %u", b->state, Terminal.event.type);
 }
 
 void button_update(Widget *w) {
@@ -1057,15 +1135,98 @@ void button_update(Widget *w) {
     }
 }
 
+void button_measure(Widget *w) {
+    Button *b = container_of(w, Button, widget);
+
+    w->measured_h = 3;
+    w->measured_w = b->label.len + 2;
+}
+
+void button_layout(Widget *w) {
+    w->rect.w = w->measured_w;
+    w->rect.h = w->measured_h;
+}
+
 static const WidgetVTable button_methods = {
     .draw = button_draw,
     .update = button_update,
+    .measure = button_measure,
+    .layout = button_layout,
 };
 
-Button button_new(u32 x, u32 y, u32 w, u32 h, s8 label) {
-    Rectangle r = {x, y, w, h};
+Button button_new(u32 x, u32 y, s8 label) {
+    Rectangle r = {x, y, 0, 0};
     Widget wid = {r, &button_methods};
     return (Button) { .label = label, .widget = wid};
+}
+
+typedef struct {
+    Widget widget;
+    u32 padding;
+    u32 spacing;
+} VBox;
+
+void vbox_measure(Widget *w) {
+    VBox *box = container_of(w, VBox, widget);
+
+    u32 width = 0;
+    u32 height = box->padding * 2;
+
+    for (Widget *c = w->first_child; c; c = c->next_sibling) {
+
+        width = MAX(width, c->measured_w);
+        height += c->measured_h;
+
+        if (c->next_sibling)
+            height += box->spacing;
+    }
+
+    w->measured_w = width + box->padding * 2;
+    w->measured_h = height;
+}
+
+void vbox_layout(Widget *w) {
+    VBox *box = container_of(w, VBox, widget);
+
+    w->rect.w = w->measured_w;
+    w->rect.h = w->measured_h;
+
+    u32 y = w->rect.y + box->padding;
+
+    for (Widget *c = w->first_child; c; c = c->next_sibling) {
+        c->rect.x = w->rect.x + box->padding;
+        c->rect.y = y;
+        c->rect.w = c->measured_w;
+        c->rect.h = c->measured_h;
+
+        y += c->rect.h + box->spacing;
+    }
+}
+
+void vbox_draw(Widget *w) {
+    draw_box(w->rect);
+}
+
+void vbox_update(Widget *w) {}
+
+static const WidgetVTable vbox_methods = {
+    .measure = vbox_measure,
+    .layout = vbox_layout,
+    .update = vbox_update,
+    .draw = vbox_draw,
+};
+
+VBox vbox_new(u32 x, u32 y, u32 padding, u32 spacing) {
+    VBox b = {0};
+
+    b.padding = padding;
+    b.spacing = spacing;
+
+    b.widget.rect.x = x;
+    b.widget.rect.y = y;
+    b.widget.vtable = &vbox_methods;
+
+    return b;
 }
 
 #endif //LIBTUI_IMPL

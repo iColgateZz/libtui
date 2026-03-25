@@ -5,7 +5,7 @@
 
 void main_loop();
 
-Button b;
+Root root = {0};
 
 i32 main(i32 argc, byte *argv[]) {
     PSH_REBUILD_UNITY_AUTO(argc, argv);
@@ -13,8 +13,18 @@ i32 main(i32 argc, byte *argv[]) {
     init_terminal();
     set_max_timeout_ms(10);
 
-    s8 label = s8("Hello there!");
-    b = button_new(5, 5, 15, 3, label);
+    root = root_new();
+    VBox layout = vbox_new(2, 2, 0, 0);
+
+    s8 label1 = s8("Hello there!");
+    s8 label2 = s8("Another button");
+
+    Button b  = button_new(0,0,label1);
+    Button b2 = button_new(0,0,label2);
+
+    widget_add_child(&root.widget, &layout.widget);
+    widget_add_child(&layout.widget, &b.widget);
+    widget_add_child(&layout.widget, &b2.widget);
 
     while (!is_codepoint(cp("q"))) {
         begin_frame();
@@ -28,6 +38,8 @@ i32 main(i32 argc, byte *argv[]) {
 }
 
 void main_loop() {
-    widget_update(&b.widget);
-    widget_draw(&b.widget);
+    widget_measure_tree(&root.widget);
+    widget_layout_tree(&root.widget);
+    widget_update_tree(&root.widget);
+    widget_draw_tree(&root.widget);
 }
