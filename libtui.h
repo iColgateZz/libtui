@@ -1004,10 +1004,15 @@ void draw_box(Rectangle r) {
 
 typedef struct {} Style;
 
+typedef struct {
+    u32 max_w;
+    u32 max_h;
+} LayoutConstraint;
+
 typedef struct Widget Widget;
 
 typedef struct {
-    void (*measure)(Widget *self);
+    void (*measure)(Widget *self, LayoutConstraint constraint);
     void (*layout)(Widget *self);
     void (*update)(Widget *self);
     void (*draw)(Widget *self);
@@ -1048,15 +1053,8 @@ void widget_update_tree(Widget *w) {
         widget_update_tree(c);
 }
 
-void widget_measure(Widget *w) {
-    w->vtable->measure(w);
-}
-
-void widget_measure_tree(Widget *w) {
-    for (Widget *c = w->first_child; c; c = c->next_sibling)
-        widget_measure_tree(c);
-
-    widget_measure(w);
+void widget_measure(Widget *w, LayoutConstraint c) {
+    w->vtable->measure(w, c);
 }
 
 void widget_layout(Widget *w) {
@@ -1076,32 +1074,22 @@ void widget_add_child(Widget *parent, Widget *child) {
     parent->first_child = child;
 }
 
-typedef struct {
-    Widget widget;
-} Root;
+static struct {
+    Widget *root;
+} UI = {0};
 
-void root_draw(Widget *w) {}
-void root_update(Widget *w) {}
-void root_measure(Widget *w) {}
-void root_layout(Widget *w) {
-    Rectangle *r = &w->rect;
-    r->w = get_terminal_width();
-    r->h = get_terminal_height();
-    r->x = 0;
-    r->y = 0;
-}
+void ui_register_root(Widget *w) { UI.root = w; }
 
-static const WidgetVTable root_methods = {
-    .draw = root_draw,
-    .update = root_update,
-    .measure = root_measure,
-    .layout = root_layout,
-};
+void ui_run() {
+    LayoutConstraint c = {
+        .max_h = get_terminal_height(),
+        .max_w = get_terminal_width(),
+    };
 
-Root root_new() {
-    Root r = {0};
-    r.widget.vtable = &root_methods;
-    return r;
+    widget_measure(UI.root, c);
+    widget_layout_tree(UI.root);
+    widget_update_tree(UI.root);
+    widget_draw_tree(UI.root);
 }
 
 typedef struct {
@@ -1135,11 +1123,13 @@ void button_update(Widget *w) {
     }
 }
 
-void button_measure(Widget *w) {
+void button_measure(Widget *w, LayoutConstraint c) {
     Button *b = container_of(w, Button, widget);
 
     w->measured_h = 3;
     w->measured_w = b->label.len + 2;
+
+    w->measured_w = MIN(w->measured_w, c.max_w);
 }
 
 void button_layout(Widget *w) {
@@ -1154,9 +1144,8 @@ static const WidgetVTable button_methods = {
     .layout = button_layout,
 };
 
-Button button_new(u32 x, u32 y, s8 label) {
-    Rectangle r = {x, y, 0, 0};
-    Widget wid = {r, &button_methods};
+Button button_new(s8 label) {
+    Widget wid = { .vtable = &button_methods };
     return (Button) { .label = label, .widget = wid};
 }
 
@@ -1166,22 +1155,37 @@ typedef struct {
     u32 spacing;
 } VBox;
 
-void vbox_measure(Widget *w) {
+void vbox_measure(Widget *w, LayoutConstraint c) {
     VBox *box = container_of(w, VBox, widget);
+
+    u32 inner_w = c.max_w - box->padding * 2;
+    u32 inner_h = c.max_h - box->padding * 2;
+
+    LayoutConstraint child_c = {
+        .max_w = inner_w,
+        .max_h = inner_h,
+    };
 
     u32 width = 0;
     u32 height = box->padding * 2;
 
-    for (Widget *c = w->first_child; c; c = c->next_sibling) {
+    for (Widget *child = w->first_child; child; child = child->next_sibling) {
+        // Should not the constraint be updated 
+        // after a child was measured?
+        widget_measure(child, child_c);
 
-        width = MAX(width, c->measured_w);
-        height += c->measured_h;
+        width = MAX(width, child->measured_w);
+        height += child->measured_h;
 
-        if (c->next_sibling)
+        if (child->next_sibling)
             height += box->spacing;
     }
 
-    w->measured_w = width + box->padding * 2;
+    width += box->padding * 2;
+
+    w->measured_w = MIN(width, c.max_w);
+    // Do not clamp height. Allow it to grow indefinitely.
+    // This way it works like html.
     w->measured_h = height;
 }
 
@@ -1194,7 +1198,8 @@ void vbox_layout(Widget *w) {
     u32 y = w->rect.y + box->padding;
 
     for (Widget *c = w->first_child; c; c = c->next_sibling) {
-        c->rect.x = w->rect.x + box->padding;
+        c->rect.x = w->rect.x + (w->rect.w - c->measured_w) / 2;
+
         c->rect.y = y;
         c->rect.w = c->measured_w;
         c->rect.h = c->measured_h;
@@ -1216,14 +1221,12 @@ static const WidgetVTable vbox_methods = {
     .draw = vbox_draw,
 };
 
-VBox vbox_new(u32 x, u32 y, u32 padding, u32 spacing) {
+VBox vbox_new(u32 padding, u32 spacing) {
     VBox b = {0};
 
     b.padding = padding;
     b.spacing = spacing;
 
-    b.widget.rect.x = x;
-    b.widget.rect.y = y;
     b.widget.vtable = &vbox_methods;
 
     return b;
