@@ -1135,6 +1135,7 @@ void button_update(Widget *w) {
 void button_measure(Widget *w, LayoutConstraint c) {
     Button *b = container_of(w, Button, widget);
 
+    //TODO: account for text wrapping
     w->measured_h = 3;
     w->measured_w = b->label.len + 2;
 
