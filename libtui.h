@@ -1120,10 +1120,7 @@ void button_draw(Widget *w) {
     Rectangle r = w->rect;
     draw_box(r);
 
-    if (b->state)
-        put_str(r.x + 1, r.y + 1, b->label.s, b->label.len);
-
-    // debug(0, 0, "state: %u, event: %u", b->state, Terminal.event.type);
+    if (b->state) put_str(r.x + 1, r.y + 1, b->label.s, b->label.len);
 }
 
 void button_update(Widget *w) {
