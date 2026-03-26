@@ -731,7 +731,7 @@ void put_codepoint(i32 x, i32 y, CodePoint cp) {
     }
 
     if (cp.display_width == 2) {
-        if (x + 1 >= w) return; // cannot fit
+        if ((u32)x + 1 >= w) return; // cannot fit
 
         fix_wide_char(x, y);
         fix_wide_char(x + 1, y);
@@ -749,28 +749,28 @@ void fix_wide_char(i32 x, i32 y) {
     Cell *cells = Terminal.backbuffer.items;
     Cell c = cells[x + y * w];
 
-    if ((c.flags & CELL_WIDE_LEAD) && x + 1 < w) {
+    if ((c.flags & CELL_WIDE_LEAD) && (u32)x + 1 < w) {
         cells[(x + 1) + y * w] = cell_empty();
     }
 
-    if ((c.flags & CELL_CONTINUATION) && x > 0) {
+    if ((c.flags & CELL_CONTINUATION) && (u32)x > 0) {
         cells[(x - 1) + y * w] = cell_empty();
     }
 }
 
-void put_ascii_char(i32 x, i32 y, byte c) {
-    put_codepoint(x, y, cp_from_byte(c));
-}
+// void put_ascii_char(i32 x, i32 y, byte c) {
+//     put_codepoint(x, y, cp_from_byte(c));
+// }
 
-void put_ascii_str(i32 x, i32 y, byte *str, usize len) {
-    Rectangle parent = peek_scope();
-    if (!point_in_rect(x, y, parent)) return;
+// void put_ascii_str(i32 x, i32 y, byte *str, usize len) {
+//     Rectangle parent = peek_scope();
+//     if (!point_in_rect(x, y, parent)) return;
 
-    usize copy_len = MIN(len, parent.x + parent.w - x);
-    for (usize i = 0; i < copy_len; ++i) {
-        put_ascii_char(x + i, y, str[i]);
-    }
-}
+//     usize copy_len = MIN(len, parent.x + parent.w - x);
+//     for (usize i = 0; i < copy_len; ++i) {
+//         put_ascii_char(x + i, y, str[i]);
+//     }
+// }
 
 void push_scope(i32 x, i32 y, i32 w, i32 h) {
     Rectangle parent = peek_scope();
@@ -1057,7 +1057,7 @@ void screen_layout(Widget *w) {
     Screen *s = container_of(w, Screen, widget);
     Widget *child = s->child;
 
-    u32 height = MIN(w->rect.h, child->measured_h);
+    u32 height = MIN((u32)w->rect.h, child->measured_h);
     child->rect.x = (w->rect.w - child->measured_w) / 2;
     child->rect.y = (w->rect.h - height) / 2;
 
