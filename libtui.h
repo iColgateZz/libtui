@@ -1076,13 +1076,9 @@ void screen_layout(Widget *w) {
     Screen *s = container_of(w, Screen, widget);
     Widget *child = s->child;
 
-    child->rect.x = (w->rect.w - child->measured_w) / 2;
-
     u32 height = MIN(w->rect.h, child->measured_h);
+    child->rect.x = (w->rect.w - child->measured_w) / 2;
     child->rect.y = (w->rect.h - height) / 2;
-
-    child->rect.w = child->measured_w;
-    child->rect.h = height;
 
     widget_layout(child);
 }
@@ -1185,9 +1181,6 @@ void div_measure(Widget *w, LayoutConstraint c) {
 
     for (usize i = 0; i < div->children.count; i++) {
         Widget *child = div->children.items[i];
-
-        // Should not the constraint be updated 
-        // after a child was measured?
         widget_measure(child, child_c);
 
         width = MAX(width, child->measured_w);
@@ -1216,8 +1209,6 @@ void div_layout(Widget *w) {
         
         child->rect.x = w->rect.x + (w->rect.w - child->measured_w) / 2;
         child->rect.y = y;
-        child->rect.w = child->measured_w;
-        child->rect.h = child->measured_h;
 
         y += child->rect.h + div->spacing;
 
