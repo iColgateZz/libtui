@@ -1035,30 +1035,8 @@ void widget_layout(Widget *w) { w->vtable->layout(w); }
 typedef struct {
     Widget widget;
     Widget *child;
+    i64 y_offset;
 } Screen;
-
-Screen screen_new();
-
-static struct {
-    Screen screen;
-} UI = {0};
-
-void ui_register_root(Widget *w) {
-    UI.screen = screen_new();
-    UI.screen.child = w;
-}
-
-void ui_run() {
-    LayoutConstraint c = {
-        .max_h = get_terminal_height(),
-        .max_w = get_terminal_width(),
-    };
-
-    widget_measure(&UI.screen.widget, c);
-    widget_layout(&UI.screen.widget);
-    widget_update(&UI.screen.widget);
-    widget_draw(&UI.screen.widget);
-}
 
 void screen_measure(Widget *w, LayoutConstraint c) {
     w->measured_w = c.max_w;
@@ -1086,6 +1064,13 @@ void screen_layout(Widget *w) {
 
 void screen_update(Widget *w) {
     Screen *s = container_of(w, Screen, widget);
+
+    if (is_event(EScrollDown)) {
+        s->y_offset++;
+    } else if (is_event(EScrollUp)) {
+        s->y_offset = MAX(0, s->y_offset - 1);
+    }
+
     widget_update(s->child);
 }
 
@@ -1103,6 +1088,27 @@ static const WidgetVTable screen_methods = {
 
 Screen screen_new() {
     return (Screen) {.widget.vtable = &screen_methods};
+}
+
+static struct {
+    Screen screen;
+} UI = {0};
+
+void ui_register_root(Widget *w) {
+    UI.screen = screen_new();
+    UI.screen.child = w;
+}
+
+void ui_run() {
+    LayoutConstraint c = {
+        .max_h = get_terminal_height(),
+        .max_w = get_terminal_width(),
+    };
+
+    widget_measure(&UI.screen.widget, c);
+    widget_layout(&UI.screen.widget);
+    widget_update(&UI.screen.widget);
+    widget_draw(&UI.screen.widget);
 }
 
 typedef struct {
