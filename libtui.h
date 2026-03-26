@@ -1224,6 +1224,14 @@ void div_layout(Widget *w) {
     }
 }
 
+void div_update(Widget *w) {
+    Div *div = container_of(w, Div, widget);
+    for (usize i = 0; i < div->children.count; i++) {
+        Widget *child = div->children.items[i];
+        widget_update(child);
+    }
+}
+
 void div_draw(Widget *w) {
     Div *div = container_of(w, Div, widget);
     draw_box(w->rect);
@@ -1231,14 +1239,6 @@ void div_draw(Widget *w) {
     for (usize i = 0; i < div->children.count; i++) {
         Widget *child = div->children.items[i];
         widget_draw(child);
-    }
-}
-
-void div_update(Widget *w) {
-    Div *div = container_of(w, Div, widget);
-    for (usize i = 0; i < div->children.count; i++) {
-        Widget *child = div->children.items[i];
-        widget_update(child);
     }
 }
 
