@@ -9,6 +9,7 @@ i32 main(i32 argc, byte *argv[]) {
     init_terminal();
     set_max_timeout_ms(10);
 
+    Screen screen = screen_new();
     VBox layout = vbox_new(1, 10);
 
     s8 label1 = s8("Hello there!");
@@ -18,10 +19,11 @@ i32 main(i32 argc, byte *argv[]) {
     Button b2 = button_new(label2);
     Button b3 = button_new(label2);
 
-    ui_register_root(&layout.widget);
-    widget_add_child(&layout.widget, &b.widget);
-    widget_add_child(&layout.widget, &b2.widget);
-    widget_add_child(&layout.widget, &b3.widget);
+    ui_register_root(&screen.widget);
+    screen.child = &layout.widget;
+    vbox_add(&layout, &b.widget);
+    vbox_add(&layout, &b2.widget);
+    vbox_add(&layout, &b3.widget);
 
     while (!is_codepoint(cp("q"))) {
         begin_frame();
