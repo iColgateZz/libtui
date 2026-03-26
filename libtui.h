@@ -88,16 +88,16 @@ b32 is_codepoint(CodePoint cp);
 CodePoint get_codepoint();
 
 typedef struct {
-    u32 x, y, w, h;
+    i32 x, y, w, h;
 } Rectangle;
 
-b32 point_in_rect(u32 x, u32 y, Rectangle r);
+b32 point_in_rect(i32 x, i32 y, Rectangle r);
 Rectangle rect_intersect(Rectangle a, Rectangle b);
 Rectangle rect_union(Rectangle a, Rectangle b);
 
 Rectangle pop_scope();
 Rectangle peek_scope();
-void push_scope(u32 x, u32 y, u32 w, u32 h);
+void push_scope(i32 x, i32 y, i32 w, i32 h);
 
 void init_terminal();
 void set_max_timeout_ms(i32 timeout);
@@ -111,10 +111,10 @@ typedef u32 Unicode;
 Unicode utf8_decode(byte *s, usize len);
 u8 unicode_width(Unicode ch);
 
-void put_str(u32 x, u32 y, byte *str, usize len);
-void put_codepoint(u32 x, u32 y, CodePoint cp);
-void put_ascii_char(u32 x, u32 y, byte c);
-void put_ascii_str(u32 x, u32 y, byte *str, usize len);
+void put_str(i32 x, i32 y, byte *str, usize len);
+void put_codepoint(i32 x, i32 y, CodePoint cp);
+void put_ascii_char(i32 x, i32 y, byte c);
+void put_ascii_str(i32 x, i32 y, byte *str, usize len);
 
 byte *vfmt(byte *p, byte *end, byte *f, va_list args);
 byte *fmt(byte *p, byte *end, byte *f, ...);
@@ -202,7 +202,7 @@ void update_root_scope();
 b32 try_parse_mouse(byte *str, isize n, Event *e);
 b32 try_parse_term_key(byte *str, isize n, Event *e);
 b32 try_parse_text(byte *str, isize n, Event *e);
-void fix_wide_char(u32 x, u32 y);
+void fix_wide_char(i32 x, i32 y);
 void emit_cells(ByteBuffer *out, Cell *cells, usize start, usize len);
 
 typedef enum {
@@ -701,7 +701,7 @@ Cell cell_cont() { return (Cell) { .flags = CELL_CONTINUATION }; }
 Cell cell_empty() { return (Cell) { .cp = cp_from_byte(' ') }; }
 b32 cell_equal(Cell a, Cell b) { return a.flags == b.flags && cp_equal(a.cp, b.cp); }
 
-void put_str(u32 x, u32 y, byte *s, usize len) {
+void put_str(i32 x, i32 y, byte *s, usize len) {
     usize i = 0;
     while (i < len) {
         Utf8Result res = utf8_next(s + i, len - i);
@@ -715,9 +715,11 @@ void put_str(u32 x, u32 y, byte *s, usize len) {
     }
 }
 
-void put_codepoint(u32 x, u32 y, CodePoint cp) {
+void put_codepoint(i32 x, i32 y, CodePoint cp) {
     Rectangle parent = peek_scope();
     if (!point_in_rect(x, y, parent)) return;
+
+    if (x < 0 || y < 0) return;
 
     u32 w = Terminal.width;
     Cell *cells = Terminal.backbuffer.items;
@@ -742,7 +744,7 @@ void put_codepoint(u32 x, u32 y, CodePoint cp) {
     assert(false && "a codepoint with invalid width");
 }
 
-void fix_wide_char(u32 x, u32 y) {
+void fix_wide_char(i32 x, i32 y) {
     u32 w = Terminal.width;
     Cell *cells = Terminal.backbuffer.items;
     Cell c = cells[x + y * w];
@@ -756,11 +758,11 @@ void fix_wide_char(u32 x, u32 y) {
     }
 }
 
-void put_ascii_char(u32 x, u32 y, byte c) {
+void put_ascii_char(i32 x, i32 y, byte c) {
     put_codepoint(x, y, cp_from_byte(c));
 }
 
-void put_ascii_str(u32 x, u32 y, byte *str, usize len) {
+void put_ascii_str(i32 x, i32 y, byte *str, usize len) {
     Rectangle parent = peek_scope();
     if (!point_in_rect(x, y, parent)) return;
 
@@ -770,7 +772,7 @@ void put_ascii_str(u32 x, u32 y, byte *str, usize len) {
     }
 }
 
-void push_scope(u32 x, u32 y, u32 w, u32 h) {
+void push_scope(i32 x, i32 y, i32 w, i32 h) {
     Rectangle parent = peek_scope();
     Rectangle clipped = rect_intersect(parent, (Rectangle) {x, y, w, h});
     da_append(&Terminal.scopes, clipped);
@@ -784,16 +786,16 @@ Rectangle peek_scope() {
     return da_last(&Terminal.scopes);
 }
 
-b32 point_in_rect(u32 x, u32 y, Rectangle r) {
+b32 point_in_rect(i32 x, i32 y, Rectangle r) {
     return r.x <= x && x < r.x + r.w 
         && r.y <= y && y < r.y + r.h;
 }
 
 Rectangle rect_intersect(Rectangle a, Rectangle b) {
-    u32 x1 = MAX(a.x, b.x);
-    u32 y1 = MAX(a.y, b.y);
-    u32 x2 = MIN(a.x + a.w, b.x + b.w);
-    u32 y2 = MIN(a.y + a.h, b.y + b.h);
+    i32 x1 = MAX(a.x, b.x);
+    i32 y1 = MAX(a.y, b.y);
+    i32 x2 = MIN(a.x + a.w, b.x + b.w);
+    i32 y2 = MIN(a.y + a.h, b.y + b.h);
 
     if (x2 <= x1 || y2 <= y1) {
         return (Rectangle){0,0,0,0}; // fully clipped
@@ -803,10 +805,10 @@ Rectangle rect_intersect(Rectangle a, Rectangle b) {
 }
 
 Rectangle rect_union(Rectangle a, Rectangle b) {
-    u32 left   = MIN(a.x, b.x);
-    u32 top    = MIN(a.y, b.y);
-    u32 right  = MAX(a.x + a.w, b.x + b.w);
-    u32 bottom = MAX(a.y + a.h, b.y + b.h);
+    i32 left   = MIN(a.x, b.x);
+    i32 top    = MIN(a.y, b.y);
+    i32 right  = MAX(a.x + a.w, b.x + b.w);
+    i32 bottom = MAX(a.y + a.h, b.y + b.h);
 
     return (Rectangle) {
         .x = left,
@@ -944,7 +946,7 @@ Stream arena_stream_start(Arena *arena, usize size) {
     return stream_start(buffer, size);
 }
 
-void debug(u32 x, u32 y, byte *fmt, ...) {
+void debug(i32 x, i32 y, byte *fmt, ...) {
     Stream s = arena_stream_start(&Terminal.tmp, 256);
 
     va_list args;
@@ -958,26 +960,26 @@ void debug(u32 x, u32 y, byte *fmt, ...) {
 
 // TUI
 
-void draw_line(u32 x0, u32 y0, u32 x1, u32 y1, CodePoint cp) {
+void draw_line(i32 x0, i32 y0, i32 x1, i32 y1, CodePoint cp) {
     if (x0 == x1) { // vertical
         if (y1 < y0) {
-            u32 tmp = y0;
+            i32 tmp = y0;
             y0 = y1;
             y1 = tmp;
         }
 
-        for (u32 y = y0; y <= y1; y++) {
+        for (i32 y = y0; y <= y1; y++) {
             put_codepoint(x0, y, cp);
         }
     }
     else if (y0 == y1) { // horizontal
         if (x1 < x0) {
-            u32 tmp = x0;
+            i32 tmp = x0;
             x0 = x1;
             x1 = tmp;
         }
 
-        for (u32 x = x0; x <= x1; x++) {
+        for (i32 x = x0; x <= x1; x++) {
             put_codepoint(x, y0, cp);
         }
     }
@@ -986,10 +988,10 @@ void draw_line(u32 x0, u32 y0, u32 x1, u32 y1, CodePoint cp) {
 void draw_box(Rectangle r) {
     if (r.w < 2 || r.h < 2) return;
 
-    u32 x0 = r.x;
-    u32 y0 = r.y;
-    u32 x1 = r.x + r.w - 1;
-    u32 y1 = r.y + r.h - 1;
+    i32 x0 = r.x;
+    i32 y0 = r.y;
+    i32 x1 = r.x + r.w - 1;
+    i32 y1 = r.y + r.h - 1;
 
     put_codepoint(x0, y0, cp("┌"));
     put_codepoint(x1, y0, cp("┐"));
@@ -1076,6 +1078,7 @@ void screen_update(Widget *w) {
 
 void screen_draw(Widget *w) {
     Screen *s = container_of(w, Screen, widget);
+    debug(0, 0, "offset: %d", s->y_offset);
     widget_draw(s->child);
 }
 
@@ -1111,6 +1114,18 @@ void ui_run() {
     widget_draw(&UI.screen.widget);
 }
 
+void draw_box_scrolled(Rectangle r) {
+    u32 offset = MIN(r.y, UI.screen.y_offset);
+    r.y -= offset;
+    draw_box(r);
+}
+
+void put_str_scrolled(u32 x, u32 y, byte *s, usize len) {
+    u32 offset = MIN(y, UI.screen.y_offset);
+    u32 shifted_y = y - offset;
+    put_str(x, shifted_y, s, len);
+}
+
 typedef struct {
     Widget widget;
     s8 label;
@@ -1121,9 +1136,9 @@ void button_draw(Widget *w) {
     Button *b = container_of(w, Button, widget);
 
     Rectangle r = w->rect;
-    draw_box(r);
+    draw_box_scrolled(r);
 
-    if (b->state) put_str(r.x + 1, r.y + 1, b->label.s, b->label.len);
+    if (b->state) put_str_scrolled(r.x + 1, r.y + 1, b->label.s, b->label.len);
 }
 
 void button_update(Widget *w) {
@@ -1234,7 +1249,7 @@ void div_update(Widget *w) {
 
 void div_draw(Widget *w) {
     Div *div = container_of(w, Div, widget);
-    draw_box(w->rect);
+    draw_box_scrolled(w->rect);
 
     for (usize i = 0; i < div->children.count; i++) {
         Widget *child = div->children.items[i];
