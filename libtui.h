@@ -1031,11 +1031,21 @@ void widget_update(Widget *w) { w->vtable->update(w); }
 void widget_measure(Widget *w, LayoutConstraint c) { w->vtable->measure(w, c); }
 void widget_layout(Widget *w) { w->vtable->layout(w); }
 
+typedef struct {
+    Widget widget;
+    Widget *child;
+} Screen;
+
+Screen screen_new();
+
 static struct {
-    Widget *root;
+    Screen screen;
 } UI = {0};
 
-void ui_register_root(Widget *w) { UI.root = w; }
+void ui_register_root(Widget *w) {
+    UI.screen = screen_new();
+    UI.screen.child = w;
+}
 
 void ui_run() {
     LayoutConstraint c = {
@@ -1043,16 +1053,11 @@ void ui_run() {
         .max_w = get_terminal_width(),
     };
 
-    widget_measure(UI.root, c);
-    widget_layout(UI.root);
-    widget_update(UI.root);
-    widget_draw(UI.root);
+    widget_measure(&UI.screen.widget, c);
+    widget_layout(&UI.screen.widget);
+    widget_update(&UI.screen.widget);
+    widget_draw(&UI.screen.widget);
 }
-
-typedef struct {
-    Widget widget;
-    Widget *child;
-} Screen;
 
 void screen_measure(Widget *w, LayoutConstraint c) {
     w->measured_w = c.max_w;
