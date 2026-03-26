@@ -1170,13 +1170,13 @@ typedef struct {
     WidgetList children;
     u32 padding;
     u32 spacing;
-} VBox;
+} Div;
 
-void vbox_measure(Widget *w, LayoutConstraint c) {
-    VBox *box = container_of(w, VBox, widget);
+void div_measure(Widget *w, LayoutConstraint c) {
+    Div *div = container_of(w, Div, widget);
 
-    u32 inner_w = c.max_w - box->padding * 2;
-    u32 inner_h = c.max_h - box->padding * 2;
+    u32 inner_w = c.max_w - div->padding * 2;
+    u32 inner_h = c.max_h - div->padding * 2;
 
     LayoutConstraint child_c = {
         .max_w = inner_w,
@@ -1184,10 +1184,10 @@ void vbox_measure(Widget *w, LayoutConstraint c) {
     };
 
     u32 width = 0;
-    u32 height = box->padding * 2;
+    u32 height = div->padding * 2;
 
-    for (usize i = 0; i < box->children.count; i++) {
-        Widget *child = box->children.items[i];
+    for (usize i = 0; i < div->children.count; i++) {
+        Widget *child = div->children.items[i];
 
         // Should not the constraint be updated 
         // after a child was measured?
@@ -1196,74 +1196,74 @@ void vbox_measure(Widget *w, LayoutConstraint c) {
         width = MAX(width, child->measured_w);
         height += child->measured_h;
 
-        if (i < box->children.count - 1)
-            height += box->spacing;
+        if (i < div->children.count - 1)
+            height += div->spacing;
     }
 
-    width += box->padding * 2;
+    width += div->padding * 2;
 
     w->measured_w = MIN(width, c.max_w);
     w->measured_h = height;
 }
 
-void vbox_layout(Widget *w) {
-    VBox *box = container_of(w, VBox, widget);
+void div_layout(Widget *w) {
+    Div *div = container_of(w, Div, widget);
 
     w->rect.w = w->measured_w;
     w->rect.h = w->measured_h;
 
-    u32 y = w->rect.y + box->padding;
+    u32 y = w->rect.y + div->padding;
 
-    for (usize i = 0; i < box->children.count; i++) {
-        Widget *child = box->children.items[i];
+    for (usize i = 0; i < div->children.count; i++) {
+        Widget *child = div->children.items[i];
         
         child->rect.x = w->rect.x + (w->rect.w - child->measured_w) / 2;
         child->rect.y = y;
         child->rect.w = child->measured_w;
         child->rect.h = child->measured_h;
 
-        y += child->rect.h + box->spacing;
+        y += child->rect.h + div->spacing;
 
         widget_layout(child);
     }
 }
 
-void vbox_draw(Widget *w) {
-    VBox *box = container_of(w, VBox, widget);
+void div_draw(Widget *w) {
+    Div *div = container_of(w, Div, widget);
     draw_box(w->rect);
 
-    for (usize i = 0; i < box->children.count; i++) {
-        Widget *child = box->children.items[i];
+    for (usize i = 0; i < div->children.count; i++) {
+        Widget *child = div->children.items[i];
         widget_draw(child);
     }
 }
 
-void vbox_update(Widget *w) {
-    VBox *box = container_of(w, VBox, widget);
-    for (usize i = 0; i < box->children.count; i++) {
-        Widget *child = box->children.items[i];
+void div_update(Widget *w) {
+    Div *div = container_of(w, Div, widget);
+    for (usize i = 0; i < div->children.count; i++) {
+        Widget *child = div->children.items[i];
         widget_update(child);
     }
 }
 
-static const WidgetVTable vbox_methods = {
-    .measure = vbox_measure,
-    .layout = vbox_layout,
-    .update = vbox_update,
-    .draw = vbox_draw,
+static const WidgetVTable div_methods = {
+    .measure = div_measure,
+    .layout = div_layout,
+    .update = div_update,
+    .draw = div_draw,
 };
 
-VBox vbox_new(u32 padding, u32 spacing) {
-    VBox b = {0};
+Div div_new(u32 padding, u32 spacing) {
+    Div b = {0};
 
     b.padding = padding;
     b.spacing = spacing;
 
-    b.widget.vtable = &vbox_methods;
+    b.widget.vtable = &div_methods;
 
     return b;
 }
 
-void vbox_add(VBox *box, Widget *child) { da_append(&box->children, child); }
+void div_add(Div *div, Widget *child) { da_append(&div->children, child); }
 
 #endif //LIBTUI_IMPL
