@@ -1002,6 +1002,7 @@ void draw_box(Rectangle r) {
     draw_line(x1, y0 + 1, x1, y1 - 1, cp("│"));
 }
 
+//TODO: add styling
 typedef struct {
     u32 max_w;
     u32 max_h;
