@@ -781,7 +781,14 @@ void fix_wide_char(i32 x, i32 y) {
 
 void push_scope(i32 x, i32 y, i32 w, i32 h) {
     Scope parent = peek_scope();
-    Rectangle clipped = rect_intersect(parent.clip, (Rectangle) {x, y, w, h});
+    Rectangle r = {
+        .x = x + parent.offset_x,
+        .y = y + parent.offset_y,
+        .w = w,
+        .h = h,
+    };
+
+    Rectangle clipped = rect_intersect(parent.clip, r);
 
     Scope s = {
         .clip = clipped, 
@@ -1051,9 +1058,9 @@ da_typedef(WidgetList, Widget *);
 
 void widget_draw(Widget *w) { 
     // used for clipping
-    // push_scope(w->rect.x, w->rect.y, w->rect.w, w->rect.h);
+    push_scope(w->rect.x, w->rect.y, w->rect.w, w->rect.h);
     w->vtable->draw(w); 
-    // pop_scope();
+    pop_scope();
 }
 
 void widget_update(Widget *w) { w->vtable->update(w); }
@@ -1142,18 +1149,6 @@ void ui_run() {
     widget_draw(&UI.screen.widget);
 }
 
-void draw_box_scrolled(Rectangle r) {
-    u32 offset = MIN(r.y, UI.screen.y_offset);
-    r.y -= offset;
-    draw_box(r);
-}
-
-void put_str_scrolled(u32 x, u32 y, byte *s, usize len) {
-    u32 offset = MIN(y, UI.screen.y_offset);
-    u32 shifted_y = y - offset;
-    put_str(x, shifted_y, s, len);
-}
-
 typedef struct {
     Widget widget;
     s8 label;
@@ -1164,9 +1159,9 @@ void button_draw(Widget *w) {
     Button *b = container_of(w, Button, widget);
 
     Rectangle r = w->rect;
-    draw_box_scrolled(r);
+    draw_box(r);
 
-    if (b->state) put_str_scrolled(r.x + 1, r.y + 1, b->label.s, b->label.len);
+    if (b->state) put_str(r.x + 1, r.y + 1, b->label.s, b->label.len);
 }
 
 void button_update(Widget *w) {
@@ -1277,7 +1272,7 @@ void div_update(Widget *w) {
 
 void div_draw(Widget *w) {
     Div *div = container_of(w, Div, widget);
-    draw_box_scrolled(w->rect);
+    draw_box(w->rect);
 
     for (usize i = 0; i < div->children.count; i++) {
         Widget *child = div->children.items[i];
