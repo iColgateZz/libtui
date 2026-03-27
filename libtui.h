@@ -95,8 +95,14 @@ b32 point_in_rect(i32 x, i32 y, Rectangle r);
 Rectangle rect_intersect(Rectangle a, Rectangle b);
 Rectangle rect_union(Rectangle a, Rectangle b);
 
-Rectangle pop_scope();
-Rectangle peek_scope();
+typedef struct {
+    Rectangle clip;
+    i32 offset_x;
+    i32 offset_y;
+} Scope;
+
+Scope pop_scope();
+Scope peek_scope();
 void push_scope(i32 x, i32 y, i32 w, i32 h);
 
 void init_terminal();
@@ -152,7 +158,7 @@ Stream arena_stream_start(Arena *arena, usize size);
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
 
 da_typedef(CellBuffer, Cell);
-da_typedef(Scopes, Rectangle);
+da_typedef(Scopes, Scope);
 da_typedef(ByteBuffer, byte);
 
 struct {
@@ -285,7 +291,8 @@ void init_terminal() {
     da_resize(&Terminal.frame_cmds, Terminal.width * Terminal.height);
 
     // manually add the terminal scope
-    da_append(&Terminal.scopes, ((Rectangle) {.w = Terminal.width, .h = Terminal.height}));
+    Rectangle r = {.w = Terminal.width, .h = Terminal.height};
+    da_append(&Terminal.scopes, (Scope) {.clip = r});
 
     Terminal.tmp = arena_init(MB(16));
 }
@@ -299,10 +306,8 @@ void update_screen_dimensions() {
 }
 
 void update_root_scope() {
-    Terminal.scopes.items[0] = (Rectangle) {
-        .w = Terminal.width,
-        .h = Terminal.height,
-    };
+    Rectangle r = {.w = Terminal.width, .h = Terminal.height};
+    Terminal.scopes.items[0] = (Scope) {.clip = r};
 }
 
 void restore_term() {
@@ -716,28 +721,30 @@ void put_str(i32 x, i32 y, byte *s, usize len) {
 }
 
 void put_codepoint(i32 x, i32 y, CodePoint cp) {
-    Rectangle parent = peek_scope();
-    if (!point_in_rect(x, y, parent)) return;
+    Scope parent = peek_scope();
+    i32 tx = x + parent.offset_x;
+    i32 ty = y + parent.offset_y;
 
-    if (x < 0 || y < 0) return;
+    if (tx < 0 || ty < 0) return;
+    if (!point_in_rect(tx, ty, parent.clip)) return;
 
     u32 w = Terminal.width;
     Cell *cells = Terminal.backbuffer.items;
 
     if (cp.display_width == 1) {
-        fix_wide_char(x, y);
-        cells[x + y * w] = cell(cp);
+        fix_wide_char(tx, ty);
+        cells[tx + ty * w] = cell(cp);
         return;
     }
 
     if (cp.display_width == 2) {
-        if ((u32)x + 1 >= w) return; // cannot fit
+        if ((u32)tx + 1 >= w) return; // cannot fit
 
-        fix_wide_char(x, y);
-        fix_wide_char(x + 1, y);
+        fix_wide_char(tx, ty);
+        fix_wide_char(tx + 1, ty);
 
-        cells[x + y * w] = cell_lead(cp);
-        cells[(x + 1) + y * w] = cell_cont();
+        cells[tx + ty * w] = cell_lead(cp);
+        cells[(tx + 1) + ty * w] = cell_cont();
     }
 
     // ignore other widths
@@ -773,17 +780,30 @@ void fix_wide_char(i32 x, i32 y) {
 // }
 
 void push_scope(i32 x, i32 y, i32 w, i32 h) {
-    Rectangle parent = peek_scope();
-    Rectangle clipped = rect_intersect(parent, (Rectangle) {x, y, w, h});
-    da_append(&Terminal.scopes, clipped);
+    Scope parent = peek_scope();
+    Rectangle clipped = rect_intersect(parent.clip, (Rectangle) {x, y, w, h});
+
+    Scope s = {
+        .clip = clipped, 
+        .offset_x = parent.offset_x, 
+        .offset_y = parent.offset_y
+    };
+
+    da_append(&Terminal.scopes, s);
 }
 
-Rectangle pop_scope() { 
+Scope pop_scope() { 
     return da_pop(&Terminal.scopes);
 }
 
-Rectangle peek_scope() {
+Scope peek_scope() {
     return da_last(&Terminal.scopes);
+}
+
+void scope_translate(i32 dx, i32 dy) {
+    Scope *s = &Terminal.scopes.items[Terminal.scopes.count - 1];
+    s->offset_x += dx;
+    s->offset_y += dy;
 }
 
 b32 point_in_rect(i32 x, i32 y, Rectangle r) {
@@ -1029,7 +1049,13 @@ struct Widget {
 
 da_typedef(WidgetList, Widget *);
 
-void widget_draw(Widget *w) { w->vtable->draw(w); }
+void widget_draw(Widget *w) { 
+    // used for clipping
+    // push_scope(w->rect.x, w->rect.y, w->rect.w, w->rect.h);
+    w->vtable->draw(w); 
+    // pop_scope();
+}
+
 void widget_update(Widget *w) { w->vtable->update(w); }
 void widget_measure(Widget *w, LayoutConstraint c) { w->vtable->measure(w, c); }
 void widget_layout(Widget *w) { w->vtable->layout(w); }
@@ -1057,9 +1083,8 @@ void screen_layout(Widget *w) {
     Screen *s = container_of(w, Screen, widget);
     Widget *child = s->child;
 
-    u32 height = MIN((u32)w->rect.h, child->measured_h);
     child->rect.x = (w->rect.w - child->measured_w) / 2;
-    child->rect.y = (w->rect.h - height) / 2;
+    child->rect.y = (w->rect.h - child->measured_h) / 2;
 
     widget_layout(child);
 }
@@ -1078,8 +1103,11 @@ void screen_update(Widget *w) {
 
 void screen_draw(Widget *w) {
     Screen *s = container_of(w, Screen, widget);
-    debug(0, 0, "offset: %d", s->y_offset);
+    // debug(0, 0, "offset: %d", s->y_offset);
+    push_scope(0, 0, w->rect.w, w->rect.h);
+    scope_translate(0, -s->y_offset);
     widget_draw(s->child);
+    pop_scope();
 }
 
 static const WidgetVTable screen_methods = {
