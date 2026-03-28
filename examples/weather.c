@@ -67,7 +67,7 @@ void print_dimensions() {
     stream_fmt(&s, "Width: %u; Heigth: %u", get_terminal_width(), get_terminal_height());
     s8 res = stream_end(s);
 
-    put_ascii_str(0, 0, res.s, res.len);
+    put_str(0, 0, res.s, res.len);
 }
 
 b32 check_min_dimensions() {
@@ -77,7 +77,7 @@ b32 check_min_dimensions() {
     if (w >= 60 && h >= 20) return true;
 
     s8 msg = s8("Terminal size is too small");
-    put_ascii_str(0, 1, msg.s, msg.len);
+    put_str(0, 1, msg.s, msg.len);
     return false;
 }
 
@@ -87,7 +87,7 @@ void print_house() {
 
     usize ground_level = y + 6;
     for (usize i = 0; i < get_terminal_width(); i++) {
-        put_ascii_char(i, ground_level, '~');
+        put_codepoint(i, ground_level, cp("~"));
     }
 
     byte *p = (byte *)house;
@@ -113,5 +113,5 @@ void print_bird() {
         }
     }
 
-    put_ascii_char(bird.x, bird.y, '>');
+    put_codepoint(bird.x, bird.y, cp_from_byte('>'));
 }

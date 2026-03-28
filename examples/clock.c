@@ -29,7 +29,7 @@ i32 main(i32 argc, byte *argv[]) {
 void main_loop() {
     byte buffer[buf_size] = {0};
     u32 len = clock_str(buffer);
-    put_ascii_str(0, 0, buffer, len);
+    put_str(0, 0, buffer, len);
 }
 
 u32 clock_str(byte buffer[buf_size]) {

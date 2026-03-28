@@ -81,7 +81,7 @@ void draw() {
     u32 printed_lines = 0;
     while (printed_lines * get_terminal_width() < buffer.count) {
         u32 print_len = MIN(get_terminal_width(), buffer.count - printed_lines * get_terminal_width());
-        put_ascii_str(
+        put_str(
             0,
             printed_lines,
             buffer.items + printed_lines * get_terminal_width(),
@@ -91,5 +91,5 @@ void draw() {
         printed_lines++;
     }
 
-    put_ascii_char(0, 7, '0' + result);
+    put_codepoint(0, 7, cp_from_byte('0' + result));
 }
