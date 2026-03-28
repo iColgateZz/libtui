@@ -765,20 +765,6 @@ void fix_wide_char(i32 x, i32 y) {
     }
 }
 
-// void put_ascii_char(i32 x, i32 y, byte c) {
-//     put_codepoint(x, y, cp_from_byte(c));
-// }
-
-// void put_ascii_str(i32 x, i32 y, byte *str, usize len) {
-//     Rectangle parent = peek_scope();
-//     if (!point_in_rect(x, y, parent)) return;
-
-//     usize copy_len = MIN(len, parent.x + parent.w - x);
-//     for (usize i = 0; i < copy_len; ++i) {
-//         put_ascii_char(x + i, y, str[i]);
-//     }
-// }
-
 void push_scope(i32 x, i32 y, i32 w, i32 h) {
     Scope parent = peek_scope();
     Rectangle r = {
