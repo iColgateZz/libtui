@@ -96,14 +96,12 @@ Rectangle rect_intersect(Rectangle a, Rectangle b);
 Rectangle rect_union(Rectangle a, Rectangle b);
 
 typedef struct {
-    Rectangle clip;
-    i32 offset_x;
-    i32 offset_y;
-} Scope;
+    Rectangle rect;
+} Clip;
 
-Scope pop_scope();
-Scope peek_scope();
-void push_scope(i32 x, i32 y, i32 w, i32 h);
+Clip clip_pop();
+Clip clip_peek();
+void clip_push(i32 x, i32 y, i32 w, i32 h);
 
 void init_terminal();
 void set_max_timeout_ms(i32 timeout);
@@ -156,7 +154,7 @@ Stream arena_stream_start(Arena *arena, usize size);
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
 
 da_typedef(CellBuffer, Cell);
-da_typedef(Scopes, Scope);
+da_typedef(ClipStack, Clip);
 da_typedef(ByteBuffer, byte);
 
 struct {
@@ -169,7 +167,7 @@ struct {
     CellBuffer backbuffer;
     ByteBuffer frame_cmds;
     Arena tmp;
-    Scopes scopes;
+    ClipStack clips;
     u32 width, height;
 } Terminal = {0};
 
@@ -290,7 +288,7 @@ void init_terminal() {
 
     // manually add the terminal scope
     Rectangle r = {.w = Terminal.width, .h = Terminal.height};
-    da_append(&Terminal.scopes, (Scope) {.clip = r});
+    da_append(&Terminal.clips, (Clip) {.rect = r});
 
     Terminal.tmp = arena_init(MB(16));
 }
@@ -305,7 +303,7 @@ void update_screen_dimensions() {
 
 void update_root_scope() {
     Rectangle r = {.w = Terminal.width, .h = Terminal.height};
-    Terminal.scopes.items[0] = (Scope) {.clip = r};
+    Terminal.clips.items[0] = (Clip) {.rect = r};
 }
 
 void restore_term() {
@@ -323,7 +321,7 @@ void restore_term() {
     da_free(Terminal.backbuffer);
     da_free(Terminal.frontbuffer);
     da_free(Terminal.frame_cmds);
-    da_free(Terminal.scopes);
+    da_free(Terminal.clips);
 
     arena_destroy(Terminal.tmp);
 }
@@ -719,30 +717,28 @@ void put_str(i32 x, i32 y, byte *s, usize len) {
 }
 
 void put_codepoint(i32 x, i32 y, CodePoint cp) {
-    Scope parent = peek_scope();
-    i32 tx = x + parent.offset_x;
-    i32 ty = y + parent.offset_y;
+    Clip parent = clip_peek();
 
-    if (tx < 0 || ty < 0) return;
-    if (!point_in_rect(tx, ty, parent.clip)) return;
+    if (x < 0 || y < 0) return;
+    if (!point_in_rect(x, y, parent.rect)) return;
 
     u32 w = Terminal.width;
     Cell *cells = Terminal.backbuffer.items;
 
     if (cp.display_width == 1) {
-        fix_wide_char(tx, ty);
-        cells[tx + ty * w] = cell(cp);
+        fix_wide_char(x, y);
+        cells[x + y * w] = cell(cp);
         return;
     }
 
     if (cp.display_width == 2) {
-        if ((u32)tx + 1 >= w) return; // cannot fit
+        if ((u32)x + 1 >= w) return; // cannot fit
 
-        fix_wide_char(tx, ty);
-        fix_wide_char(tx + 1, ty);
+        fix_wide_char(x, y);
+        fix_wide_char(x + 1, y);
 
-        cells[tx + ty * w] = cell_lead(cp);
-        cells[(tx + 1) + ty * w] = cell_cont();
+        cells[x + y * w] = cell_lead(cp);
+        cells[(x + 1) + y * w] = cell_cont();
     }
 
     // ignore other widths
@@ -763,38 +759,21 @@ void fix_wide_char(i32 x, i32 y) {
     }
 }
 
-void push_scope(i32 x, i32 y, i32 w, i32 h) {
-    Scope parent = peek_scope();
-    Rectangle r = {
-        .x = x + parent.offset_x,
-        .y = y + parent.offset_y,
-        .w = w,
-        .h = h,
-    };
+void clip_push(i32 x, i32 y, i32 w, i32 h) {
+    Clip parent = clip_peek();
 
-    Rectangle clipped = rect_intersect(parent.clip, r);
+    Rectangle r = {x,y,w,h};
+    Rectangle clipped = rect_intersect(parent.rect, r);
 
-    Scope s = {
-        .clip = clipped, 
-        .offset_x = parent.offset_x, 
-        .offset_y = parent.offset_y
-    };
-
-    da_append(&Terminal.scopes, s);
+    da_append(&Terminal.clips, (Clip){.rect = clipped});
 }
 
-Scope pop_scope() { 
-    return da_pop(&Terminal.scopes);
+Clip clip_pop() { 
+    return da_pop(&Terminal.clips);
 }
 
-Scope peek_scope() {
-    return da_last(&Terminal.scopes);
-}
-
-void scope_translate(i32 dx, i32 dy) {
-    Scope *s = &Terminal.scopes.items[Terminal.scopes.count - 1];
-    s->offset_x += dx;
-    s->offset_y += dy;
+Clip clip_peek() {
+    return da_last(&Terminal.clips);
 }
 
 b32 point_in_rect(i32 x, i32 y, Rectangle r) {
