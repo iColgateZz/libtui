@@ -119,8 +119,6 @@ u8 unicode_width(Unicode ch);
 
 void put_str(i32 x, i32 y, byte *str, usize len);
 void put_codepoint(i32 x, i32 y, CodePoint cp);
-void put_ascii_char(i32 x, i32 y, byte c);
-void put_ascii_str(i32 x, i32 y, byte *str, usize len);
 
 byte *vfmt(byte *p, byte *end, byte *f, va_list args);
 byte *fmt(byte *p, byte *end, byte *f, ...);
