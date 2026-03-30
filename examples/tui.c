@@ -9,14 +9,15 @@ i32 main(i32 argc, byte *argv[]) {
     init_terminal();
     set_max_timeout_ms(10);
 
-    Div layout = div_new(1, 10);
+    Div layout = div_new(5, 5);
 
-    s8 label1 = s8("Hello there!");
-    s8 label2 = s8("Another button");
+    s8 label1 = s8("What is Chandler Bing's job?");
+    s8 label2 = s8("Transponster");
+    s8 label3 = s8("That's not even a word..");
 
     Button b  = button_new(label1);
     Button b2 = button_new(label2);
-    Button b3 = button_new(label2);
+    Button b3 = button_new(label3);
 
     ui_register_root(&layout.widget);
     div_add(&layout, &b.widget);
