@@ -1091,13 +1091,40 @@ Screen screen_new() {
     return (Screen) {.widget.vtable = &screen_methods};
 }
 
+typedef struct {
+    i32 x;
+    i32 y;
+} Transform;
+
+da_typedef(TransformStack, Transform);
+
 static struct {
+    TransformStack transforms;
     Screen screen;
 } UI = {0};
+
+void push_transform(i32 dx, i32 dy) {
+    Transform parent = da_last(&UI.transforms);
+    Transform t = {
+        parent.x + dx,
+        parent.y + dy
+    };
+
+    da_append(&UI.transforms, t);
+}
+
+void pop_transform() {
+    da_pop(&UI.transforms);
+}
+
+Transform peek_transform() {
+    return da_last(&UI.transforms);
+}
 
 void ui_register_root(Widget *w) {
     UI.screen = screen_new();
     UI.screen.child = w;
+    da_append(&UI.transforms, ((Transform){0,0}));
 }
 
 void ui_run() {
