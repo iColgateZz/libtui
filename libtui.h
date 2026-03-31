@@ -998,6 +998,12 @@ void ui_put_cp(i32 x, i32 y, CodePoint cp);
 void ui_put_str(i32 x, i32 y, byte *s, usize len);
 void ui_draw_line(i32 x0, i32 y0, i32 x1, i32 y1, CodePoint cp);
 void ui_draw_box(Rectangle r);
+
+typedef struct {
+    i32 x;
+    i32 y;
+} Transform;
+
 void push_transform(i32 dx, i32 dy);
 Transform pop_transform();
 Transform peek_transform();
@@ -1042,7 +1048,12 @@ void widget_draw(Widget *w) {
     clip_pop();
 }
 
-void widget_update(Widget *w) { w->vtable->update(w); }
+void widget_update(Widget *w) { 
+    push_transform(w->rect.x, w->rect.y);
+    w->vtable->update(w);
+    pop_transform();
+}
+
 void widget_measure(Widget *w, LayoutConstraint c) { w->vtable->measure(w, c); }
 void widget_layout(Widget *w) { w->vtable->layout(w); }
 
@@ -1084,16 +1095,17 @@ void screen_update(Widget *w) {
         s->y_offset = MAX(0, s->y_offset - 1);
     }
 
+    push_transform(0, -s->y_offset);
     widget_update(s->child);
+    pop_transform();
 }
 
 void screen_draw(Widget *w) {
     Screen *s = container_of(w, Screen, widget);
     // debug(0, 0, "offset: %d", s->y_offset);
-    push_scope(0, 0, w->rect.w, w->rect.h);
-    scope_translate(0, -s->y_offset);
+    push_transform(0, -s->y_offset);
     widget_draw(s->child);
-    pop_scope();
+    pop_transform();
 }
 
 static const WidgetVTable screen_methods = {
@@ -1106,11 +1118,6 @@ static const WidgetVTable screen_methods = {
 Screen screen_new() {
     return (Screen) {.widget.vtable = &screen_methods};
 }
-
-typedef struct {
-    i32 x;
-    i32 y;
-} Transform;
 
 da_typedef(TransformStack, Transform);
 
@@ -1186,19 +1193,27 @@ typedef struct {
 void button_draw(Widget *w) {
     Button *b = container_of(w, Button, widget);
 
-    Rectangle r = w->rect;
-    draw_box(r);
+    Rectangle r = {0, 0, w->rect.w, w->rect.h};
+    ui_draw_box(r);
 
-    if (b->state) put_str(r.x + 1, r.y + 1, b->label.s, b->label.len);
+    if (b->state) ui_put_str(1, 1, b->label.s, b->label.len);
 }
 
 void button_update(Widget *w) {
     Button *b = container_of(w, Button, widget);
 
-    Rectangle r = w->rect;
     if (is_event(EMouseLeft)) {
         u32 x = get_mouse_x();
         u32 y = get_mouse_y();
+
+        Transform t = peek_transform();
+
+        Rectangle r = {
+            t.x,
+            t.y,
+            w->rect.w,
+            w->rect.h
+        };
 
         if (point_in_rect(x, y, r) && is_mouse_pressed())
             b->state = !b->state;
@@ -1276,12 +1291,12 @@ void div_layout(Widget *w) {
     w->rect.w = w->measured_w;
     w->rect.h = w->measured_h;
 
-    u32 y = w->rect.y + div->padding;
+    u32 y = div->padding;
 
     for (usize i = 0; i < div->children.count; i++) {
         Widget *child = div->children.items[i];
         
-        child->rect.x = w->rect.x + (w->rect.w - child->measured_w) / 2;
+        child->rect.x = (w->rect.w - child->measured_w) / 2;
         child->rect.y = y;
 
         y += child->rect.h + div->spacing;
@@ -1300,7 +1315,8 @@ void div_update(Widget *w) {
 
 void div_draw(Widget *w) {
     Div *div = container_of(w, Div, widget);
-    draw_box(w->rect);
+    Rectangle r = {0, 0, w->rect.w, w->rect.h};
+    ui_draw_box(r);
 
     for (usize i = 0; i < div->children.count; i++) {
         Widget *child = div->children.items[i];
