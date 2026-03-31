@@ -1008,6 +1008,16 @@ void push_transform(i32 dx, i32 dy);
 Transform pop_transform();
 Transform peek_transform();
 
+typedef struct {
+    i32 x;
+    i32 y;
+} Position;
+
+typedef struct {
+    u32 w;
+    u32 h;
+} Size;
+
 //TODO: add styling
 typedef struct {
     u32 max_w;
@@ -1024,22 +1034,20 @@ typedef struct {
 } WidgetVTable;
 
 struct Widget {
-    Rectangle rect;
+    Position offset;
+    Size size;
     const WidgetVTable *vtable;
-
-    u32 measured_w;
-    u32 measured_h;
 };
 
 da_typedef(WidgetList, Widget *);
 
 void widget_draw(Widget *w) { 
-    push_transform(w->rect.x, w->rect.y);
+    push_transform(w->offset.x, w->offset.y);
     clip_push(
         peek_transform().x,
         peek_transform().y,
-        w->rect.w,
-        w->rect.h
+        w->size.w,
+        w->size.h
     );
 
     w->vtable->draw(w);
@@ -1049,7 +1057,7 @@ void widget_draw(Widget *w) {
 }
 
 void widget_update(Widget *w) { 
-    push_transform(w->rect.x, w->rect.y);
+    push_transform(w->offset.x, w->offset.y);
     w->vtable->update(w);
     pop_transform();
 }
@@ -1064,24 +1072,22 @@ typedef struct {
 } Screen;
 
 void screen_measure(Widget *w, LayoutConstraint c) {
-    w->measured_w = c.max_w;
-    w->measured_h = c.max_h;
+    w->size.w = c.max_w;
+    w->size.h = c.max_h;
 
     Screen *s = container_of(w, Screen, widget);
     widget_measure(s->child, c);
 }
 
 void screen_layout(Widget *w) {
-    w->rect.x = 0;
-    w->rect.y = 0;
-    w->rect.w = w->measured_w;
-    w->rect.h = w->measured_h;
+    w->offset.x = 0;
+    w->offset.y = 0;
 
     Screen *s = container_of(w, Screen, widget);
     Widget *child = s->child;
 
-    child->rect.x = (w->rect.w - child->measured_w) / 2;
-    child->rect.y = (w->rect.h - child->measured_h) / 2;
+    child->offset.x = (w->size.w - child->size.w) / 2;
+    child->offset.y = (w->size.h - child->size.h) / 2;
 
     widget_layout(child);
 }
@@ -1193,7 +1199,7 @@ typedef struct {
 void button_draw(Widget *w) {
     Button *b = container_of(w, Button, widget);
 
-    Rectangle r = {0, 0, w->rect.w, w->rect.h};
+    Rectangle r = {0, 0, w->size.w, w->size.h};
     ui_draw_box(r);
 
     if (b->state) ui_put_str(1, 1, b->label.s, b->label.len);
@@ -1211,8 +1217,8 @@ void button_update(Widget *w) {
         Rectangle r = {
             t.x,
             t.y,
-            w->rect.w,
-            w->rect.h
+            w->size.w,
+            w->size.h
         };
 
         if (point_in_rect(x, y, r) && is_mouse_pressed())
@@ -1224,16 +1230,11 @@ void button_measure(Widget *w, LayoutConstraint c) {
     Button *b = container_of(w, Button, widget);
 
     //TODO: account for text wrapping
-    w->measured_h = 3;
-    w->measured_w = b->label.len + 2;
-
-    w->measured_w = MIN(w->measured_w, c.max_w);
+    w->size.h = 3;
+    w->size.w = MIN(b->label.len + 2, c.max_w);
 }
 
-void button_layout(Widget *w) {
-    w->rect.w = w->measured_w;
-    w->rect.h = w->measured_h;
-}
+void button_layout(Widget *w) { UNUSED(w); }
 
 static const WidgetVTable button_methods = {
     .draw = button_draw,
@@ -1272,8 +1273,8 @@ void div_measure(Widget *w, LayoutConstraint c) {
         Widget *child = div->children.items[i];
         widget_measure(child, child_c);
 
-        width = MAX(width, child->measured_w);
-        height += child->measured_h;
+        width = MAX(width, child->size.w);
+        height += child->size.h;
 
         if (i < div->children.count - 1)
             height += div->spacing;
@@ -1281,25 +1282,21 @@ void div_measure(Widget *w, LayoutConstraint c) {
 
     width += div->padding * 2;
 
-    w->measured_w = MIN(width, c.max_w);
-    w->measured_h = height;
+    w->size.w = MIN(width, c.max_w);
+    w->size.h = height;
 }
 
 void div_layout(Widget *w) {
     Div *div = container_of(w, Div, widget);
-
-    w->rect.w = w->measured_w;
-    w->rect.h = w->measured_h;
-
     u32 y = div->padding;
 
     for (usize i = 0; i < div->children.count; i++) {
         Widget *child = div->children.items[i];
         
-        child->rect.x = (w->rect.w - child->measured_w) / 2;
-        child->rect.y = y;
+        child->offset.x = (w->size.w - child->size.w) / 2;
+        child->offset.y = y;
 
-        y += child->rect.h + div->spacing;
+        y += child->size.h + div->spacing;
 
         widget_layout(child);
     }
@@ -1315,7 +1312,7 @@ void div_update(Widget *w) {
 
 void div_draw(Widget *w) {
     Div *div = container_of(w, Div, widget);
-    Rectangle r = {0, 0, w->rect.w, w->rect.h};
+    Rectangle r = {0, 0, w->size.w, w->size.h};
     ui_draw_box(r);
 
     for (usize i = 0; i < div->children.count; i++) {
