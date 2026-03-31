@@ -950,6 +950,12 @@ void debug(i32 x, i32 y, byte *fmt, ...) {
 
 // TUI
 
+void ui_put_cp(i32 x, i32 y, CodePoint cp);
+void ui_put_str(i32 x, i32 y, byte *s, usize len);
+void push_transform(i32 dx, i32 dy);
+Transform pop_transform();
+Transform peek_transform();
+
 void draw_line(i32 x0, i32 y0, i32 x1, i32 y1, CodePoint cp) {
     if (x0 == x1) { // vertical
         if (y1 < y0) {
@@ -1020,10 +1026,18 @@ struct Widget {
 da_typedef(WidgetList, Widget *);
 
 void widget_draw(Widget *w) { 
-    // used for clipping
-    push_scope(w->rect.x, w->rect.y, w->rect.w, w->rect.h);
-    w->vtable->draw(w); 
-    pop_scope();
+    push_transform(w->rect.x, w->rect.y);
+    clip_push(
+        peek_transform().x,
+        peek_transform().y,
+        w->rect.w,
+        w->rect.h
+    );
+
+    w->vtable->draw(w);
+
+    pop_transform();
+    clip_pop();
 }
 
 void widget_update(Widget *w) { w->vtable->update(w); }
@@ -1113,8 +1127,8 @@ void push_transform(i32 dx, i32 dy) {
     da_append(&UI.transforms, t);
 }
 
-void pop_transform() {
-    da_pop(&UI.transforms);
+Transform pop_transform() {
+    return da_pop(&UI.transforms);
 }
 
 Transform peek_transform() {
@@ -1137,6 +1151,16 @@ void ui_run() {
     widget_layout(&UI.screen.widget);
     widget_update(&UI.screen.widget);
     widget_draw(&UI.screen.widget);
+}
+
+void ui_put_cp(i32 x, i32 y, CodePoint cp) {
+    Transform t = peek_transform();
+    put_codepoint(x + t.x, y + t.y, cp);
+}
+
+void ui_put_str(i32 x, i32 y, byte *s, usize len) {
+    Transform t = peek_transform();
+    put_str(x + t.x, y + t.y, s, len);
 }
 
 typedef struct {
