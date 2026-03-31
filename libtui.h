@@ -1027,8 +1027,7 @@ typedef struct {
 typedef struct Widget Widget;
 
 typedef struct {
-    void (*measure)(Widget *self, LayoutConstraint constraint);
-    void (*layout)(Widget *self);
+    void (*layout)(Widget *self, LayoutConstraint constraint);
     void (*update)(Widget *self);
     void (*draw)(Widget *self);
 } WidgetVTable;
@@ -1052,8 +1051,8 @@ void widget_draw(Widget *w) {
 
     w->vtable->draw(w);
 
-    pop_transform();
     clip_pop();
+    pop_transform();
 }
 
 void widget_update(Widget *w) { 
@@ -1062,8 +1061,9 @@ void widget_update(Widget *w) {
     pop_transform();
 }
 
-void widget_measure(Widget *w, LayoutConstraint c) { w->vtable->measure(w, c); }
-void widget_layout(Widget *w) { w->vtable->layout(w); }
+void widget_layout(Widget *w, LayoutConstraint c) {
+    w->vtable->layout(w, c);
+}
 
 typedef struct {
     Widget widget;
@@ -1071,25 +1071,23 @@ typedef struct {
     i64 y_offset;
 } Screen;
 
-void screen_measure(Widget *w, LayoutConstraint c) {
+void screen_layout(Widget *w, LayoutConstraint c) {
+    Screen *s = container_of(w, Screen, widget);
+
+    w->offset.x = 0;
+    w->offset.y = 0;
     w->size.w = c.max_w;
     w->size.h = c.max_h;
 
-    Screen *s = container_of(w, Screen, widget);
-    widget_measure(s->child, c);
-}
-
-void screen_layout(Widget *w) {
-    w->offset.x = 0;
-    w->offset.y = 0;
-
-    Screen *s = container_of(w, Screen, widget);
     Widget *child = s->child;
+    widget_layout(child, (LayoutConstraint){
+        .max_w = w->size.w,
+        .max_h = w->size.h
+    });
 
     child->offset.x = (w->size.w - child->size.w) / 2;
     child->offset.y = (w->size.h - child->size.h) / 2;
 
-    widget_layout(child);
 }
 
 void screen_update(Widget *w) {
@@ -1115,7 +1113,6 @@ void screen_draw(Widget *w) {
 }
 
 static const WidgetVTable screen_methods = {
-    .measure = screen_measure,
     .layout = screen_layout,
     .update = screen_update,
     .draw = screen_draw,
@@ -1162,8 +1159,7 @@ void ui_run() {
         .max_w = get_terminal_width(),
     };
 
-    widget_measure(&UI.screen.widget, c);
-    widget_layout(&UI.screen.widget);
+    widget_layout(&UI.screen.widget, c);
     widget_update(&UI.screen.widget);
     widget_draw(&UI.screen.widget);
 }
@@ -1196,13 +1192,12 @@ typedef struct {
     b32 state;
 } Button;
 
-void button_draw(Widget *w) {
+void button_layout(Widget *w, LayoutConstraint c) {
     Button *b = container_of(w, Button, widget);
 
-    Rectangle r = {0, 0, w->size.w, w->size.h};
-    ui_draw_box(r);
-
-    if (b->state) ui_put_str(1, 1, b->label.s, b->label.len);
+    //TODO: account for text wrapping
+    w->size.h = 3;
+    w->size.w = MIN(b->label.len + 2, c.max_w);
 }
 
 void button_update(Widget *w) {
@@ -1226,21 +1221,19 @@ void button_update(Widget *w) {
     }
 }
 
-void button_measure(Widget *w, LayoutConstraint c) {
+void button_draw(Widget *w) {
     Button *b = container_of(w, Button, widget);
 
-    //TODO: account for text wrapping
-    w->size.h = 3;
-    w->size.w = MIN(b->label.len + 2, c.max_w);
+    Rectangle r = {0, 0, w->size.w, w->size.h};
+    ui_draw_box(r);
+
+    if (b->state) ui_put_str(1, 1, b->label.s, b->label.len);
 }
 
-void button_layout(Widget *w) { UNUSED(w); }
-
 static const WidgetVTable button_methods = {
-    .draw = button_draw,
-    .update = button_update,
-    .measure = button_measure,
     .layout = button_layout,
+    .update = button_update,
+    .draw = button_draw,
 };
 
 Button button_new(s8 label) {
@@ -1255,51 +1248,32 @@ typedef struct {
     u32 spacing;
 } Div;
 
-void div_measure(Widget *w, LayoutConstraint c) {
+void div_layout(Widget *w, LayoutConstraint c) {
     Div *div = container_of(w, Div, widget);
 
-    u32 inner_w = c.max_w - div->padding * 2;
-    u32 inner_h = c.max_h - div->padding * 2;
-
-    LayoutConstraint child_c = {
-        .max_w = inner_w,
-        .max_h = inner_h,
-    };
-
-    u32 width = 0;
-    u32 height = div->padding * 2;
-
-    for (usize i = 0; i < div->children.count; i++) {
-        Widget *child = div->children.items[i];
-        widget_measure(child, child_c);
-
-        width = MAX(width, child->size.w);
-        height += child->size.h;
-
-        if (i < div->children.count - 1)
-            height += div->spacing;
-    }
-
-    width += div->padding * 2;
-
-    w->size.w = MIN(width, c.max_w);
-    w->size.h = height;
-}
-
-void div_layout(Widget *w) {
-    Div *div = container_of(w, Div, widget);
+    u32 max_w = 0;
     u32 y = div->padding;
 
     for (usize i = 0; i < div->children.count; i++) {
         Widget *child = div->children.items[i];
-        
-        child->offset.x = (w->size.w - child->size.w) / 2;
+
+        widget_layout(child, (LayoutConstraint) {
+            .max_w = c.max_w - div->padding * 2,
+            .max_h = c.max_h,
+        });
+
+        // not center aligned anymore
+        child->offset.x = div->padding;
         child->offset.y = y;
 
-        y += child->size.h + div->spacing;
+        y += child->size.h;
+        if (i < div->children.count - 1) y += div->spacing;
 
-        widget_layout(child);
+        max_w = MAX(max_w, child->size.w);
     }
+
+    w->size.w = max_w + div->padding * 2;
+    w->size.h = y + div->padding;
 }
 
 void div_update(Widget *w) {
@@ -1322,7 +1296,6 @@ void div_draw(Widget *w) {
 }
 
 static const WidgetVTable div_methods = {
-    .measure = div_measure,
     .layout = div_layout,
     .update = div_update,
     .draw = div_draw,

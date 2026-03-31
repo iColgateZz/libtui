@@ -9,7 +9,7 @@ i32 main(i32 argc, byte *argv[]) {
     init_terminal();
     set_max_timeout_ms(10);
 
-    Div layout = div_new(5, 5);
+    Div layout = div_new(5, 1);
 
     s8 label1 = s8("What is Chandler Bing's job?");
     s8 label2 = s8("Transponster");
