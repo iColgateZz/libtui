@@ -948,14 +948,6 @@ void debug(i32 x, i32 y, byte *fmt, ...) {
     put_str(x, y, str.s, str.len);
 }
 
-// TUI
-
-void ui_put_cp(i32 x, i32 y, CodePoint cp);
-void ui_put_str(i32 x, i32 y, byte *s, usize len);
-void push_transform(i32 dx, i32 dy);
-Transform pop_transform();
-Transform peek_transform();
-
 void draw_line(i32 x0, i32 y0, i32 x1, i32 y1, CodePoint cp) {
     if (x0 == x1) { // vertical
         if (y1 < y0) {
@@ -999,6 +991,16 @@ void draw_box(Rectangle r) {
     draw_line(x0, y0 + 1, x0, y1 - 1, cp("│"));
     draw_line(x1, y0 + 1, x1, y1 - 1, cp("│"));
 }
+
+// TUI
+
+void ui_put_cp(i32 x, i32 y, CodePoint cp);
+void ui_put_str(i32 x, i32 y, byte *s, usize len);
+void ui_draw_line(i32 x0, i32 y0, i32 x1, i32 y1, CodePoint cp);
+void ui_draw_box(Rectangle r);
+void push_transform(i32 dx, i32 dy);
+Transform pop_transform();
+Transform peek_transform();
 
 //TODO: add styling
 typedef struct {
@@ -1161,6 +1163,18 @@ void ui_put_cp(i32 x, i32 y, CodePoint cp) {
 void ui_put_str(i32 x, i32 y, byte *s, usize len) {
     Transform t = peek_transform();
     put_str(x + t.x, y + t.y, s, len);
+}
+
+void ui_draw_line(i32 x0, i32 y0, i32 x1, i32 y1, CodePoint cp) {
+    Transform t = peek_transform();
+    draw_line(x0 + t.x, y0 + t.y, x1 + t.x, y1 + t.y, cp);
+}
+
+void ui_draw_box(Rectangle r) {
+    Transform t = peek_transform();
+    r.x += t.x;
+    r.y += t.y;
+    draw_box(r);
 }
 
 typedef struct {
