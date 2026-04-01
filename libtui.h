@@ -1041,6 +1041,8 @@ typedef struct Widget Widget;
 
 typedef struct {
     void (*layout)(Widget *self, LayoutConstraint constraint);
+    Widget *(*hit_test)(Widget *self);
+    void (*event)(Widget *self);
     void (*update)(Widget *self);
     void (*draw)(Widget *self);
 } WidgetVTable;
@@ -1048,6 +1050,7 @@ typedef struct {
 struct Widget {
     Position offset;
     Size size;
+    Widget *parent;
     const WidgetVTable *vtable;
 };
 
@@ -1055,6 +1058,19 @@ da_typedef(WidgetList, Widget *);
 
 void widget_layout(Widget *w, LayoutConstraint c) {
     w->vtable->layout(w, c);
+}
+
+Widget *widget_hit_test(Widget *w) {
+    push_transform(w->offset.x, w->offset.y);
+    Widget *res = w->vtable->hit_test(w);
+    pop_transform();
+    return res;
+}
+
+void widget_event(Widget *w) {
+    push_transform(w->offset.x, w->offset.y);
+    w->vtable->event(w);
+    pop_transform();
 }
 
 void widget_update(Widget *w) { 
@@ -1089,13 +1105,6 @@ Rectangle absolute_rect(Widget *w) {
     };
 }
 
-b32 is_widget_mouse_event(Widget *w) {
-    if (!is_mouse_event()) return false;
-
-    Rectangle r = absolute_rect(w);
-    return point_in_rect(get_mouse_x(), get_mouse_y(), r);
-}
-
 typedef struct {
     Widget widget;
     Widget *child;
@@ -1118,7 +1127,24 @@ void screen_layout(Widget *w, LayoutConstraint c) {
 
     child->offset.x = (w->size.w - child->size.w) / 2;
     child->offset.y = (w->size.h - child->size.h) / 2;
+}
 
+Widget *screen_hit_test(Widget *w) {
+    Screen *s = container_of(w, Screen, widget);
+    Widget *result = widget_hit_test(s->child);
+
+    if (!result) result = w;
+    return result;
+}
+
+void screen_event(Widget *w) {
+    Screen *s = container_of(w, Screen, widget);
+
+    if (is_event(EScrollDown)) {
+        s->y_offset++;
+    } else if (is_event(EScrollUp)) {
+        s->y_offset = MAX(0, s->y_offset - 1);
+    }
 }
 
 void screen_update(Widget *w) {
@@ -1127,12 +1153,6 @@ void screen_update(Widget *w) {
     push_transform(0, -s->y_offset);
     widget_update(s->child);
     pop_transform();
-
-    if (is_event(EScrollDown)) {
-        s->y_offset++;
-    } else if (is_event(EScrollUp)) {
-        s->y_offset = MAX(0, s->y_offset - 1);
-    }
 }
 
 void screen_draw(Widget *w) {
@@ -1145,6 +1165,8 @@ void screen_draw(Widget *w) {
 
 static const WidgetVTable screen_methods = {
     .layout = screen_layout,
+    .hit_test = screen_hit_test,
+    .event = screen_event,
     .update = screen_update,
     .draw = screen_draw,
 };
@@ -1181,7 +1203,17 @@ Transform peek_transform() {
 void ui_register_root(Widget *w) {
     UI.screen = screen_new();
     UI.screen.child = w;
+    w->parent = &UI.screen.widget;
+
     da_append(&UI.transforms, ((Transform){0,0}));
+}
+
+void ui_dispatch_event(Widget *hit) {
+    while (hit) {
+        widget_event(hit);
+        if (is_event_consumed()) break;
+        hit = hit->parent;
+    }
 }
 
 void ui_run() {
@@ -1191,6 +1223,8 @@ void ui_run() {
     };
 
     widget_layout(&UI.screen.widget, c);
+    Widget *hit = widget_hit_test(&UI.screen.widget);
+    ui_dispatch_event(hit);
     widget_update(&UI.screen.widget);
     widget_draw(&UI.screen.widget);
 }
@@ -1231,14 +1265,25 @@ void button_layout(Widget *w, LayoutConstraint c) {
     w->size.w = MIN(b->label.len + 2, c.max_w);
 }
 
-void button_update(Widget *w) {
+Widget *button_hit_test(Widget *w) {
+    Rectangle r = absolute_rect(w);
+    if (point_in_rect(get_mouse_x(), get_mouse_y(), r)){
+        return w;
+    }
+
+    return NULL;
+}
+
+void button_event(Widget *w) {
     Button *b = container_of(w, Button, widget);
 
-    if (is_event(EMouseLeft) && is_widget_mouse_event(w) && is_mouse_pressed()) {
+    if (is_event(EMouseLeft) && is_mouse_pressed()) {
         b->state = !b->state;
         event_consume();
     }
 }
+
+void button_update(Widget *w) { UNUSED(w); }
 
 void button_draw(Widget *w) {
     Button *b = container_of(w, Button, widget);
@@ -1251,6 +1296,8 @@ void button_draw(Widget *w) {
 
 static const WidgetVTable button_methods = {
     .layout = button_layout,
+    .hit_test = button_hit_test,
+    .event = button_event,
     .update = button_update,
     .draw = button_draw,
 };
@@ -1295,6 +1342,25 @@ void div_layout(Widget *w, LayoutConstraint c) {
     w->size.h = y + div->padding;
 }
 
+Widget *div_hit_test(Widget *w) {
+    Div *d = container_of(w, Div, widget);
+
+    for (i32 i = d->children.count - 1; i >= 0; i--) {
+        Widget *child = d->children.items[i];
+        Widget *hit = widget_hit_test(child);
+        if (hit) return hit;
+    }
+
+    Rectangle r = absolute_rect(w);
+    if (point_in_rect(get_mouse_x(), get_mouse_y(), r)){
+        return w;
+    }
+
+    return NULL;
+}
+
+void div_event(Widget *w) { UNUSED(w); }
+
 void div_update(Widget *w) {
     Div *div = container_of(w, Div, widget);
     for (usize i = 0; i < div->children.count; i++) {
@@ -1316,6 +1382,8 @@ void div_draw(Widget *w) {
 
 static const WidgetVTable div_methods = {
     .layout = div_layout,
+    .hit_test = div_hit_test,
+    .event = div_event,
     .update = div_update,
     .draw = div_draw,
 };
@@ -1331,7 +1399,10 @@ Div div_new(u32 padding, u32 spacing) {
     return b;
 }
 
-void div_add(Div *div, Widget *child) { da_append(&div->children, child); }
+void div_add(Div *div, Widget *child) { 
+    child->parent = &div->widget;
+    da_append(&div->children, child);
+}
 
 typedef struct {
     Widget widget;
@@ -1354,21 +1425,39 @@ void scroll_layout(Widget *w, LayoutConstraint c) {
     s->child->offset.y = 0;
 }
 
-void scroll_update(Widget *w) {
+Widget *scroll_hit_test(Widget *w) {
     ScrollArea *s = container_of(w, ScrollArea, widget);
 
-    if (is_widget_mouse_event(w)) {
+    push_transform(0, -s->scroll_y);
+    Widget *result = widget_hit_test(s->child);
+    pop_transform();
 
-        if (is_event(EScrollDown)) {
-            s->scroll_y++;
-            event_consume();
-        }
+    if (result) return result;
 
-        if (is_event(EScrollUp)) {
-            s->scroll_y = MAX(0, s->scroll_y - 1);
-            event_consume();
-        }
+    Rectangle r = absolute_rect(w);
+    if (point_in_rect(get_mouse_x(), get_mouse_y(), r)){
+        return w;
     }
+
+    return NULL;
+}
+
+void scroll_event(Widget *w) {
+     ScrollArea *s = container_of(w, ScrollArea, widget);
+
+    if (is_event(EScrollDown)) {
+        s->scroll_y++;
+        event_consume();
+    }
+
+    if (is_event(EScrollUp)) {
+        s->scroll_y = MAX(0, s->scroll_y - 1);
+        event_consume();
+    }
+}
+
+void scroll_update(Widget *w) {
+    ScrollArea *s = container_of(w, ScrollArea, widget);
 
     push_transform(0, -s->scroll_y);
     widget_update(s->child);
@@ -1378,8 +1467,8 @@ void scroll_update(Widget *w) {
 void scroll_draw(Widget *w) {
     ScrollArea *s = container_of(w, ScrollArea, widget);
 
-    Rectangle r = absolute_rect(w);
-    draw_box(r);
+    Rectangle r = {0, 0, w->size.w, w->size.h};
+    ui_draw_box(r);
 
     push_transform(0, -s->scroll_y);
     widget_draw(s->child);
@@ -1388,15 +1477,21 @@ void scroll_draw(Widget *w) {
 
 static const WidgetVTable scroll_methods = {
     .layout = scroll_layout,
+    .hit_test = scroll_hit_test,
+    .event = scroll_event,
     .update = scroll_update,
     .draw = scroll_draw,
 };
 
-ScrollArea scroll_new(Widget *child) {
+ScrollArea scroll_new() {
     ScrollArea s = {0};
     s.widget.vtable = &scroll_methods;
-    s.child = child;
     return s;
+}
+
+void scroll_add(ScrollArea *s, Widget *child) {
+    s->child = child;
+    child->parent = &s->widget;
 }
 
 

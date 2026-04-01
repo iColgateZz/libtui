@@ -37,7 +37,8 @@ i32 main(i32 argc, byte *argv[]) {
     div_add(&content, &b4.widget);
     div_add(&content, &b5.widget);
 
-    ScrollArea scroll = scroll_new(&content.widget);
+    ScrollArea scroll = scroll_new();
+    scroll_add(&scroll, &content.widget);
 
     ui_register_root(&scroll.widget);
 
