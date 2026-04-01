@@ -68,6 +68,7 @@ typedef enum {
 
 typedef struct {
     EventType type;
+    b32 handled;
     union {
         struct {
             u32 x, y;
@@ -85,6 +86,8 @@ b32 is_mouse_pressed();
 b32 is_mouse_released();
 b32 is_term_key(TermKey k);
 b32 is_codepoint(CodePoint cp);
+b32 is_event_consumed();
+void event_consume();
 CodePoint get_codepoint();
 
 typedef struct {
@@ -174,7 +177,7 @@ struct {
 u64 get_delta_time() { return Terminal.dt; }
 u32 get_terminal_width() { return Terminal.width; }
 u32 get_terminal_height() { return Terminal.height; }
-b32 is_event(EventType e) { return Terminal.event.type == e; }
+b32 is_event(EventType e) { return Terminal.event.type == e && !is_event_consumed(); }
 u32 get_mouse_x() { return Terminal.event.mouse.x; }
 u32 get_mouse_y() { return Terminal.event.mouse.y; }
 b32 is_mouse_pressed() { return Terminal.event.mouse.pressed; }
@@ -182,6 +185,16 @@ b32 is_mouse_released() { return !is_mouse_pressed(); }
 b32 is_term_key(TermKey k) { return Terminal.event.term_key == k && Terminal.event.type == ETermKey; }
 b32 is_codepoint(CodePoint cp) { return cp_equal(cp, Terminal.event.parsed_cp); }
 CodePoint get_codepoint() { return Terminal.event.parsed_cp; }
+
+b32 is_event_consumed() { return Terminal.event.handled; }
+void event_consume() { Terminal.event.handled = true; }
+b32 is_mouse_event() { return (Terminal.event.type == EScrollUp ||
+                              Terminal.event.type == EScrollDown ||
+                              Terminal.event.type == EMouseDrag || 
+                              Terminal.event.type == EMouseLeft ||
+                              Terminal.event.type == EMouseMiddle ||
+                              Terminal.event.type == EMouseRight) &&
+                              !is_event_consumed(); }
 
 // private
 void restore_term();
@@ -1065,6 +1078,24 @@ void widget_layout(Widget *w, LayoutConstraint c) {
     w->vtable->layout(w, c);
 }
 
+Rectangle absolute_rect(Widget *w) {
+    Transform t = peek_transform();
+
+    return (Rectangle){
+        .x = t.x,
+        .y = t.y,
+        .w = w->size.w,
+        .h = w->size.h,
+    };
+}
+
+b32 is_widget_mouse_event(Widget *w) {
+    if (!is_mouse_event()) return false;
+
+    Rectangle r = absolute_rect(w);
+    return point_in_rect(get_mouse_x(), get_mouse_y(), r);
+}
+
 typedef struct {
     Widget widget;
     Widget *child;
@@ -1093,15 +1124,15 @@ void screen_layout(Widget *w, LayoutConstraint c) {
 void screen_update(Widget *w) {
     Screen *s = container_of(w, Screen, widget);
 
+    push_transform(0, -s->y_offset);
+    widget_update(s->child);
+    pop_transform();
+
     if (is_event(EScrollDown)) {
         s->y_offset++;
     } else if (is_event(EScrollUp)) {
         s->y_offset = MAX(0, s->y_offset - 1);
     }
-
-    push_transform(0, -s->y_offset);
-    widget_update(s->child);
-    pop_transform();
 }
 
 void screen_draw(Widget *w) {
@@ -1203,21 +1234,9 @@ void button_layout(Widget *w, LayoutConstraint c) {
 void button_update(Widget *w) {
     Button *b = container_of(w, Button, widget);
 
-    if (is_event(EMouseLeft)) {
-        u32 x = get_mouse_x();
-        u32 y = get_mouse_y();
-
-        Transform t = peek_transform();
-
-        Rectangle r = {
-            t.x,
-            t.y,
-            w->size.w,
-            w->size.h
-        };
-
-        if (point_in_rect(x, y, r) && is_mouse_pressed())
-            b->state = !b->state;
+    if (is_event(EMouseLeft) && is_widget_mouse_event(w) && is_mouse_pressed()) {
+        b->state = !b->state;
+        event_consume();
     }
 }
 
@@ -1313,6 +1332,72 @@ Div div_new(u32 padding, u32 spacing) {
 }
 
 void div_add(Div *div, Widget *child) { da_append(&div->children, child); }
+
+typedef struct {
+    Widget widget;
+    Widget *child;
+    i32 scroll_y;
+} ScrollArea;
+
+void scroll_layout(Widget *w, LayoutConstraint c) {
+    ScrollArea *s = container_of(w, ScrollArea, widget);
+
+    w->size.w = c.max_w / 2;
+    w->size.h = c.max_h / 2;
+
+    widget_layout(s->child, (LayoutConstraint){
+        .max_w = w->size.w,
+        .max_h = 1000000
+    });
+
+    s->child->offset.x = 0;
+    s->child->offset.y = 0;
+}
+
+void scroll_update(Widget *w) {
+    ScrollArea *s = container_of(w, ScrollArea, widget);
+
+    if (is_widget_mouse_event(w)) {
+
+        if (is_event(EScrollDown)) {
+            s->scroll_y++;
+            event_consume();
+        }
+
+        if (is_event(EScrollUp)) {
+            s->scroll_y = MAX(0, s->scroll_y - 1);
+            event_consume();
+        }
+    }
+
+    push_transform(0, -s->scroll_y);
+    widget_update(s->child);
+    pop_transform();
+}
+
+void scroll_draw(Widget *w) {
+    ScrollArea *s = container_of(w, ScrollArea, widget);
+
+    Rectangle r = absolute_rect(w);
+    draw_box(r);
+
+    push_transform(0, -s->scroll_y);
+    widget_draw(s->child);
+    pop_transform();
+}
+
+static const WidgetVTable scroll_methods = {
+    .layout = scroll_layout,
+    .update = scroll_update,
+    .draw = scroll_draw,
+};
+
+ScrollArea scroll_new(Widget *child) {
+    ScrollArea s = {0};
+    s.widget.vtable = &scroll_methods;
+    s.child = child;
+    return s;
+}
 
 
 #endif //LIBTUI_IMPL
