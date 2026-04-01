@@ -1130,7 +1130,10 @@ void screen_layout(Widget *w, LayoutConstraint c) {
 
 Widget *screen_hit_test(Widget *w) {
     Screen *s = container_of(w, Screen, widget);
+ 
+    push_transform(0, -s->y_offset);
     Widget *result = widget_hit_test(s->child);
+    pop_transform();
 
     if (!result) result = w;
     return result;
