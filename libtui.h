@@ -177,7 +177,7 @@ struct {
 u64 get_delta_time() { return Terminal.dt; }
 u32 get_terminal_width() { return Terminal.width; }
 u32 get_terminal_height() { return Terminal.height; }
-b32 is_event(EventType e) { return Terminal.event.type == e && !is_event_consumed(); }
+b32 is_event(EventType e) { return Terminal.event.type == e; }
 u32 get_mouse_x() { return Terminal.event.mouse.x; }
 u32 get_mouse_y() { return Terminal.event.mouse.y; }
 b32 is_mouse_pressed() { return Terminal.event.mouse.pressed; }
@@ -188,13 +188,12 @@ CodePoint get_codepoint() { return Terminal.event.parsed_cp; }
 
 b32 is_event_consumed() { return Terminal.event.handled; }
 void event_consume() { Terminal.event.handled = true; }
-b32 is_mouse_event() { return (Terminal.event.type == EScrollUp ||
+b32 is_mouse_event() { return Terminal.event.type == EScrollUp ||
                               Terminal.event.type == EScrollDown ||
                               Terminal.event.type == EMouseDrag || 
                               Terminal.event.type == EMouseLeft ||
                               Terminal.event.type == EMouseMiddle ||
-                              Terminal.event.type == EMouseRight) &&
-                              !is_event_consumed(); }
+                              Terminal.event.type == EMouseRight; }
 
 // private
 void restore_term();
