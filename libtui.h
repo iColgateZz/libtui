@@ -1053,6 +1053,16 @@ struct Widget {
 
 da_typedef(WidgetList, Widget *);
 
+void widget_layout(Widget *w, LayoutConstraint c) {
+    w->vtable->layout(w, c);
+}
+
+void widget_update(Widget *w) { 
+    push_transform(w->offset.x, w->offset.y);
+    w->vtable->update(w);
+    pop_transform();
+}
+
 void widget_draw(Widget *w) { 
     push_transform(w->offset.x, w->offset.y);
     clip_push(
@@ -1066,16 +1076,6 @@ void widget_draw(Widget *w) {
 
     clip_pop();
     pop_transform();
-}
-
-void widget_update(Widget *w) { 
-    push_transform(w->offset.x, w->offset.y);
-    w->vtable->update(w);
-    pop_transform();
-}
-
-void widget_layout(Widget *w, LayoutConstraint c) {
-    w->vtable->layout(w, c);
 }
 
 Rectangle absolute_rect(Widget *w) {
