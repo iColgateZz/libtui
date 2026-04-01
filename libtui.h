@@ -138,6 +138,8 @@ void stream_fmt(Stream *s, byte *f, ...);
 s8 stream_end(Stream s);
 Stream arena_stream_start(Arena *arena, usize size);
 
+void debug(i32 x, i32 y, byte *fmt, ...);
+
 #endif //LIBTUI_INCLUDE
 
 #ifdef LIBTUI_IMPL
@@ -513,6 +515,14 @@ void parse_input(byte *str, isize n, Event *e) {
         return;
     }
 
+    // special case
+    #define DELETE 127
+    if (n == 1 && *str == DELETE) {
+        e->type = ETermKey;
+        e->term_key = TERMKEY_BACKSPACE;
+        return;
+    }
+
     if (try_parse_text(str, n, e)) return;
 
     e->type = ENone;
@@ -751,6 +761,7 @@ void put_codepoint(i32 x, i32 y, CodePoint cp) {
 
         cells[x + y * w] = cell_lead(cp);
         cells[(x + 1) + y * w] = cell_cont();
+        return;
     }
 
     // ignore other widths
@@ -1182,6 +1193,7 @@ da_typedef(TransformStack, Transform);
 static struct {
     TransformStack transforms;
     Screen screen;
+    Widget *focus;
 } UI = {0};
 
 void push_transform(i32 dx, i32 dy) {
@@ -1211,10 +1223,17 @@ void ui_register_root(Widget *w) {
 }
 
 void ui_dispatch_event(Widget *hit) {
-    while (hit) {
-        widget_event(hit);
+    Widget *w;
+    if (is_mouse_event()) {
+        w = hit;
+    } else {
+        w = UI.focus;
+    }
+
+    while (w) {
+        widget_event(w);
         if (is_event_consumed()) break;
-        hit = hit->parent;
+        w = w->parent;
     }
 }
 
@@ -1496,5 +1515,84 @@ void scroll_add(ScrollArea *s, Widget *child) {
     child->parent = &s->widget;
 }
 
+da_typedef(CodePoints, CodePoint);
+
+typedef struct {
+    Widget widget;
+    CodePoints text;
+} TextInput;
+
+void text_input_layout(Widget *w, LayoutConstraint c) {
+    w->size.h = 3;
+    w->size.w = MIN(20, c.max_w);
+}
+
+Widget *text_input_hit_test(Widget *w) {
+    Rectangle r = absolute_rect(w);
+
+    if (point_in_rect(get_mouse_x(), get_mouse_y(), r))
+        return w;
+
+    return NULL;
+}
+
+void text_input_event(Widget *w) {
+    TextInput *t = container_of(w, TextInput, widget);
+
+    if (is_event(EMouseLeft) && is_mouse_pressed()) {
+        UI.focus = w;
+        event_consume();
+        return;
+    }
+
+    if (UI.focus != w) return;
+
+    if (is_event(ECodePoint)) {
+        CodePoint cp = get_codepoint();
+        da_append(&t->text, cp);
+        event_consume();
+    }
+
+    if (is_term_key(TERMKEY_BACKSPACE)) {
+        if (t->text.count > 0) {
+            t->text.count--;
+        }
+        event_consume();
+    }
+}
+
+void text_input_update(Widget *w) { UNUSED(w); }
+
+void text_input_draw(Widget *w) {
+    TextInput *t = container_of(w, TextInput, widget);
+
+    Rectangle r = {0, 0, w->size.w, w->size.h};
+    ui_draw_box(r);
+
+    i32 x = 1;
+    for (usize i = 0; i < t->text.count; i++) {
+        CodePoint cp = t->text.items[i];
+        ui_put_cp(x, 1, cp);
+        x += cp.display_width;
+    }
+
+    if (UI.focus == w) {
+        ui_put_cp(x, 1, cp("_"));
+    }
+}
+
+static const WidgetVTable text_input_methods = {
+    .layout = text_input_layout,
+    .hit_test = text_input_hit_test,
+    .event = text_input_event,
+    .update = text_input_update,
+    .draw = text_input_draw,
+};
+
+TextInput text_input_new() {
+    TextInput t = {0};
+    t.widget.vtable = &text_input_methods;
+    return t;
+}
 
 #endif //LIBTUI_IMPL

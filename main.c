@@ -85,19 +85,30 @@ i32 main(i32 argc, byte *argv[]) {
 
         if (is_event(EScrollDown)) {
             y_offset++;
-            // write_str("Here\r\n");
+            write_str("Here\r\n");
         } else if (is_event(EScrollUp)) {
             y_offset--;
-            // write_str("Here2\r\n");
+            write_str("Here2\r\n");
         }
 
-        push_scope(0, 0, 88, 10);
-        update(&a);
-        draw(&a);
-        pop_scope();
+        // clip_push(0, 0, 88, 10);
+        // update(&a);
+        // draw(&a);
+        // clip_pop();
 
-        update(&b);
-        draw(&b);
+        // update(&b);
+        // draw(&b);
+
+        if (is_event(ECodePoint)) {
+            write_str("cp\r\n");
+            CodePoint cp = Terminal.event.parsed_cp;
+            write_strf("%.*s\r\n", cp.raw_len, cp.raw);
+            write_strf("len: %d\r\n", cp.raw_len);
+            write_strf("val: %d\r\n", *cp.raw);
+        }
+        else if (is_event(ETermKey))
+            write_str("tk\r\n");
+        else debug(0, 0, "cringe");
 
         end_frame();
     }
