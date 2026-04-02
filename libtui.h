@@ -143,6 +143,7 @@ void debug(i32 x, i32 y, byte *fmt, ...);
 
 // TUI
 
+//TODO: Add styling
 typedef struct {
     i32 x;
     i32 y;
