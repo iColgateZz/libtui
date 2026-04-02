@@ -1509,6 +1509,7 @@ void div_add(Div *div, Widget *child) {
     da_append(&div->children, child);
 }
 
+//TODO: remove the widget. Make Div optionally scrollable.
 void scroll_layout(Widget *w, LayoutConstraint c) {
     ScrollArea *s = container_of(w, ScrollArea, widget);
 
