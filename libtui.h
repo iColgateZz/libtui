@@ -1192,7 +1192,6 @@ void draw_box(Rectangle r) {
 
 // TUI
 
-//TODO: add focus helpers
 static struct {
     TransformStack transforms;
     Screen screen;
