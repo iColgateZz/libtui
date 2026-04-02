@@ -140,6 +140,178 @@ Stream arena_stream_start(Arena *arena, usize size);
 
 void debug(i32 x, i32 y, byte *fmt, ...);
 
+// TUI
+
+typedef struct {
+    i32 x;
+    i32 y;
+} Transform;
+
+da_typedef(TransformStack, Transform);
+
+void push_transform(i32 dx, i32 dy);
+Transform pop_transform();
+Transform peek_transform();
+
+typedef struct {
+    i32 x;
+    i32 y;
+} Position;
+
+typedef struct {
+    u32 w;
+    u32 h;
+} Size;
+
+typedef struct {
+    u32 max_w;
+    u32 max_h;
+} LayoutConstraint;
+
+typedef struct Widget Widget;
+
+typedef struct {
+    void (*layout)(Widget *self, LayoutConstraint constraint);
+    Widget *(*hit_test)(Widget *self);
+    void (*event)(Widget *self);
+    void (*update)(Widget *self);
+    void (*draw)(Widget *self);
+} WidgetVTable;
+
+struct Widget {
+    Position offset;
+    Size size;
+    Widget *parent;
+    const WidgetVTable *vtable;
+};
+
+da_typedef(WidgetList, Widget *);
+
+void widget_layout(Widget *w, LayoutConstraint c);
+Widget *widget_hit_test(Widget *w);
+void widget_update(Widget *w);
+void widget_draw(Widget *w);
+
+Rectangle absolute_rect(Widget *w);
+
+void ui_register_root(Widget *w);
+void ui_dispatch_event(Widget *hit);
+void ui_run();
+
+void ui_put_cp(i32 x, i32 y, CodePoint cp);
+void ui_put_str(i32 x, i32 y, byte *s, usize len);
+void ui_draw_line(i32 x0, i32 y0, i32 x1, i32 y1, CodePoint cp);
+void ui_draw_box(Rectangle r);
+
+typedef struct {
+    Widget widget;
+    Widget *child;
+    i64 y_offset;
+} Screen;
+
+void screen_layout(Widget *w, LayoutConstraint c);
+Widget *screen_hit_test(Widget *w);
+void screen_event(Widget *w);
+void screen_update(Widget *w);
+void screen_draw(Widget *w);
+Screen screen_new();
+
+static const WidgetVTable screen_methods = {
+    .layout = screen_layout,
+    .hit_test = screen_hit_test,
+    .event = screen_event,
+    .update = screen_update,
+    .draw = screen_draw,
+};
+
+typedef struct {
+    Widget widget;
+    s8 label;
+    b32 state;
+} Button;
+
+void button_layout(Widget *w, LayoutConstraint c);
+Widget *button_hit_test(Widget *w);
+void button_event(Widget *w);
+void button_update(Widget *w);
+void button_draw(Widget *w);
+Button button_new(s8 label);
+
+static const WidgetVTable button_methods = {
+    .layout = button_layout,
+    .hit_test = button_hit_test,
+    .event = button_event,
+    .update = button_update,
+    .draw = button_draw,
+};
+
+typedef struct {
+    Widget widget;
+    WidgetList children;
+    u32 padding;
+    u32 spacing;
+} Div;
+
+void div_layout(Widget *w, LayoutConstraint c);
+Widget *div_hit_test(Widget *w);
+void div_event(Widget *w);
+void div_update(Widget *w);
+void div_draw(Widget *w);
+Div div_new(u32 padding, u32 spacing);
+void div_add(Div *div, Widget *child);
+
+static const WidgetVTable div_methods = {
+    .layout = div_layout,
+    .hit_test = div_hit_test,
+    .event = div_event,
+    .update = div_update,
+    .draw = div_draw,
+};
+
+typedef struct {
+    Widget widget;
+    Widget *child;
+    i32 scroll_y;
+} ScrollArea;
+
+void scroll_layout(Widget *w, LayoutConstraint c);
+Widget *scroll_hit_test(Widget *w);
+void scroll_event(Widget *w);
+void scroll_update(Widget *w);
+void scroll_draw(Widget *w);
+ScrollArea scroll_new();
+void scroll_add(ScrollArea *s, Widget *child);
+
+static const WidgetVTable scroll_methods = {
+    .layout = scroll_layout,
+    .hit_test = scroll_hit_test,
+    .event = scroll_event,
+    .update = scroll_update,
+    .draw = scroll_draw,
+};
+
+da_typedef(CodePoints, CodePoint);
+
+typedef struct {
+    Widget widget;
+    CodePoints text;
+} TextInput;
+
+void text_input_layout(Widget *w, LayoutConstraint c);
+Widget *text_input_hit_test(Widget *w);
+void text_input_event(Widget *w);
+void text_input_update(Widget *w);
+void text_input_draw(Widget *w);
+TextInput text_input_new();
+
+static const WidgetVTable text_input_methods = {
+    .layout = text_input_layout,
+    .hit_test = text_input_hit_test,
+    .event = text_input_event,
+    .update = text_input_update,
+    .draw = text_input_draw,
+};
+
 #endif //LIBTUI_INCLUDE
 
 #ifdef LIBTUI_IMPL
@@ -1017,54 +1189,29 @@ void draw_box(Rectangle r) {
 
 // TUI
 
-void ui_put_cp(i32 x, i32 y, CodePoint cp);
-void ui_put_str(i32 x, i32 y, byte *s, usize len);
-void ui_draw_line(i32 x0, i32 y0, i32 x1, i32 y1, CodePoint cp);
-void ui_draw_box(Rectangle r);
+static struct {
+    TransformStack transforms;
+    Screen screen;
+    Widget *focus;
+} UI = {0};
 
-typedef struct {
-    i32 x;
-    i32 y;
-} Transform;
+void push_transform(i32 dx, i32 dy) {
+    Transform parent = da_last(&UI.transforms);
+    Transform t = {
+        parent.x + dx,
+        parent.y + dy
+    };
 
-void push_transform(i32 dx, i32 dy);
-Transform pop_transform();
-Transform peek_transform();
+    da_append(&UI.transforms, t);
+}
 
-typedef struct {
-    i32 x;
-    i32 y;
-} Position;
+Transform pop_transform() {
+    return da_pop(&UI.transforms);
+}
 
-typedef struct {
-    u32 w;
-    u32 h;
-} Size;
-
-//TODO: add styling
-typedef struct {
-    u32 max_w;
-    u32 max_h;
-} LayoutConstraint;
-
-typedef struct Widget Widget;
-
-typedef struct {
-    void (*layout)(Widget *self, LayoutConstraint constraint);
-    Widget *(*hit_test)(Widget *self);
-    void (*event)(Widget *self);
-    void (*update)(Widget *self);
-    void (*draw)(Widget *self);
-} WidgetVTable;
-
-struct Widget {
-    Position offset;
-    Size size;
-    Widget *parent;
-    const WidgetVTable *vtable;
-};
-
-da_typedef(WidgetList, Widget *);
+Transform peek_transform() {
+    return da_last(&UI.transforms);
+}
 
 void widget_layout(Widget *w, LayoutConstraint c) {
     w->vtable->layout(w, c);
@@ -1113,105 +1260,6 @@ Rectangle absolute_rect(Widget *w) {
         .w = w->size.w,
         .h = w->size.h,
     };
-}
-
-typedef struct {
-    Widget widget;
-    Widget *child;
-    i64 y_offset;
-} Screen;
-
-void screen_layout(Widget *w, LayoutConstraint c) {
-    Screen *s = container_of(w, Screen, widget);
-
-    w->offset.x = 0;
-    w->offset.y = 0;
-    w->size.w = c.max_w;
-    w->size.h = c.max_h;
-
-    Widget *child = s->child;
-    widget_layout(child, (LayoutConstraint){
-        .max_w = w->size.w,
-        .max_h = w->size.h
-    });
-
-    child->offset.x = (w->size.w - child->size.w) / 2;
-    child->offset.y = (w->size.h - child->size.h) / 2;
-}
-
-Widget *screen_hit_test(Widget *w) {
-    Screen *s = container_of(w, Screen, widget);
- 
-    push_transform(0, -s->y_offset);
-    Widget *result = widget_hit_test(s->child);
-    pop_transform();
-
-    if (!result) result = w;
-    return result;
-}
-
-void screen_event(Widget *w) {
-    Screen *s = container_of(w, Screen, widget);
-
-    if (is_event(EScrollDown)) {
-        s->y_offset++;
-    } else if (is_event(EScrollUp)) {
-        s->y_offset = MAX(0, s->y_offset - 1);
-    }
-}
-
-void screen_update(Widget *w) {
-    Screen *s = container_of(w, Screen, widget);
-
-    push_transform(0, -s->y_offset);
-    widget_update(s->child);
-    pop_transform();
-}
-
-void screen_draw(Widget *w) {
-    Screen *s = container_of(w, Screen, widget);
-    // debug(0, 0, "offset: %d", s->y_offset);
-    push_transform(0, -s->y_offset);
-    widget_draw(s->child);
-    pop_transform();
-}
-
-static const WidgetVTable screen_methods = {
-    .layout = screen_layout,
-    .hit_test = screen_hit_test,
-    .event = screen_event,
-    .update = screen_update,
-    .draw = screen_draw,
-};
-
-Screen screen_new() {
-    return (Screen) {.widget.vtable = &screen_methods};
-}
-
-da_typedef(TransformStack, Transform);
-
-static struct {
-    TransformStack transforms;
-    Screen screen;
-    Widget *focus;
-} UI = {0};
-
-void push_transform(i32 dx, i32 dy) {
-    Transform parent = da_last(&UI.transforms);
-    Transform t = {
-        parent.x + dx,
-        parent.y + dy
-    };
-
-    da_append(&UI.transforms, t);
-}
-
-Transform pop_transform() {
-    return da_pop(&UI.transforms);
-}
-
-Transform peek_transform() {
-    return da_last(&UI.transforms);
 }
 
 void ui_register_root(Widget *w) {
@@ -1272,11 +1320,64 @@ void ui_draw_box(Rectangle r) {
     draw_box(r);
 }
 
-typedef struct {
-    Widget widget;
-    s8 label;
-    b32 state;
-} Button;
+void screen_layout(Widget *w, LayoutConstraint c) {
+    Screen *s = container_of(w, Screen, widget);
+
+    w->offset.x = 0;
+    w->offset.y = 0;
+    w->size.w = c.max_w;
+    w->size.h = c.max_h;
+
+    Widget *child = s->child;
+    widget_layout(child, (LayoutConstraint){
+        .max_w = w->size.w,
+        .max_h = w->size.h
+    });
+
+    child->offset.x = (w->size.w - child->size.w) / 2;
+    child->offset.y = (w->size.h - child->size.h) / 2;
+}
+
+Widget *screen_hit_test(Widget *w) {
+    Screen *s = container_of(w, Screen, widget);
+ 
+    push_transform(0, -s->y_offset);
+    Widget *result = widget_hit_test(s->child);
+    pop_transform();
+
+    if (!result) result = w;
+    return result;
+}
+
+void screen_event(Widget *w) {
+    Screen *s = container_of(w, Screen, widget);
+
+    if (is_event(EScrollDown)) {
+        s->y_offset++;
+    } else if (is_event(EScrollUp)) {
+        s->y_offset = MAX(0, s->y_offset - 1);
+    }
+}
+
+void screen_update(Widget *w) {
+    Screen *s = container_of(w, Screen, widget);
+
+    push_transform(0, -s->y_offset);
+    widget_update(s->child);
+    pop_transform();
+}
+
+void screen_draw(Widget *w) {
+    Screen *s = container_of(w, Screen, widget);
+    // debug(0, 0, "offset: %d", s->y_offset);
+    push_transform(0, -s->y_offset);
+    widget_draw(s->child);
+    pop_transform();
+}
+
+Screen screen_new() {
+    return (Screen) {.widget.vtable = &screen_methods};
+}
 
 void button_layout(Widget *w, LayoutConstraint c) {
     Button *b = container_of(w, Button, widget);
@@ -1315,25 +1416,10 @@ void button_draw(Widget *w) {
     if (b->state) ui_put_str(1, 1, b->label.s, b->label.len);
 }
 
-static const WidgetVTable button_methods = {
-    .layout = button_layout,
-    .hit_test = button_hit_test,
-    .event = button_event,
-    .update = button_update,
-    .draw = button_draw,
-};
-
 Button button_new(s8 label) {
     Widget wid = { .vtable = &button_methods };
     return (Button) { .label = label, .widget = wid};
 }
-
-typedef struct {
-    Widget widget;
-    WidgetList children;
-    u32 padding;
-    u32 spacing;
-} Div;
 
 void div_layout(Widget *w, LayoutConstraint c) {
     Div *div = container_of(w, Div, widget);
@@ -1401,14 +1487,6 @@ void div_draw(Widget *w) {
     }
 }
 
-static const WidgetVTable div_methods = {
-    .layout = div_layout,
-    .hit_test = div_hit_test,
-    .event = div_event,
-    .update = div_update,
-    .draw = div_draw,
-};
-
 Div div_new(u32 padding, u32 spacing) {
     Div b = {0};
 
@@ -1424,12 +1502,6 @@ void div_add(Div *div, Widget *child) {
     child->parent = &div->widget;
     da_append(&div->children, child);
 }
-
-typedef struct {
-    Widget widget;
-    Widget *child;
-    i32 scroll_y;
-} ScrollArea;
 
 void scroll_layout(Widget *w, LayoutConstraint c) {
     ScrollArea *s = container_of(w, ScrollArea, widget);
@@ -1496,14 +1568,6 @@ void scroll_draw(Widget *w) {
     pop_transform();
 }
 
-static const WidgetVTable scroll_methods = {
-    .layout = scroll_layout,
-    .hit_test = scroll_hit_test,
-    .event = scroll_event,
-    .update = scroll_update,
-    .draw = scroll_draw,
-};
-
 ScrollArea scroll_new() {
     ScrollArea s = {0};
     s.widget.vtable = &scroll_methods;
@@ -1514,13 +1578,6 @@ void scroll_add(ScrollArea *s, Widget *child) {
     s->child = child;
     child->parent = &s->widget;
 }
-
-da_typedef(CodePoints, CodePoint);
-
-typedef struct {
-    Widget widget;
-    CodePoints text;
-} TextInput;
 
 void text_input_layout(Widget *w, LayoutConstraint c) {
     w->size.h = 3;
@@ -1580,14 +1637,6 @@ void text_input_draw(Widget *w) {
         ui_put_cp(x, 1, cp("_"));
     }
 }
-
-static const WidgetVTable text_input_methods = {
-    .layout = text_input_layout,
-    .hit_test = text_input_hit_test,
-    .event = text_input_event,
-    .update = text_input_update,
-    .draw = text_input_draw,
-};
 
 TextInput text_input_new() {
     TextInput t = {0};
