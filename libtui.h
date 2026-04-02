@@ -189,6 +189,7 @@ da_typedef(WidgetList, Widget *);
 
 void widget_layout(Widget *w, LayoutConstraint c);
 Widget *widget_hit_test(Widget *w);
+void widget_event(Widget *w);
 void widget_update(Widget *w);
 void widget_draw(Widget *w);
 
