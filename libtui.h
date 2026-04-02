@@ -102,9 +102,10 @@ typedef struct {
     Rectangle rect;
 } Clip;
 
+void clip_push(i32 x, i32 y, i32 w, i32 h);
+void clip_push_rect(Rectangle r);
 Clip clip_pop();
 Clip clip_peek();
-void clip_push(i32 x, i32 y, i32 w, i32 h);
 
 void init_terminal();
 void set_max_timeout_ms(i32 timeout);
@@ -958,11 +959,13 @@ void fix_wide_char(i32 x, i32 y) {
 }
 
 void clip_push(i32 x, i32 y, i32 w, i32 h) {
-    Clip parent = clip_peek();
-
     Rectangle r = {x,y,w,h};
-    Rectangle clipped = rect_intersect(parent.rect, r);
+    clip_push_rect(r);
+}
 
+void clip_push_rect(Rectangle r) {
+    Clip parent = clip_peek();
+    Rectangle clipped = rect_intersect(parent.rect, r);
     da_append(&Terminal.clips, (Clip){.rect = clipped});
 }
 
@@ -1325,12 +1328,7 @@ void widget_update(Widget *w) {
 
 void widget_draw(Widget *w) { 
     push_transform(w->offset.x, w->offset.y);
-    clip_push(
-        peek_transform().x,
-        peek_transform().y,
-        w->size.w,
-        w->size.h
-    );
+    clip_push_rect(absolute_rect(w));
 
     w->vtable->draw(w);
 
