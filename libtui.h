@@ -196,6 +196,8 @@ void widget_draw(Widget *w);
 Rectangle absolute_rect(Widget *w);
 
 void ui_register_root(Widget *w);
+void ui_set_focus(Widget *w);
+b32 ui_is_focused(Widget *w);
 void ui_dispatch_event(Widget *hit);
 void ui_run();
 
@@ -1205,6 +1207,14 @@ void ui_register_root(Widget *w) {
     da_append(&UI.transforms, ((Transform){0,0}));
 }
 
+void ui_set_focus(Widget *w) {
+    UI.focus = w;
+}
+
+b32 ui_is_focused(Widget *w) {
+    return w == UI.focus;
+}
+
 void ui_dispatch_event(Widget *hit) {
     Widget *w;
     if (is_mouse_event()) {
@@ -1586,12 +1596,12 @@ void text_input_event(Widget *w) {
     TextInput *t = container_of(w, TextInput, widget);
 
     if (is_event(EMouseLeft) && is_mouse_pressed()) {
-        UI.focus = w;
+        ui_set_focus(w);
         event_consume();
         return;
     }
 
-    if (UI.focus != w) return;
+    if (!ui_is_focused(w)) return;
 
     if (is_event(ECodePoint)) {
         CodePoint cp = get_codepoint();
@@ -1622,7 +1632,7 @@ void text_input_draw(Widget *w) {
         x += cp.display_width;
     }
 
-    if (UI.focus == w) {
+    if (ui_is_focused(w)) {
         ui_put_cp(x, 1, cp("_"));
     }
 }
