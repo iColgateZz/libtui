@@ -1587,6 +1587,7 @@ void text_input_layout(Widget *w, LayoutConstraint c) {
     w->size.w = MIN(20, c.max_w);
 }
 
+//TODO: clicking away should remove the focus
 Widget *text_input_hit_test(Widget *w) {
     Rectangle r = absolute_rect(w);
 
