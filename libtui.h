@@ -1284,7 +1284,7 @@ Rectangle absolute_rect(Widget *w) {
     };
 }
 
-b32 is_clicked(Widget *w) {
+b32 is_hit(Widget *w) {
     Rectangle r = absolute_rect(w);
     return point_in_rect(get_mouse_x(), get_mouse_y(), r);
 }
@@ -1397,7 +1397,7 @@ void button_layout(Widget *w, LayoutConstraint c) {
 }
 
 Widget *button_hit_test(Widget *w) {
-    return is_clicked(w) ? w : NULL;
+    return is_hit(w) ? w : NULL;
 }
 
 void button_event(Widget *w) {
@@ -1462,7 +1462,7 @@ Widget *div_hit_test(Widget *w) {
         if (hit) return hit;
     }
 
-    return is_clicked(w) ? w : NULL;
+    return is_hit(w) ? w : NULL;
 }
 
 void div_event(Widget *w) { UNUSED(w); }
@@ -1525,7 +1525,7 @@ Widget *scroll_hit_test(Widget *w) {
     pop_transform();
 
     if (result) return result;
-    return is_clicked(w) ? w : NULL;
+    return is_hit(w) ? w : NULL;
 }
 
 void scroll_event(Widget *w) {
@@ -1579,7 +1579,7 @@ void text_input_layout(Widget *w, LayoutConstraint c) {
 
 //TODO: clicking away should remove the focus
 Widget *text_input_hit_test(Widget *w) {
-    return is_clicked(w) ? w : NULL;
+    return is_hit(w) ? w : NULL;
 }
 
 void text_input_event(Widget *w) {
