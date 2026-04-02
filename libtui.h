@@ -1196,75 +1196,6 @@ static struct {
     Widget *focus;
 } UI = {0};
 
-void push_transform(i32 dx, i32 dy) {
-    Transform parent = da_last(&UI.transforms);
-    Transform t = {
-        parent.x + dx,
-        parent.y + dy
-    };
-
-    da_append(&UI.transforms, t);
-}
-
-Transform pop_transform() {
-    return da_pop(&UI.transforms);
-}
-
-Transform peek_transform() {
-    return da_last(&UI.transforms);
-}
-
-//TODO: parents give constraint + starting x, y.
-//      children align themselves in the given rectangle?
-void widget_layout(Widget *w, LayoutConstraint c) {
-    w->vtable->layout(w, c);
-}
-
-Widget *widget_hit_test(Widget *w) {
-    push_transform(w->offset.x, w->offset.y);
-    Widget *res = w->vtable->hit_test(w);
-    pop_transform();
-    return res;
-}
-
-void widget_event(Widget *w) {
-    push_transform(w->offset.x, w->offset.y);
-    w->vtable->event(w);
-    pop_transform();
-}
-
-void widget_update(Widget *w) { 
-    push_transform(w->offset.x, w->offset.y);
-    w->vtable->update(w);
-    pop_transform();
-}
-
-void widget_draw(Widget *w) { 
-    push_transform(w->offset.x, w->offset.y);
-    clip_push(
-        peek_transform().x,
-        peek_transform().y,
-        w->size.w,
-        w->size.h
-    );
-
-    w->vtable->draw(w);
-
-    clip_pop();
-    pop_transform();
-}
-
-Rectangle absolute_rect(Widget *w) {
-    Transform t = peek_transform();
-
-    return (Rectangle){
-        .x = t.x,
-        .y = t.y,
-        .w = w->size.w,
-        .h = w->size.h,
-    };
-}
-
 void ui_register_root(Widget *w) {
     UI.screen = screen_new();
     UI.screen.child = w;
@@ -1321,6 +1252,75 @@ void ui_draw_box(Rectangle r) {
     r.x += t.x;
     r.y += t.y;
     draw_box(r);
+}
+
+void push_transform(i32 dx, i32 dy) {
+    Transform parent = da_last(&UI.transforms);
+    Transform t = {
+        parent.x + dx,
+        parent.y + dy
+    };
+
+    da_append(&UI.transforms, t);
+}
+
+Transform pop_transform() {
+    return da_pop(&UI.transforms);
+}
+
+Transform peek_transform() {
+    return da_last(&UI.transforms);
+}
+
+Rectangle absolute_rect(Widget *w) {
+    Transform t = peek_transform();
+
+    return (Rectangle){
+        .x = t.x,
+        .y = t.y,
+        .w = w->size.w,
+        .h = w->size.h,
+    };
+}
+
+//TODO: parents give constraint + starting x, y.
+//      children align themselves in the given rectangle?
+void widget_layout(Widget *w, LayoutConstraint c) {
+    w->vtable->layout(w, c);
+}
+
+Widget *widget_hit_test(Widget *w) {
+    push_transform(w->offset.x, w->offset.y);
+    Widget *res = w->vtable->hit_test(w);
+    pop_transform();
+    return res;
+}
+
+void widget_event(Widget *w) {
+    push_transform(w->offset.x, w->offset.y);
+    w->vtable->event(w);
+    pop_transform();
+}
+
+void widget_update(Widget *w) { 
+    push_transform(w->offset.x, w->offset.y);
+    w->vtable->update(w);
+    pop_transform();
+}
+
+void widget_draw(Widget *w) { 
+    push_transform(w->offset.x, w->offset.y);
+    clip_push(
+        peek_transform().x,
+        peek_transform().y,
+        w->size.w,
+        w->size.h
+    );
+
+    w->vtable->draw(w);
+
+    clip_pop();
+    pop_transform();
 }
 
 void screen_layout(Widget *w, LayoutConstraint c) {
