@@ -1214,6 +1214,8 @@ Transform peek_transform() {
     return da_last(&UI.transforms);
 }
 
+//TODO: parents give constraint + starting x, y.
+//      children align themselves in the given rectangle?
 void widget_layout(Widget *w, LayoutConstraint c) {
     w->vtable->layout(w, c);
 }
