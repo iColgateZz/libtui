@@ -267,8 +267,10 @@ static const WidgetVTable button_methods = {
 typedef struct {
     Widget widget;
     WidgetList children;
+    Scrollable scroll;
     u32 padding;
     u32 spacing;
+    b32 scrollable;
 } Div;
 
 void div_layout(Widget *w, LayoutConstraint c);
@@ -276,7 +278,7 @@ Widget *div_hit_test(Widget *w);
 void div_event(Widget *w);
 void div_update(Widget *w);
 void div_draw(Widget *w);
-Div div_new(u32 padding, u32 spacing);
+Div div_new(u32 padding, u32 spacing, b32 scrollable);
 void div_add(Div *div, Widget *child);
 
 static const WidgetVTable div_methods = {
@@ -1479,25 +1481,48 @@ void div_layout(Widget *w, LayoutConstraint c) {
 }
 
 Widget *div_hit_test(Widget *w) {
-    Div *d = container_of(w, Div, widget);
+    Div *div = container_of(w, Div, widget);
 
-    for (i32 i = d->children.count - 1; i >= 0; i--) {
-        Widget *child = d->children.items[i];
+    scroll_apply(&div->scroll);
+    for (i32 i = div->children.count - 1; i >= 0; i--) {
+        Widget *child = div->children.items[i];
         Widget *hit = widget_hit_test(child);
-        if (hit) return hit;
+
+        if (hit) {
+            scroll_pop();
+            return hit;
+        }
     }
+    scroll_pop();
 
     return is_hit(w) ? w : NULL;
 }
 
-void div_event(Widget *w) { UNUSED(w); }
+void div_event(Widget *w) {
+    Div *div = container_of(w, Div, widget);
+    if (!div->scrollable) return;
+
+    Scrollable *s = &div->scroll;
+    if (is_event(EScrollDown)) {
+        s->y_offset++;
+        event_consume();
+    }
+
+    if (is_event(EScrollUp)) {
+        s->y_offset = MAX(0, s->y_offset - 1);
+        event_consume();
+    }
+}
 
 void div_update(Widget *w) {
     Div *div = container_of(w, Div, widget);
+
+    scroll_apply(&div->scroll);
     for (usize i = 0; i < div->children.count; i++) {
         Widget *child = div->children.items[i];
         widget_update(child);
     }
+    scroll_pop();
 }
 
 void div_draw(Widget *w) {
@@ -1505,17 +1530,20 @@ void div_draw(Widget *w) {
     Rectangle r = {0, 0, w->size.w, w->size.h};
     ui_draw_box(r);
 
+    scroll_apply(&div->scroll);
     for (usize i = 0; i < div->children.count; i++) {
         Widget *child = div->children.items[i];
         widget_draw(child);
     }
+    scroll_pop();
 }
 
-Div div_new(u32 padding, u32 spacing) {
+Div div_new(u32 padding, u32 spacing, b32 scrollable) {
     Div b = {0};
 
     b.padding = padding;
     b.spacing = spacing;
+    b.scrollable = scrollable;
 
     b.widget.vtable = &div_methods;
 
@@ -1555,7 +1583,7 @@ Widget *scroll_hit_test(Widget *w) {
 }
 
 void scroll_event(Widget *w) {
-     ScrollArea *s = container_of(w, ScrollArea, widget);
+    ScrollArea *s = container_of(w, ScrollArea, widget);
 
     if (is_event(EScrollDown)) {
         s->scroll_y++;

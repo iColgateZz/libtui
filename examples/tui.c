@@ -13,7 +13,7 @@ i32 main(i32 argc, byte *argv[]) {
     init_terminal();
     set_max_timeout_ms(10);
 
-    Div root = div_new(1,1);
+    Div root = div_new(1,1, false);
 
     Button b = button_new(s8("Click"));
     TextInput input = text_input_new();
@@ -35,7 +35,7 @@ i32 main(i32 argc, byte *argv[]) {
 }
 
 void e1() {
-    Div layout = div_new(5, 1);
+    Div layout = div_new(5, 1, false);
 
     s8 label1 = s8("What is Chandler Bing's job?");
     s8 label2 = s8("Transponster");
@@ -52,7 +52,7 @@ void e1() {
 }
 
 void e2() {
-    Div content = div_new(1,1);
+    Div content = div_new(1,1, false);
     Button b1 = button_new(s8("item"));
     Button b2 = button_new(s8("item"));
     Button b3 = button_new(s8("item"));
@@ -72,7 +72,7 @@ void e2() {
 }
 
 void e3() {
-    Div root = div_new(1,1);
+    Div root = div_new(1,1, false);
 
     Button b = button_new(s8("Click"));
     TextInput input = text_input_new();
