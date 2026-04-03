@@ -1354,8 +1354,6 @@ void widget_draw(Widget *w) {
     pop_transform();
 }
 
-//TODO: Add a scrollable interface. Store offset there.
-//      Add functionality to apply the offset.
 void screen_layout(Widget *w, LayoutConstraint c) {
     Screen *s = container_of(w, Screen, widget);
 
