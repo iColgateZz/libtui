@@ -289,28 +289,6 @@ static const WidgetVTable div_methods = {
     .draw = div_draw,
 };
 
-typedef struct {
-    Widget widget;
-    Widget *child;
-    i32 scroll_y;
-} ScrollArea;
-
-void scroll_layout(Widget *w, LayoutConstraint c);
-Widget *scroll_hit_test(Widget *w);
-void scroll_event(Widget *w);
-void scroll_update(Widget *w);
-void scroll_draw(Widget *w);
-ScrollArea scroll_new();
-void scroll_add(ScrollArea *s, Widget *child);
-
-static const WidgetVTable scroll_methods = {
-    .layout = scroll_layout,
-    .hit_test = scroll_hit_test,
-    .event = scroll_event,
-    .update = scroll_update,
-    .draw = scroll_draw,
-};
-
 da_typedef(CodePoints, CodePoint);
 
 typedef struct {
@@ -1553,77 +1531,6 @@ Div div_new(u32 padding, u32 spacing, b32 scrollable) {
 void div_add(Div *div, Widget *child) { 
     child->parent = &div->widget;
     da_append(&div->children, child);
-}
-
-//TODO: remove the widget. Make Div optionally scrollable.
-void scroll_layout(Widget *w, LayoutConstraint c) {
-    ScrollArea *s = container_of(w, ScrollArea, widget);
-
-    w->size.w = c.max_w / 2;
-    w->size.h = c.max_h / 2;
-
-    widget_layout(s->child, (LayoutConstraint){
-        .max_w = w->size.w,
-        .max_h = 1000000
-    });
-
-    s->child->offset.x = 0;
-    s->child->offset.y = 0;
-}
-
-Widget *scroll_hit_test(Widget *w) {
-    ScrollArea *s = container_of(w, ScrollArea, widget);
-
-    push_transform(0, -s->scroll_y);
-    Widget *result = widget_hit_test(s->child);
-    pop_transform();
-
-    if (result) return result;
-    return is_hit(w) ? w : NULL;
-}
-
-void scroll_event(Widget *w) {
-    ScrollArea *s = container_of(w, ScrollArea, widget);
-
-    if (is_event(EScrollDown)) {
-        s->scroll_y++;
-        event_consume();
-    }
-
-    if (is_event(EScrollUp)) {
-        s->scroll_y = MAX(0, s->scroll_y - 1);
-        event_consume();
-    }
-}
-
-void scroll_update(Widget *w) {
-    ScrollArea *s = container_of(w, ScrollArea, widget);
-
-    push_transform(0, -s->scroll_y);
-    widget_update(s->child);
-    pop_transform();
-}
-
-void scroll_draw(Widget *w) {
-    ScrollArea *s = container_of(w, ScrollArea, widget);
-
-    Rectangle r = {0, 0, w->size.w, w->size.h};
-    ui_draw_box(r);
-
-    push_transform(0, -s->scroll_y);
-    widget_draw(s->child);
-    pop_transform();
-}
-
-ScrollArea scroll_new() {
-    ScrollArea s = {0};
-    s.widget.vtable = &scroll_methods;
-    return s;
-}
-
-void scroll_add(ScrollArea *s, Widget *child) {
-    s->child = child;
-    child->parent = &s->widget;
 }
 
 void text_input_layout(Widget *w, LayoutConstraint c) {

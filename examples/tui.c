@@ -13,15 +13,23 @@ i32 main(i32 argc, byte *argv[]) {
     init_terminal();
     set_max_timeout_ms(10);
 
-    Div root = div_new(1,1, false);
+    Div content = div_new(1,1, false);
+    Button b1 = button_new(s8("item"));
+    Button b2 = button_new(s8("item"));
+    Button b3 = button_new(s8("item"));
+    Button b4 = button_new(s8("item"));
+    Button b5 = button_new(s8("item"));
 
-    Button b = button_new(s8("Click"));
-    TextInput input = text_input_new();
+    div_add(&content, &b1.widget);
+    div_add(&content, &b2.widget);
+    div_add(&content, &b3.widget);
+    div_add(&content, &b4.widget);
+    div_add(&content, &b5.widget);
 
-    div_add(&root, &b.widget);
-    div_add(&root, &input.widget);
+    Div scroll = div_new(0, 0, true);
+    div_add(&scroll, &content.widget);
 
-    ui_register_root(&root.widget);
+    ui_register_root(&scroll.widget);
 
     while (!is_codepoint(cp("q"))) {
         begin_frame();
@@ -65,8 +73,8 @@ void e2() {
     div_add(&content, &b4.widget);
     div_add(&content, &b5.widget);
 
-    ScrollArea scroll = scroll_new();
-    scroll_add(&scroll, &content.widget);
+    Div scroll = div_new(0, 0, true);
+    div_add(&scroll, &content.widget);
 
     ui_register_root(&scroll.widget);
 }
