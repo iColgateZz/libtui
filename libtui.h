@@ -218,6 +218,7 @@ void widget_update(Widget *w);
 void widget_draw(Widget *w);
 
 Widget *default_hit_test(Widget *w);
+void default_update(Widget *w);
 
 Rectangle absolute_rect(Widget *w);
 
@@ -261,7 +262,6 @@ typedef struct {
 
 void button_layout(Widget *w, LayoutConstraint c);
 void button_event(Widget *w);
-void button_update(Widget *w);
 void button_draw(Widget *w);
 Button button_new(s8 label);
 
@@ -269,7 +269,7 @@ static const WidgetVTable button_methods = {
     .layout = button_layout,
     .hit_test = default_hit_test,
     .event = button_event,
-    .update = button_update,
+    .update = default_update,
     .draw = button_draw,
 };
 
@@ -307,7 +307,6 @@ typedef struct {
 
 void text_input_layout(Widget *w, LayoutConstraint c);
 void text_input_event(Widget *w);
-void text_input_update(Widget *w);
 void text_input_draw(Widget *w);
 TextInput text_input_new();
 
@@ -315,7 +314,7 @@ static const WidgetVTable text_input_methods = {
     .layout = text_input_layout,
     .hit_test = default_hit_test,
     .event = text_input_event,
-    .update = text_input_update,
+    .update = default_update,
     .draw = text_input_draw,
 };
 
@@ -1346,6 +1345,8 @@ Widget *default_hit_test(Widget *w) {
     return is_hit(w) ? w : NULL;
 }
 
+void default_update(Widget *w) { UNUSED(w); }
+
 void screen_layout(Widget *w, LayoutConstraint c) {
     Screen *s = container_of(w, Screen, widget);
 
@@ -1421,8 +1422,6 @@ void button_event(Widget *w) {
         event_consume();
     }
 }
-
-void button_update(Widget *w) { UNUSED(w); }
 
 void button_draw(Widget *w) {
     Button *b = container_of(w, Button, widget);
@@ -1564,8 +1563,6 @@ void text_input_event(Widget *w) {
         event_consume();
     }
 }
-
-void text_input_update(Widget *w) { UNUSED(w); }
 
 void text_input_draw(Widget *w) {
     TextInput *t = container_of(w, TextInput, widget);
