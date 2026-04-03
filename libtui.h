@@ -1220,12 +1220,16 @@ b32 ui_is_focused(Widget *w) {
     return w == UI.focus;
 }
 
+Widget *ui_get_focus() {
+    return UI.focus;
+}
+
 void ui_dispatch_event(Widget *hit) {
     Widget *w;
     if (is_mouse_event()) {
         w = hit;
     } else {
-        w = UI.focus;
+        w = ui_get_focus();
     }
 
     while (w) {
