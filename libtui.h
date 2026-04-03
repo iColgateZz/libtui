@@ -217,6 +217,8 @@ void widget_update(Widget *w);
 // Draw widget
 void widget_draw(Widget *w);
 
+Widget *default_hit_test(Widget *w);
+
 Rectangle absolute_rect(Widget *w);
 
 void ui_register_root(Widget *w);
@@ -258,7 +260,6 @@ typedef struct {
 } Button;
 
 void button_layout(Widget *w, LayoutConstraint c);
-Widget *button_hit_test(Widget *w);
 void button_event(Widget *w);
 void button_update(Widget *w);
 void button_draw(Widget *w);
@@ -266,7 +267,7 @@ Button button_new(s8 label);
 
 static const WidgetVTable button_methods = {
     .layout = button_layout,
-    .hit_test = button_hit_test,
+    .hit_test = default_hit_test,
     .event = button_event,
     .update = button_update,
     .draw = button_draw,
@@ -305,7 +306,6 @@ typedef struct {
 } TextInput;
 
 void text_input_layout(Widget *w, LayoutConstraint c);
-Widget *text_input_hit_test(Widget *w);
 void text_input_event(Widget *w);
 void text_input_update(Widget *w);
 void text_input_draw(Widget *w);
@@ -313,7 +313,7 @@ TextInput text_input_new();
 
 static const WidgetVTable text_input_methods = {
     .layout = text_input_layout,
-    .hit_test = text_input_hit_test,
+    .hit_test = default_hit_test,
     .event = text_input_event,
     .update = text_input_update,
     .draw = text_input_draw,
@@ -1342,6 +1342,10 @@ void widget_draw(Widget *w) {
     pop_transform();
 }
 
+Widget *default_hit_test(Widget *w) {
+    return is_hit(w) ? w : NULL;
+}
+
 void screen_layout(Widget *w, LayoutConstraint c) {
     Screen *s = container_of(w, Screen, widget);
 
@@ -1407,10 +1411,6 @@ void button_layout(Widget *w, LayoutConstraint c) {
     //TODO: account for text wrapping
     w->size.h = 3;
     w->size.w = MIN(b->label.len + 2, c.max_w);
-}
-
-Widget *button_hit_test(Widget *w) {
-    return is_hit(w) ? w : NULL;
 }
 
 void button_event(Widget *w) {
@@ -1481,7 +1481,7 @@ Widget *div_hit_test(Widget *w) {
     }
     scroll_pop();
 
-    return is_hit(w) ? w : NULL;
+    return default_hit_test(w);
 }
 
 void div_event(Widget *w) {
@@ -1544,10 +1544,6 @@ void div_add(Div *div, Widget *child) {
 void text_input_layout(Widget *w, LayoutConstraint c) {
     w->size.h = 3;
     w->size.w = MIN(20, c.max_w);
-}
-
-Widget *text_input_hit_test(Widget *w) {
-    return is_hit(w) ? w : NULL;
 }
 
 void text_input_event(Widget *w) {
