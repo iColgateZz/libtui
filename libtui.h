@@ -1225,12 +1225,11 @@ Widget *ui_get_focus() {
 }
 
 void ui_dispatch_event(Widget *hit) {
-    Widget *w;
-    if (is_mouse_event()) {
-        w = hit;
-    } else {
-        w = ui_get_focus();
+    if (is_event(EMouseLeft) && is_mouse_pressed()) {
+        ui_set_focus(hit);
     }
+
+    Widget *w = is_mouse_event() ? hit : ui_get_focus();
 
     while (w) {
         widget_event(w);
@@ -1594,19 +1593,12 @@ void text_input_layout(Widget *w, LayoutConstraint c) {
     w->size.w = MIN(20, c.max_w);
 }
 
-//TODO: clicking away should remove the focus
 Widget *text_input_hit_test(Widget *w) {
     return is_hit(w) ? w : NULL;
 }
 
 void text_input_event(Widget *w) {
     TextInput *t = container_of(w, TextInput, widget);
-
-    if (is_event(EMouseLeft) && is_mouse_pressed()) {
-        ui_set_focus(w);
-        event_consume();
-        return;
-    }
 
     if (!ui_is_focused(w)) return;
 
