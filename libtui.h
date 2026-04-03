@@ -158,6 +158,18 @@ Transform pop_transform();
 Transform peek_transform();
 
 typedef struct {
+    i32 y_offset;
+} Scrollable;
+
+void scroll_apply(Scrollable *s) {
+    push_transform(0, -s->y_offset);
+}
+
+void scroll_pop() {
+    pop_transform();
+}
+
+typedef struct {
     i32 x;
     i32 y;
 } Position;
@@ -213,7 +225,7 @@ void ui_draw_box(Rectangle r);
 typedef struct {
     Widget widget;
     Widget *child;
-    i64 y_offset;
+    Scrollable scroll;
 } Screen;
 
 void screen_layout(Widget *w, LayoutConstraint c);
@@ -1365,9 +1377,9 @@ void screen_layout(Widget *w, LayoutConstraint c) {
 Widget *screen_hit_test(Widget *w) {
     Screen *s = container_of(w, Screen, widget);
  
-    push_transform(0, -s->y_offset);
+    scroll_apply(&s->scroll);
     Widget *result = widget_hit_test(s->child);
-    pop_transform();
+    scroll_pop();
 
     if (!result) result = w;
     return result;
@@ -1377,26 +1389,26 @@ void screen_event(Widget *w) {
     Screen *s = container_of(w, Screen, widget);
 
     if (is_event(EScrollDown)) {
-        s->y_offset++;
+        s->scroll.y_offset++;
     } else if (is_event(EScrollUp)) {
-        s->y_offset = MAX(0, s->y_offset - 1);
+        s->scroll.y_offset = MAX(0, s->scroll.y_offset - 1);
     }
 }
 
 void screen_update(Widget *w) {
     Screen *s = container_of(w, Screen, widget);
 
-    push_transform(0, -s->y_offset);
+    scroll_apply(&s->scroll);
     widget_update(s->child);
-    pop_transform();
+    scroll_pop();
 }
 
 void screen_draw(Widget *w) {
     Screen *s = container_of(w, Screen, widget);
     // debug(0, 0, "offset: %d", s->y_offset);
-    push_transform(0, -s->y_offset);
+    scroll_apply(&s->scroll);
     widget_draw(s->child);
-    pop_transform();
+    scroll_pop();
 }
 
 Screen screen_new() {
