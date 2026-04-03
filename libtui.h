@@ -203,10 +203,18 @@ struct Widget {
 
 da_typedef(WidgetList, Widget *);
 
+// Children widgets meausure their sizes
+// Parents set children's relative coordinates
 void widget_layout(Widget *w, LayoutConstraint c);
+// Test if widget was clicked
 Widget *widget_hit_test(Widget *w);
+// Handle event (Only called on widgets
+// that were clicked or focused)
 void widget_event(Widget *w);
+// Can be used for animations and stuff
+// that needs to be updated every frame
 void widget_update(Widget *w);
+// Draw widget
 void widget_draw(Widget *w);
 
 Rectangle absolute_rect(Widget *w);
