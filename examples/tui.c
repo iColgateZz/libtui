@@ -20,6 +20,8 @@ i32 main(i32 argc, byte *argv[]) {
     Button b4 = button_new(s8("item"));
     Button b5 = button_new(s8("item"));
 
+    content.container_style.direction = LAYOUT_ROW;
+
     div_add(&content, &b1.widget);
     div_add(&content, &b2.widget);
     div_add(&content, &b3.widget);

@@ -312,14 +312,16 @@ static const WidgetVTable button_methods = {
     .draw = button_draw,
 };
 
-typedef struct {
-    Widget widget;
-    WidgetList children;
-    Scrollable scroll;
-    u32 padding;
-    u32 spacing;
-    b32 scrollable;
-} Div;
+// typedef struct {
+//     Widget widget;
+//     WidgetList children;
+//     Scrollable scroll;
+//     u32 padding;
+//     u32 spacing;
+//     b32 scrollable;
+// } Div;
+
+typedef ContainerWidget Div;
 
 void div_layout(Widget *w, LayoutConstraint c);
 Widget *div_hit_test(Widget *w);
@@ -1582,33 +1584,33 @@ Button button_new(s8 label) {
     return (Button) { .label = label, .widget = wid};
 }
 
-void div_layout(Widget *w, LayoutConstraint c) {
-    Div *div = container_of(w, Div, widget);
+// void div_layout(Widget *w, LayoutConstraint c) {
+//     Div *div = container_of(w, Div, widget);
 
-    i32 max_w = 0;
-    i32 y = div->padding;
+//     i32 max_w = 0;
+//     i32 y = div->padding;
 
-    for (usize i = 0; i < div->children.count; i++) {
-        Widget *child = div->children.items[i];
+//     for (usize i = 0; i < div->children.count; i++) {
+//         Widget *child = div->children.items[i];
 
-        widget_layout(child, (LayoutConstraint) {
-            .max_w = c.max_w - div->padding * 2,
-            .max_h = c.max_h,
-        });
+//         widget_layout(child, (LayoutConstraint) {
+//             .max_w = c.max_w - div->padding * 2,
+//             .max_h = c.max_h,
+//         });
 
-        // not center aligned anymore
-        child->offset.x = div->padding;
-        child->offset.y = y;
+//         // not center aligned anymore
+//         child->offset.x = div->padding;
+//         child->offset.y = y;
 
-        y += child->size.h;
-        if (i < div->children.count - 1) y += div->spacing;
+//         y += child->size.h;
+//         if (i < div->children.count - 1) y += div->spacing;
 
-        max_w = MAX(max_w, child->size.w);
-    }
+//         max_w = MAX(max_w, child->size.w);
+//     }
 
-    w->size.w = max_w + div->padding * 2;
-    w->size.h = y + div->padding;
-}
+//     w->size.w = max_w + div->padding * 2;
+//     w->size.h = y + div->padding;
+// }
 
 Widget *div_hit_test(Widget *w) {
     Div *div = container_of(w, Div, widget);
@@ -1630,7 +1632,7 @@ Widget *div_hit_test(Widget *w) {
 
 void div_event(Widget *w) {
     Div *div = container_of(w, Div, widget);
-    if (!div->scrollable) return;
+    if (!div->container_style.scrollable) return;
 
     Scrollable *s = &div->scroll;
     if (is_event(EScrollDown)) {
@@ -1671,9 +1673,9 @@ void div_draw(Widget *w) {
 Div div_new(u32 padding, u32 spacing, b32 scrollable) {
     Div b = {0};
 
-    b.padding = padding;
-    b.spacing = spacing;
-    b.scrollable = scrollable;
+    b.widget.style.padding = padding;
+    b.container_style.spacing = spacing;
+    b.container_style.scrollable = scrollable;
 
     b.widget.vtable = &div_methods;
 
