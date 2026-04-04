@@ -184,6 +184,14 @@ typedef struct {
     u32 max_h;
 } LayoutConstraint;
 
+typedef struct {
+    u32 w, h; // fixed size
+    u32 padding, margin;
+    // alignment
+    // overflow handling?
+    // border y/n
+} Style;
+
 typedef struct Widget Widget;
 
 typedef struct {
