@@ -184,13 +184,20 @@ typedef struct {
     u32 max_h;
 } LayoutConstraint;
 
+typedef enum {
+    ALIGN_START,
+    ALIGN_CENTER,
+    ALIGN_END,
+    ALIGN_STRETCH,
+} Align;
+
 //TODO: use less memory
 typedef struct {
     u32 w, h; // fixed size
-    u32 padding, margin;
-    // alignment
-    // overflow handling?
-    // border y/n
+    Align align_self_x;
+    Align align_self_y;
+    u8 padding, margin;
+    u8 border;
 } Style;
 
 typedef struct Widget Widget;
@@ -213,6 +220,27 @@ struct Widget {
 
 da_typedef(WidgetList, Widget *);
 
+typedef enum {
+    LAYOUT_COLUMN,
+    LAYOUT_ROW,
+} LayoutDirection;
+
+typedef struct {
+    b32 scrollable;
+    LayoutDirection direction;
+    Align align_children_x;
+    Align align_children_y;
+    u8 spacing;
+    // overflow handling?
+} ContainerStyle;
+
+typedef struct {
+    Widget widget;
+    WidgetList children;
+    Scrollable scroll;
+    ContainerStyle container_style;
+} ContainerWidget;
+
 // Children widgets meausure their sizes
 // Parents set children's relative coordinates
 void widget_layout(Widget *w, LayoutConstraint c);
@@ -229,6 +257,8 @@ void widget_draw(Widget *w);
 
 Widget *default_hit_test(Widget *w);
 void default_update(Widget *w);
+
+void container_layout(Widget *w, LayoutConstraint c);
 
 Rectangle absolute_rect(Widget *w);
 
@@ -1356,6 +1386,44 @@ Widget *default_hit_test(Widget *w) {
 }
 
 void default_update(Widget *w) { UNUSED(w); }
+
+u32 min_of_positives(u32 a, u32 b) {
+    if (a == 0) return b;
+    return MIN(a, b);
+}
+
+void container_layout(Widget *w, LayoutConstraint c) {
+    ContainerWidget *container = container_of(w, ContainerWidget, widget);
+
+    // handle fixed size
+    u32 constrained_w = min_of_positives(container->widget.style.w, c.max_w);
+    u32 constrained_h = min_of_positives(container->widget.style.h, c.max_h);
+
+    // handle container styling
+    constrained_w -= (w->style.border + w->style.margin + w->style.padding) * 2;
+    constrained_h -= (w->style.border + w->style.margin + w->style.padding) * 2;
+
+    LayoutConstraint constraint = {.max_w = constrained_w, .max_h = constrained_h};
+
+    // No constraints for vertical growth
+    if (container->container_style.direction == LAYOUT_ROW) {
+        assert(container->children.count > 0);
+        constraint.max_w -= container->container_style.spacing * (container->children.count - 1);
+        constraint.max_w /= container->children.count;
+    }
+
+    for (usize i = 0; i < container->children.count; i++) {
+        Widget *child = container->children.items[i];
+        widget_layout(child, constraint);
+    } // Now, we know child's size (padding, margin, border are included)
+
+    u32 child_x = w->style.border + w->style.margin + w->style.padding;
+    u32 child_y = w->style.border + w->style.margin + w->style.padding;
+    for (usize i = 0; i < container->children.count; i++) {
+        Widget *child = container->children.items[i];
+
+    }
+}
 
 void screen_layout(Widget *w, LayoutConstraint c) {
     Screen *s = container_of(w, Screen, widget);
