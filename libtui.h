@@ -184,6 +184,7 @@ typedef struct {
     u32 max_h;
 } LayoutConstraint;
 
+//TODO: use less memory
 typedef struct {
     u32 w, h; // fixed size
     u32 padding, margin;
@@ -206,6 +207,7 @@ struct Widget {
     Position offset;
     Size size;
     Widget *parent;
+    Style style;
     const WidgetVTable *vtable;
 };
 
