@@ -175,13 +175,13 @@ typedef struct {
 } Position;
 
 typedef struct {
-    u32 w;
-    u32 h;
+    i32 w;
+    i32 h;
 } Size;
 
 typedef struct {
-    u32 max_w;
-    u32 max_h;
+    i32 max_w;
+    i32 max_h;
 } LayoutConstraint;
 
 typedef enum {
@@ -193,7 +193,7 @@ typedef enum {
 
 //TODO: use less memory
 typedef struct {
-    u32 w, h; // fixed size
+    i32 w, h; // fixed size
     Align align_self_x;
     Align align_self_y;
     u8 padding, margin;
@@ -1489,7 +1489,7 @@ void button_layout(Widget *w, LayoutConstraint c) {
 
     //TODO: account for text wrapping
     w->size.h = 3;
-    w->size.w = MIN(b->label.len + 2, c.max_w);
+    w->size.w = MIN(b->label.len + 2, (u32)c.max_w);
 }
 
 void button_event(Widget *w) {
@@ -1518,8 +1518,8 @@ Button button_new(s8 label) {
 void div_layout(Widget *w, LayoutConstraint c) {
     Div *div = container_of(w, Div, widget);
 
-    u32 max_w = 0;
-    u32 y = div->padding;
+    i32 max_w = 0;
+    i32 y = div->padding;
 
     for (usize i = 0; i < div->children.count; i++) {
         Widget *child = div->children.items[i];
