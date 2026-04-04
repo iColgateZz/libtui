@@ -71,7 +71,7 @@ typedef struct {
     b32 handled;
     union {
         struct {
-            u32 x, y;
+            i32 x, y;
             b32 pressed;
         } mouse;
         CodePoint parsed_cp;
@@ -80,8 +80,8 @@ typedef struct {
 } Event;
 
 b32 is_event(EventType e);
-u32 get_mouse_x();
-u32 get_mouse_y();
+i32 get_mouse_x();
+i32 get_mouse_y();
 b32 is_mouse_pressed();
 b32 is_mouse_released();
 b32 is_term_key(TermKey k);
@@ -188,7 +188,6 @@ typedef enum {
     ALIGN_START,
     ALIGN_CENTER,
     ALIGN_END,
-    ALIGN_STRETCH,
 } Align;
 
 //TODO: use less memory
@@ -331,7 +330,7 @@ Div div_new(u32 padding, u32 spacing, b32 scrollable);
 void div_add(Div *div, Widget *child);
 
 static const WidgetVTable div_methods = {
-    .layout = div_layout,
+    .layout = container_layout,
     .hit_test = div_hit_test,
     .event = div_event,
     .update = div_update,
@@ -398,8 +397,8 @@ u64 get_delta_time() { return Terminal.dt; }
 u32 get_terminal_width() { return Terminal.width; }
 u32 get_terminal_height() { return Terminal.height; }
 b32 is_event(EventType e) { return Terminal.event.type == e; }
-u32 get_mouse_x() { return Terminal.event.mouse.x; }
-u32 get_mouse_y() { return Terminal.event.mouse.y; }
+i32 get_mouse_x() { return Terminal.event.mouse.x; }
+i32 get_mouse_y() { return Terminal.event.mouse.y; }
 b32 is_mouse_pressed() { return Terminal.event.mouse.pressed; }
 b32 is_mouse_released() { return !is_mouse_pressed(); }
 b32 is_term_key(TermKey k) { return Terminal.event.term_key == k && Terminal.event.type == ETermKey; }
@@ -1387,7 +1386,7 @@ Widget *default_hit_test(Widget *w) {
 
 void default_update(Widget *w) { UNUSED(w); }
 
-u32 min_of_positives(u32 a, u32 b) {
+i32 min_of_positives(i32 a, i32 b) {
     if (a == 0) return b;
     return MIN(a, b);
 }
@@ -1396,32 +1395,100 @@ void container_layout(Widget *w, LayoutConstraint c) {
     ContainerWidget *container = container_of(w, ContainerWidget, widget);
 
     // handle fixed size
-    u32 constrained_w = min_of_positives(container->widget.style.w, c.max_w);
-    u32 constrained_h = min_of_positives(container->widget.style.h, c.max_h);
+    i32 constrained_w = min_of_positives(container->widget.style.w, c.max_w);
+    i32 constrained_h = min_of_positives(container->widget.style.h, c.max_h);
+
+    i32 border_padding = w->style.border + w->style.padding;
 
     // handle container styling
-    constrained_w -= (w->style.border + w->style.margin + w->style.padding) * 2;
-    constrained_h -= (w->style.border + w->style.margin + w->style.padding) * 2;
+    LayoutConstraint constraint = {
+        .max_w = constrained_w - border_padding * 2,
+        .max_h = constrained_h - border_padding * 2,
+    };
 
-    LayoutConstraint constraint = {.max_w = constrained_w, .max_h = constrained_h};
-
-    // No constraints for vertical growth
-    if (container->container_style.direction == LAYOUT_ROW) {
-        assert(container->children.count > 0);
-        constraint.max_w -= container->container_style.spacing * (container->children.count - 1);
-        constraint.max_w /= container->children.count;
-    }
-
+    // apply children constraints
     for (usize i = 0; i < container->children.count; i++) {
         Widget *child = container->children.items[i];
         widget_layout(child, constraint);
+
+        if (container->container_style.direction == LAYOUT_ROW) {
+            constraint.max_w -= (child->size.w + container->container_style.spacing);
+        }
     } // Now, we know child's size (padding, margin, border are included)
 
-    u32 child_x = w->style.border + w->style.margin + w->style.padding;
-    u32 child_y = w->style.border + w->style.margin + w->style.padding;
+    assert(constraint.max_w > 0);
+
+    // measure container width and height
+    i32 primary_axis = 0;
+    i32 secondary_axis_max = 0;
     for (usize i = 0; i < container->children.count; i++) {
         Widget *child = container->children.items[i];
 
+        if (container->container_style.direction == LAYOUT_COLUMN) {
+            primary_axis += child->size.h;
+            secondary_axis_max = MAX(secondary_axis_max, child->size.w);
+        } else {
+            primary_axis += child->size.w;
+            secondary_axis_max = MAX(secondary_axis_max, child->size.h);
+        }
+
+        if (i < container->children.count - 1) {
+            primary_axis += container->container_style.spacing;
+        }
+    }
+
+    if (container->container_style.direction == LAYOUT_COLUMN) {
+        w->size.w = secondary_axis_max + border_padding * 2;
+        w->size.h = primary_axis + border_padding * 2;
+    } else {
+        w->size.w = primary_axis + border_padding * 2;
+        w->size.h = secondary_axis_max + border_padding * 2;
+    }
+
+    i32 cursor_x = border_padding;
+    i32 cursor_y = border_padding;
+
+    for (usize i = 0; i < container->children.count; i++) {
+        Widget *child = container->children.items[i];
+
+        if (container->container_style.direction == LAYOUT_COLUMN) {
+            Align ax = child->style.align_self_x;
+
+            if (ax == ALIGN_CENTER) {
+                child->offset.x =
+                    (w->size.w - child->size.w) / 2;
+            }
+            else if (ax == ALIGN_END) {
+                child->offset.x =
+                    w->size.w - border_padding - child->size.w;
+            }
+            else { // start or stretch
+                child->offset.x = border_padding;
+            }
+
+            child->offset.y = cursor_y;
+
+            cursor_y += child->size.h + container->container_style.spacing;
+        }
+        else {
+            Align ay = child->style.align_self_y;
+
+            if (ay == ALIGN_CENTER) {
+                child->offset.y =
+                    (w->size.h - child->size.h) / 2;
+            }
+            else if (ay == ALIGN_END) {
+                child->offset.y =
+                    w->size.h - border_padding - child->size.h;
+            }
+            else {
+                child->offset.y = border_padding;
+            }
+
+            child->offset.x = cursor_x;
+
+            cursor_x += child->size.w + container->container_style.spacing;
+        }
     }
 }
 
