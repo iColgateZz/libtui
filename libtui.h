@@ -1425,6 +1425,9 @@ void container_layout_column(Widget *w, LayoutConstraint constraint) {
     for (usize i = 0; i < container->children.count; i++) {
         Widget *child = container->children.items[i];
         widget_layout(child, constraint);
+
+        constraint.max_h -= (child->size.h + container->container_style.spacing);
+        assert(constraint.max_h > 0);
     }
 
     // measure container width and height
