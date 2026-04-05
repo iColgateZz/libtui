@@ -1410,6 +1410,13 @@ void container_layout(Widget *w, LayoutConstraint c) {
         .max_h = constrained_h - border_padding * 2,
     };
 
+    //TODO: Is this correct? Constraint is not dynamic.
+    //      It lets the children overflow.
+    for (usize i = 0; i < container->children.count; i++) {
+        Widget *child = container->children.items[i];
+        widget_layout(child, constraint);
+    }
+
     if (container->container_style.direction == LAYOUT_COLUMN) {
         container_layout_column(w, constraint);
     } else {
@@ -1419,19 +1426,6 @@ void container_layout(Widget *w, LayoutConstraint c) {
 
 void container_layout_column(Widget *w, LayoutConstraint constraint) {
     ContainerWidget *container = container_of(w, ContainerWidget, widget);
-    LayoutConstraint c = constraint;
-
-    // measure children
-    for (usize i = 0; i < container->children.count; i++) {
-        Widget *child = container->children.items[i];
-        widget_layout(child, c);
-
-        c.max_h -= child->size.h;
-        if (i < container->children.count - 1) {
-            c.max_h -= container->container_style.spacing;
-        }
-        assert(c.max_h > 0);
-    }
 
     // measure container width and height
     i32 primary_axis = 0;
@@ -1468,18 +1462,6 @@ void container_layout_column(Widget *w, LayoutConstraint constraint) {
 
 void container_layout_row(Widget *w, LayoutConstraint constraint) {
     ContainerWidget *container = container_of(w, ContainerWidget, widget);
-    LayoutConstraint c = constraint;
-
-    for (usize i = 0; i < container->children.count; i++) {
-        Widget *child = container->children.items[i];
-        widget_layout(child, c);
-
-        c.max_w -= child->size.w;
-        if (i < container->children.count - 1) {
-            c.max_w -= container->container_style.spacing;
-        }
-        assert(c.max_w > 0);
-    }
 
     i32 primary_axis = 0;
     i32 secondary_axis_max = 0;
