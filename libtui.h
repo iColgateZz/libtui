@@ -1239,6 +1239,8 @@ void draw_box(Rectangle r) {
 
 // TUI
 
+i32 aligned_pos(i32 parent_size, i32 parent_features, i32 child_size, Align align);
+
 static struct {
     TransformStack transforms;
     Screen screen;
@@ -1455,18 +1457,7 @@ void container_layout(Widget *w, LayoutConstraint c) {
         if (container->container_style.direction == LAYOUT_COLUMN) {
             Align ax = child->style.align_self_x;
 
-            if (ax == ALIGN_CENTER) {
-                child->offset.x =
-                    (w->size.w - child->size.w) / 2;
-            }
-            else if (ax == ALIGN_END) {
-                child->offset.x =
-                    w->size.w - border_padding - child->size.w;
-            }
-            else { // start or stretch
-                child->offset.x = border_padding;
-            }
-
+            child->offset.x = aligned_pos(w->size.w, border_padding, child->size.w, ax);
             child->offset.y = cursor_y;
 
             cursor_y += child->size.h + container->container_style.spacing;
@@ -1474,22 +1465,21 @@ void container_layout(Widget *w, LayoutConstraint c) {
         else {
             Align ay = child->style.align_self_y;
 
-            if (ay == ALIGN_CENTER) {
-                child->offset.y =
-                    (w->size.h - child->size.h) / 2;
-            }
-            else if (ay == ALIGN_END) {
-                child->offset.y =
-                    w->size.h - border_padding - child->size.h;
-            }
-            else {
-                child->offset.y = border_padding;
-            }
-
+            child->offset.y = aligned_pos(w->size.h, border_padding, child->size.h, ay);
             child->offset.x = cursor_x;
 
             cursor_x += child->size.w + container->container_style.spacing;
         }
+    }
+}
+
+i32 aligned_pos(i32 parent_size, i32 parent_features, i32 child_size, Align align) {
+    if (align == ALIGN_CENTER) {
+        return (parent_size - child_size) / 2;
+    } else if (align == ALIGN_END) {
+        return parent_size - parent_features - child_size;
+    } else {
+        return parent_features;
     }
 }
 
