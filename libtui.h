@@ -1239,6 +1239,8 @@ void draw_box(Rectangle r) {
 
 // TUI
 
+void container_layout_column(Widget *w, LayoutConstraint constraint);
+void container_layout_row(Widget *w, LayoutConstraint constraint);
 i32 aligned_pos(i32 parent_size, i32 parent_features, i32 child_size, Align align);
 
 static struct {
@@ -1409,17 +1411,21 @@ void container_layout(Widget *w, LayoutConstraint c) {
         .max_h = constrained_h - border_padding * 2,
     };
 
-    // apply children constraints
+    if (container->container_style.direction == LAYOUT_COLUMN) {
+        container_layout_column(w, constraint);
+    } else {
+        container_layout_row(w, constraint);
+    }
+}
+
+void container_layout_column(Widget *w, LayoutConstraint constraint) {
+    ContainerWidget *container = container_of(w, ContainerWidget, widget);
+
+    // measure children
     for (usize i = 0; i < container->children.count; i++) {
         Widget *child = container->children.items[i];
         widget_layout(child, constraint);
-
-        if (container->container_style.direction == LAYOUT_ROW) {
-            constraint.max_w -= (child->size.w + container->container_style.spacing);
-        }
-    } // Now, we know child's size (padding, margin, border are included)
-
-    assert(constraint.max_w > 0);
+    }
 
     // measure container width and height
     i32 primary_axis = 0;
@@ -1427,49 +1433,68 @@ void container_layout(Widget *w, LayoutConstraint c) {
     for (usize i = 0; i < container->children.count; i++) {
         Widget *child = container->children.items[i];
 
-        if (container->container_style.direction == LAYOUT_COLUMN) {
-            primary_axis += child->size.h;
-            secondary_axis_max = MAX(secondary_axis_max, child->size.w);
-        } else {
-            primary_axis += child->size.w;
-            secondary_axis_max = MAX(secondary_axis_max, child->size.h);
-        }
+        primary_axis += child->size.h;
+        secondary_axis_max = MAX(secondary_axis_max, child->size.w);
 
         if (i < container->children.count - 1) {
             primary_axis += container->container_style.spacing;
         }
     }
 
-    if (container->container_style.direction == LAYOUT_COLUMN) {
-        w->size.w = secondary_axis_max + border_padding * 2;
-        w->size.h = primary_axis + border_padding * 2;
-    } else {
-        w->size.w = primary_axis + border_padding * 2;
-        w->size.h = secondary_axis_max + border_padding * 2;
-    }
+    i32 border_padding = w->style.border + w->style.padding;
+    w->size.w = secondary_axis_max + border_padding * 2;
+    w->size.h = primary_axis + border_padding * 2;
 
-    i32 cursor_x = border_padding;
-    i32 cursor_y = border_padding;
+    primary_axis = border_padding;
+    for (usize i = 0; i < container->children.count; i++) {
+        Widget *child = container->children.items[i];
+        Align ax = child->style.align_self_x;
+
+        child->offset.x = aligned_pos(w->size.w, border_padding, child->size.w, ax);
+        child->offset.y = primary_axis;
+
+        primary_axis += child->size.h + container->container_style.spacing;
+    }
+}
+
+void container_layout_row(Widget *w, LayoutConstraint constraint) {
+    ContainerWidget *container = container_of(w, ContainerWidget, widget);
 
     for (usize i = 0; i < container->children.count; i++) {
         Widget *child = container->children.items[i];
+        widget_layout(child, constraint);
 
-        if (container->container_style.direction == LAYOUT_COLUMN) {
-            Align ax = child->style.align_self_x;
+        constraint.max_w -= (child->size.w + container->container_style.spacing);
+        assert(constraint.max_w > 0);
+    }
 
-            child->offset.x = aligned_pos(w->size.w, border_padding, child->size.w, ax);
-            child->offset.y = cursor_y;
+    i32 primary_axis = 0;
+    i32 secondary_axis_max = 0;
+    for (usize i = 0; i < container->children.count; i++) {
+        Widget *child = container->children.items[i];
 
-            cursor_y += child->size.h + container->container_style.spacing;
+        primary_axis += child->size.w;
+        secondary_axis_max = MAX(secondary_axis_max, child->size.h);
+
+        if (i < container->children.count - 1) {
+            primary_axis += container->container_style.spacing;
         }
-        else {
-            Align ay = child->style.align_self_y;
+    }
 
-            child->offset.y = aligned_pos(w->size.h, border_padding, child->size.h, ay);
-            child->offset.x = cursor_x;
+    i32 border_padding = w->style.border + w->style.padding;
+    w->size.w = primary_axis + border_padding * 2;
+    w->size.h = secondary_axis_max + border_padding * 2;
 
-            cursor_x += child->size.w + container->container_style.spacing;
-        }
+    primary_axis = border_padding;
+    for (usize i = 0; i < container->children.count; i++) {
+        Widget *child = container->children.items[i];
+
+        Align ay = child->style.align_self_y;
+
+        child->offset.y = aligned_pos(w->size.h, border_padding, child->size.h, ay);
+        child->offset.x = primary_axis;
+
+        primary_axis += child->size.w + container->container_style.spacing;
     }
 }
 
