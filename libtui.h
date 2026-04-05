@@ -265,6 +265,7 @@ void container_layout(Widget *w, LayoutConstraint c);
 i32 container_max_scroll_y(Widget *w);
 void container_scroll_incr(Widget *w);
 void container_scroll_decr(Widget *w);
+void container_add(Widget *c, Widget *w);
 
 Rectangle absolute_rect(Widget *w);
 
@@ -305,7 +306,6 @@ void div_event(Widget *w);
 void div_update(Widget *w);
 void div_draw(Widget *w);
 Div div_new(u32 padding, u32 spacing);
-void div_add(Div *div, Widget *child);
 
 static const WidgetVTable div_methods = {
     .layout = container_layout,
@@ -1229,7 +1229,7 @@ void ui_register_root(Widget *w) {
     UI.root = div_new(0, 0);
     UI.root.container_style.direction = LAYOUT_COLUMN;
     UI.root.container_style.overflow = OVERFLOW_SCROLL_Y;
-    div_add(&UI.root, w);
+    container_add(&UI.root.widget, w);
 
     da_append(&UI.transforms, ((Transform){0,0}));
 }
@@ -1529,6 +1529,12 @@ void container_scroll_decr(Widget *w) {
     }
 }
 
+void container_add(Widget *c, Widget *w) {
+    ContainerWidget *container = container_of(c, ContainerWidget, widget);
+    w->parent = c;
+    da_append(&container->children, w);
+}
+
 void button_layout(Widget *w, LayoutConstraint c) {
     Button *b = container_of(w, Button, widget);
 
@@ -1629,12 +1635,6 @@ Div div_new(u32 padding, u32 spacing) {
     b.widget.vtable = &div_methods;
 
     return b;
-}
-
-//TODO: replace with generic container_add
-void div_add(Div *div, Widget *child) { 
-    child->parent = &div->widget;
-    da_append(&div->children, child);
 }
 
 void text_input_layout(Widget *w, LayoutConstraint c) {
