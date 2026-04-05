@@ -1390,6 +1390,7 @@ Widget *default_hit_test(Widget *w) {
 
 void default_update(Widget *w) { UNUSED(w); }
 
+//TODO: better name
 i32 min_of_positives(i32 a, i32 b) {
     if (a == 0) return b;
     return MIN(a, b);
