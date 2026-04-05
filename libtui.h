@@ -1396,8 +1396,6 @@ void container_layout(Widget *w, LayoutConstraint c) {
         .max_h = constrained_h - border_padding * 2,
     };
 
-    //TODO: Is this correct? Constraint is not dynamic.
-    //      It lets the children overflow.
     for (usize i = 0; i < container->children.count; i++) {
         Widget *child = container->children.items[i];
         widget_layout(child, constraint);
