@@ -1348,8 +1348,6 @@ b32 is_hit(Widget *w) {
     return point_in_rect(get_mouse_x(), get_mouse_y(), r);
 }
 
-//TODO: parents give constraint + starting x, y.
-//      children align themselves in the given rectangle?
 void widget_layout(Widget *w, LayoutConstraint c) {
     w->vtable->layout(w, c);
 }
