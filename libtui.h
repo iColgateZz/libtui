@@ -1427,7 +1427,6 @@ void container_layout(Widget *w, LayoutConstraint c) {
 void container_layout_column(Widget *w, LayoutConstraint constraint) {
     ContainerWidget *container = container_of(w, ContainerWidget, widget);
 
-    // measure container width and height
     i32 primary_axis = 0;
     i32 secondary_axis_max = 0;
     for (usize i = 0; i < container->children.count; i++) {
@@ -1451,9 +1450,9 @@ void container_layout_column(Widget *w, LayoutConstraint constraint) {
     i32 start = aligned_primary_pos(border_padding, extra, container->container_style.align_children);
     for (usize i = 0; i < container->children.count; i++) {
         Widget *child = container->children.items[i];
-        Align ax = child->style.align_self;
+        Align align = child->style.align_self;
 
-        child->offset.x = aligned_secondary_pos(w->size.w, border_padding, child->size.w, ax);
+        child->offset.x = aligned_secondary_pos(w->size.w, border_padding, child->size.w, align);
         child->offset.y = start;
 
         start += child->size.h + container->container_style.spacing;
@@ -1486,11 +1485,10 @@ void container_layout_row(Widget *w, LayoutConstraint constraint) {
     i32 start = aligned_primary_pos(border_padding, extra, container->container_style.align_children);
     for (usize i = 0; i < container->children.count; i++) {
         Widget *child = container->children.items[i];
+        Align align = child->style.align_self;
 
-        Align ay = child->style.align_self;
-
-        child->offset.y = aligned_secondary_pos(w->size.h, border_padding, child->size.h, ay);
         child->offset.x = start;
+        child->offset.y = aligned_secondary_pos(w->size.h, border_padding, child->size.h, align);
 
         start += child->size.w + container->container_style.spacing;
     }
