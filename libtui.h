@@ -278,28 +278,6 @@ void ui_put_str(i32 x, i32 y, byte *s, usize len);
 void ui_draw_line(i32 x0, i32 y0, i32 x1, i32 y1, CodePoint cp);
 void ui_draw_box(Rectangle r);
 
-//TODO: replace with generic container
-typedef struct {
-    Widget widget;
-    Widget *child;
-    Scrollable scroll;
-} Screen;
-
-void screen_layout(Widget *w, LayoutConstraint c);
-Widget *screen_hit_test(Widget *w);
-void screen_event(Widget *w);
-void screen_update(Widget *w);
-void screen_draw(Widget *w);
-Screen screen_new();
-
-static const WidgetVTable screen_methods = {
-    .layout = screen_layout,
-    .hit_test = screen_hit_test,
-    .event = screen_event,
-    .update = screen_update,
-    .draw = screen_draw,
-};
-
 typedef struct {
     Widget widget;
     s8 label;
@@ -319,18 +297,8 @@ static const WidgetVTable button_methods = {
     .draw = button_draw,
 };
 
-// typedef struct {
-//     Widget widget;
-//     WidgetList children;
-//     Scrollable scroll;
-//     u32 padding;
-//     u32 spacing;
-//     b32 scrollable;
-// } Div;
-
 typedef ContainerWidget Div;
 
-void div_layout(Widget *w, LayoutConstraint c);
 Widget *div_hit_test(Widget *w);
 void div_event(Widget *w);
 void div_update(Widget *w);
@@ -1252,14 +1220,15 @@ i32 aligned_secondary_pos(i32 parent_size, i32 parent_features, i32 child_size, 
 
 static struct {
     TransformStack transforms;
-    Screen screen;
+    ContainerWidget root;
     Widget *focus;
 } UI = {0};
 
 void ui_register_root(Widget *w) {
-    UI.screen = screen_new();
-    UI.screen.child = w;
-    w->parent = &UI.screen.widget;
+    UI.root = div_new(0, 0);
+    UI.root.container_style.direction = LAYOUT_COLUMN;
+    UI.root.container_style.overflow = OVERFLOW_SCROLL_Y;
+    div_add(&UI.root, w);
 
     da_append(&UI.transforms, ((Transform){0,0}));
 }
@@ -1296,11 +1265,14 @@ void ui_run() {
         .max_w = get_terminal_width(),
     };
 
-    widget_layout(&UI.screen.widget, c);
-    Widget *hit = widget_hit_test(&UI.screen.widget);
+    UI.root.widget.style.w = get_terminal_width();
+    UI.root.widget.style.h = get_terminal_height();
+
+    widget_layout(&UI.root.widget, c);
+    Widget *hit = widget_hit_test(&UI.root.widget);
     ui_dispatch_event(hit);
-    widget_update(&UI.screen.widget);
-    widget_draw(&UI.screen.widget);
+    widget_update(&UI.root.widget);
+    widget_draw(&UI.root.widget);
 }
 
 void ui_put_cp(i32 x, i32 y, CodePoint cp) {
@@ -1554,65 +1526,6 @@ void container_scroll_decr(Widget *w) {
     }
 }
 
-void screen_layout(Widget *w, LayoutConstraint c) {
-    Screen *s = container_of(w, Screen, widget);
-
-    w->offset.x = 0;
-    w->offset.y = 0;
-    w->size.w = c.max_w;
-    w->size.h = c.max_h;
-
-    Widget *child = s->child;
-    widget_layout(child, (LayoutConstraint){
-        .max_w = w->size.w,
-        .max_h = w->size.h,
-    });
-
-    child->offset.x = (w->size.w - child->size.w) / 2;
-    child->offset.y = (w->size.h - child->size.h) / 2;
-}
-
-Widget *screen_hit_test(Widget *w) {
-    Screen *s = container_of(w, Screen, widget);
- 
-    scroll_apply(&s->scroll);
-    Widget *result = widget_hit_test(s->child);
-    scroll_pop();
-
-    if (!result) result = w;
-    return result;
-}
-
-void screen_event(Widget *w) {
-    Screen *s = container_of(w, Screen, widget);
-
-    if (is_event(EScrollDown)) {
-        s->scroll.y_offset++;
-    } else if (is_event(EScrollUp)) {
-        s->scroll.y_offset = MAX(0, s->scroll.y_offset - 1);
-    }
-}
-
-void screen_update(Widget *w) {
-    Screen *s = container_of(w, Screen, widget);
-
-    scroll_apply(&s->scroll);
-    widget_update(s->child);
-    scroll_pop();
-}
-
-void screen_draw(Widget *w) {
-    Screen *s = container_of(w, Screen, widget);
-    // debug(0, 0, "offset: %d", s->y_offset);
-    scroll_apply(&s->scroll);
-    widget_draw(s->child);
-    scroll_pop();
-}
-
-Screen screen_new() {
-    return (Screen) {.widget.vtable = &screen_methods};
-}
-
 void button_layout(Widget *w, LayoutConstraint c) {
     Button *b = container_of(w, Button, widget);
 
@@ -1643,34 +1556,6 @@ Button button_new(s8 label) {
     Widget wid = { .vtable = &button_methods };
     return (Button) { .label = label, .widget = wid};
 }
-
-// void div_layout(Widget *w, LayoutConstraint c) {
-//     Div *div = container_of(w, Div, widget);
-
-//     i32 max_w = 0;
-//     i32 y = div->padding;
-
-//     for (usize i = 0; i < div->children.count; i++) {
-//         Widget *child = div->children.items[i];
-
-//         widget_layout(child, (LayoutConstraint) {
-//             .max_w = c.max_w - div->padding * 2,
-//             .max_h = c.max_h,
-//         });
-
-//         // not center aligned anymore
-//         child->offset.x = div->padding;
-//         child->offset.y = y;
-
-//         y += child->size.h;
-//         if (i < div->children.count - 1) y += div->spacing;
-
-//         max_w = MAX(max_w, child->size.w);
-//     }
-
-//     w->size.w = max_w + div->padding * 2;
-//     w->size.h = y + div->padding;
-// }
 
 Widget *div_hit_test(Widget *w) {
     Div *div = container_of(w, Div, widget);
@@ -1718,8 +1603,11 @@ void div_update(Widget *w) {
 
 void div_draw(Widget *w) {
     Div *div = container_of(w, Div, widget);
-    Rectangle r = {0, 0, w->size.w, w->size.h};
-    ui_draw_box(r);
+
+    if (w->style.border) {
+        Rectangle r = {0, 0, w->size.w, w->size.h};
+        ui_draw_box(r);
+    }
 
     scroll_apply(&div->scroll);
     for (usize i = 0; i < div->children.count; i++) {
