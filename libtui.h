@@ -193,8 +193,7 @@ typedef enum {
 //TODO: use less memory
 typedef struct {
     i32 w, h; // fixed size
-    Align align_self_x;
-    Align align_self_y;
+    Align align_self;
     u8 padding, margin;
     u8 border;
 } Style;
@@ -227,8 +226,7 @@ typedef enum {
 typedef struct {
     b32 scrollable;
     LayoutDirection direction;
-    Align align_children_x;
-    Align align_children_y;
+    Align align_children;
     u8 spacing;
     // overflow handling?
 } ContainerStyle;
@@ -1241,7 +1239,8 @@ void draw_box(Rectangle r) {
 
 void container_layout_column(Widget *w, LayoutConstraint constraint);
 void container_layout_row(Widget *w, LayoutConstraint constraint);
-i32 aligned_pos(i32 parent_size, i32 parent_features, i32 child_size, Align align);
+i32 aligned_primary_pos(i32 start, i32 extra_space, Align align);
+i32 aligned_secondary_pos(i32 parent_size, i32 parent_features, i32 child_size, Align align);
 
 static struct {
     TransformStack transforms;
@@ -1448,15 +1447,18 @@ void container_layout_column(Widget *w, LayoutConstraint constraint) {
     w->size.w = secondary_axis_max + border_padding * 2;
     w->size.h = primary_axis + border_padding * 2;
 
-    primary_axis = border_padding;
+    i32 content_h = primary_axis + border_padding * 2;
+    i32 extra = w->size.h - content_h;
+
+    i32 start = aligned_primary_pos(border_padding, extra, container->container_style.align_children);
     for (usize i = 0; i < container->children.count; i++) {
         Widget *child = container->children.items[i];
-        Align ax = child->style.align_self_x;
+        Align ax = child->style.align_self;
 
-        child->offset.x = aligned_pos(w->size.w, border_padding, child->size.w, ax);
-        child->offset.y = primary_axis;
+        child->offset.x = aligned_secondary_pos(w->size.w, border_padding, child->size.w, ax);
+        child->offset.y = start;
 
-        primary_axis += child->size.h + container->container_style.spacing;
+        start += child->size.h + container->container_style.spacing;
     }
 }
 
@@ -1488,20 +1490,33 @@ void container_layout_row(Widget *w, LayoutConstraint constraint) {
     w->size.w = primary_axis + border_padding * 2;
     w->size.h = secondary_axis_max + border_padding * 2;
 
-    primary_axis = border_padding;
+    i32 content_w = primary_axis + border_padding * 2;
+    i32 extra = w->size.w - content_w;
+
+    i32 start = aligned_primary_pos(border_padding, extra, container->container_style.align_children);
     for (usize i = 0; i < container->children.count; i++) {
         Widget *child = container->children.items[i];
 
-        Align ay = child->style.align_self_y;
+        Align ay = child->style.align_self;
 
-        child->offset.y = aligned_pos(w->size.h, border_padding, child->size.h, ay);
-        child->offset.x = primary_axis;
+        child->offset.y = aligned_secondary_pos(w->size.h, border_padding, child->size.h, ay);
+        child->offset.x = start;
 
-        primary_axis += child->size.w + container->container_style.spacing;
+        start += child->size.w + container->container_style.spacing;
     }
 }
 
-i32 aligned_pos(i32 parent_size, i32 parent_features, i32 child_size, Align align) {
+i32 aligned_primary_pos(i32 start, i32 extra_space, Align align) {
+    if (align == ALIGN_CENTER) {
+        return start + extra_space / 2;
+    } else if (align == ALIGN_END) {
+        return start + extra_space;
+    } else {
+        return start;
+    }
+}
+
+i32 aligned_secondary_pos(i32 parent_size, i32 parent_features, i32 child_size, Align align) {
     if (align == ALIGN_CENTER) {
         return (parent_size - child_size) / 2;
     } else if (align == ALIGN_END) {

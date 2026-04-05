@@ -21,6 +21,10 @@ i32 main(i32 argc, byte *argv[]) {
     Button b5 = button_new(s8("item"));
 
     content.container_style.direction = LAYOUT_ROW;
+    content.container_style.spacing = 5;
+
+    // content.widget.style.padding = 5;
+    content.widget.style.h = 40;
 
     div_add(&content, &b1.widget);
     div_add(&content, &b2.widget);
