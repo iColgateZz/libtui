@@ -1419,14 +1419,18 @@ void container_layout(Widget *w, LayoutConstraint c) {
 
 void container_layout_column(Widget *w, LayoutConstraint constraint) {
     ContainerWidget *container = container_of(w, ContainerWidget, widget);
+    LayoutConstraint c = constraint;
 
     // measure children
     for (usize i = 0; i < container->children.count; i++) {
         Widget *child = container->children.items[i];
-        widget_layout(child, constraint);
+        widget_layout(child, c);
 
-        constraint.max_h -= (child->size.h + container->container_style.spacing);
-        assert(constraint.max_h > 0);
+        c.max_h -= child->size.h;
+        if (i < container->children.count - 1) {
+            c.max_h -= container->container_style.spacing;
+        }
+        assert(c.max_h > 0);
     }
 
     // measure container width and height
@@ -1444,8 +1448,8 @@ void container_layout_column(Widget *w, LayoutConstraint constraint) {
     }
 
     i32 border_padding = w->style.border + w->style.padding;
-    w->size.w = secondary_axis_max + border_padding * 2;
-    w->size.h = primary_axis + border_padding * 2;
+    w->size.w = MIN(MAX(secondary_axis_max, w->style.w), constraint.max_w) + border_padding * 2;
+    w->size.h = MIN(MAX(primary_axis, w->style.h), constraint.max_h) + border_padding * 2;
 
     i32 content_h = primary_axis + border_padding * 2;
     i32 extra = w->size.h - content_h;
@@ -1464,13 +1468,17 @@ void container_layout_column(Widget *w, LayoutConstraint constraint) {
 
 void container_layout_row(Widget *w, LayoutConstraint constraint) {
     ContainerWidget *container = container_of(w, ContainerWidget, widget);
+    LayoutConstraint c = constraint;
 
     for (usize i = 0; i < container->children.count; i++) {
         Widget *child = container->children.items[i];
-        widget_layout(child, constraint);
+        widget_layout(child, c);
 
-        constraint.max_w -= (child->size.w + container->container_style.spacing);
-        assert(constraint.max_w > 0);
+        c.max_w -= child->size.w;
+        if (i < container->children.count - 1) {
+            c.max_w -= container->container_style.spacing;
+        }
+        assert(c.max_w > 0);
     }
 
     i32 primary_axis = 0;
@@ -1487,8 +1495,8 @@ void container_layout_row(Widget *w, LayoutConstraint constraint) {
     }
 
     i32 border_padding = w->style.border + w->style.padding;
-    w->size.w = primary_axis + border_padding * 2;
-    w->size.h = secondary_axis_max + border_padding * 2;
+    w->size.w = MIN(MAX(primary_axis, w->style.w), constraint.max_w) + border_padding * 2;
+    w->size.h = MIN(MAX(secondary_axis_max, w->style.h), constraint.max_h) + border_padding * 2;
 
     i32 content_w = primary_axis + border_padding * 2;
     i32 extra = w->size.w - content_w;
