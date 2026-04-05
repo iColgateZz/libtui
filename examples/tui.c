@@ -13,7 +13,7 @@ i32 main(i32 argc, byte *argv[]) {
     init_terminal();
     set_max_timeout_ms(10);
 
-    Div content = div_new(1,0, false);
+    Div content = div_new(1,0);
     Button b1 = button_new(s8("item"));
     b1.widget.style.align_self = ALIGN_CENTER;
     Button b2 = button_new(s8("item"));
@@ -23,11 +23,12 @@ i32 main(i32 argc, byte *argv[]) {
     b5.widget.style.align_self = ALIGN_END;
 
     // content.container_style.direction = LAYOUT_ROW;
-    // content.container_style.spacing = 2;
-    content.container_style.align_children = ALIGN_CENTER;
+    content.container_style.spacing = 5;
+    content.container_style.align_children = ALIGN_START;
+    content.container_style.overflow = OVERFLOW_SCROLL_Y;
 
     // content.widget.style.padding = 5;
-    content.widget.style.h = 30;
+    // content.widget.style.h = 30;
     // content.widget.style.w = 100;
 
     div_add(&content, &b1.widget);
@@ -36,7 +37,7 @@ i32 main(i32 argc, byte *argv[]) {
     div_add(&content, &b4.widget);
     div_add(&content, &b5.widget);
 
-    Div scroll = div_new(0, 0, true);
+    Div scroll = div_new(1, 0);
     div_add(&scroll, &content.widget);
 
     ui_register_root(&scroll.widget);
@@ -53,7 +54,7 @@ i32 main(i32 argc, byte *argv[]) {
 }
 
 void e1() {
-    Div layout = div_new(5, 1, false);
+    Div layout = div_new(5, 1);
 
     s8 label1 = s8("What is Chandler Bing's job?");
     s8 label2 = s8("Transponster");
@@ -70,7 +71,7 @@ void e1() {
 }
 
 void e2() {
-    Div content = div_new(1,1, false);
+    Div content = div_new(1,1);
     Button b1 = button_new(s8("item"));
     Button b2 = button_new(s8("item"));
     Button b3 = button_new(s8("item"));
@@ -83,14 +84,14 @@ void e2() {
     div_add(&content, &b4.widget);
     div_add(&content, &b5.widget);
 
-    Div scroll = div_new(0, 0, true);
+    Div scroll = div_new(0, 0);
     div_add(&scroll, &content.widget);
 
     ui_register_root(&scroll.widget);
 }
 
 void e3() {
-    Div root = div_new(1,1, false);
+    Div root = div_new(1,1);
 
     Button b = button_new(s8("Click"));
     TextInput input = text_input_new();

@@ -223,12 +223,16 @@ typedef enum {
     LAYOUT_ROW,
 } LayoutDirection;
 
+typedef enum {
+    OVERFLOW_CLIP,
+    OVERFLOW_SCROLL_Y,
+} Overflow;
+
 typedef struct {
-    b32 scrollable;
     LayoutDirection direction;
     Align align_children;
     u8 spacing;
-    // overflow handling?
+    Overflow overflow;
 } ContainerStyle;
 
 typedef struct {
@@ -236,6 +240,7 @@ typedef struct {
     WidgetList children;
     Scrollable scroll;
     ContainerStyle container_style;
+    Size content_size;
 } ContainerWidget;
 
 // Children widgets meausure their sizes
@@ -256,6 +261,9 @@ Widget *default_hit_test(Widget *w);
 void default_update(Widget *w);
 
 void container_layout(Widget *w, LayoutConstraint c);
+i32 container_max_scroll_y(Widget *w);
+void container_scroll_incr(Widget *w);
+void container_scroll_decr(Widget *w);
 
 Rectangle absolute_rect(Widget *w);
 
@@ -327,7 +335,7 @@ Widget *div_hit_test(Widget *w);
 void div_event(Widget *w);
 void div_update(Widget *w);
 void div_draw(Widget *w);
-Div div_new(u32 padding, u32 spacing, b32 scrollable);
+Div div_new(u32 padding, u32 spacing);
 void div_add(Div *div, Widget *child);
 
 static const WidgetVTable div_methods = {
@@ -1442,6 +1450,10 @@ void container_layout_column(Widget *w, LayoutConstraint constraint) {
     }
 
     i32 border_padding = w->style.border + w->style.padding;
+
+    container->content_size.w = secondary_axis_max + border_padding * 2;
+    container->content_size.h = primary_axis + border_padding * 2;
+
     w->size.w = MIN(MAX(secondary_axis_max, w->style.w), constraint.max_w) + border_padding * 2;
     w->size.h = MIN(MAX(primary_axis, w->style.h), constraint.max_h) + border_padding * 2;
 
@@ -1477,6 +1489,10 @@ void container_layout_row(Widget *w, LayoutConstraint constraint) {
     }
 
     i32 border_padding = w->style.border + w->style.padding;
+
+    container->content_size.w = primary_axis + border_padding * 2;
+    container->content_size.h = secondary_axis_max + border_padding * 2;
+
     w->size.w = MIN(MAX(primary_axis, w->style.w), constraint.max_w) + border_padding * 2;
     w->size.h = MIN(MAX(secondary_axis_max, w->style.h), constraint.max_h) + border_padding * 2;
 
@@ -1515,6 +1531,29 @@ i32 aligned_secondary_pos(i32 parent_size, i32 parent_features, i32 child_size, 
     }
 }
 
+i32 container_max_scroll_y(Widget *w) {
+    ContainerWidget *c = container_of(w, ContainerWidget, widget);
+    i32 overflow = c->content_size.h - c->widget.size.h;
+    return MAX(0, overflow);
+}
+
+void container_scroll_incr(Widget *w) {
+    ContainerWidget *c = container_of(w, ContainerWidget, widget);
+
+    i32 max_scoll = container_max_scroll_y(w);
+    if (c->scroll.y_offset < max_scoll) {
+        c->scroll.y_offset++;
+    }
+}
+
+void container_scroll_decr(Widget *w) {
+    ContainerWidget *c = container_of(w, ContainerWidget, widget);
+
+    if (c->scroll.y_offset > 0) {
+        c->scroll.y_offset--;
+    }
+}
+
 void screen_layout(Widget *w, LayoutConstraint c) {
     Screen *s = container_of(w, Screen, widget);
 
@@ -1526,7 +1565,7 @@ void screen_layout(Widget *w, LayoutConstraint c) {
     Widget *child = s->child;
     widget_layout(child, (LayoutConstraint){
         .max_w = w->size.w,
-        .max_h = w->size.h
+        .max_h = w->size.h,
     });
 
     child->offset.x = (w->size.w - child->size.w) / 2;
@@ -1653,16 +1692,15 @@ Widget *div_hit_test(Widget *w) {
 
 void div_event(Widget *w) {
     Div *div = container_of(w, Div, widget);
-    if (!div->container_style.scrollable) return;
+    if (div->container_style.overflow != OVERFLOW_SCROLL_Y) return;
 
-    Scrollable *s = &div->scroll;
     if (is_event(EScrollDown)) {
-        s->y_offset++;
+        container_scroll_incr(&div->widget);
         event_consume();
     }
 
     if (is_event(EScrollUp)) {
-        s->y_offset = MAX(0, s->y_offset - 1);
+        container_scroll_decr(&div->widget);
         event_consume();
     }
 }
@@ -1691,12 +1729,11 @@ void div_draw(Widget *w) {
     scroll_pop();
 }
 
-Div div_new(u32 padding, u32 spacing, b32 scrollable) {
+Div div_new(u32 padding, u32 spacing) {
     Div b = {0};
 
     b.widget.style.padding = padding;
     b.container_style.spacing = spacing;
-    b.container_style.scrollable = scrollable;
 
     b.widget.vtable = &div_methods;
 
