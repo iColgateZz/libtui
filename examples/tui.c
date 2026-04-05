@@ -13,16 +13,38 @@ i32 main(i32 argc, byte *argv[]) {
     init_terminal();
     set_max_timeout_ms(10);
 
-    Div root = div_new(1,1);
-    root.widget.style.border = 1;
+    Div content = div_new(0,0);
+    Button b1 = button_new(s8("item"));
+    b1.widget.style.align_self = ALIGN_CENTER;
+    Button b2 = button_new(s8("item"));
+    Button b3 = button_new(s8("itemasdnakjsdkalsdjlnaskd"));
+    Button b4 = button_new(s8("item"));
+    Button b5 = button_new(s8("item"));
+    b5.widget.style.align_self = ALIGN_END;
 
-    Button b = button_new(s8("Click"));
-    TextInput input = text_input_new();
+    // content.container_style.direction = LAYOUT_ROW;
+    content.container_style.spacing = 10;
+    content.container_style.align_children = ALIGN_START;
+    content.container_style.overflow = OVERFLOW_SCROLL_Y;
 
-    div_add(&root, &b.widget);
-    div_add(&root, &input.widget);
+    // content.widget.style.padding = 5;
+    // content.widget.style.h = 30;
+    // content.widget.style.w = 100;
+    content.widget.style.border = 1;
 
-    ui_register_root(&root.widget);
+    div_add(&content, &b1.widget);
+    div_add(&content, &b2.widget);
+    div_add(&content, &b3.widget);
+    div_add(&content, &b4.widget);
+    div_add(&content, &b5.widget);
+
+    Div scroll = div_new(0, 0);
+    scroll.container_style.overflow = OVERFLOW_CLIP;
+    // scroll.widget.style.border = 1;
+    scroll.widget.style.align_self = ALIGN_CENTER;
+    div_add(&scroll, &content.widget);
+
+    ui_register_root(&scroll.widget);
 
     while (!is_codepoint(cp("q"))) {
         begin_frame();
