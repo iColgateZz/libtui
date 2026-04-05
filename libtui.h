@@ -224,7 +224,7 @@ typedef enum {
 } LayoutDirection;
 
 typedef enum {
-    OVERFLOW_VISIBLE,
+    OVERFLOW_VISIBLE_Y,
     OVERFLOW_CLIP,
     OVERFLOW_SCROLL_Y,
 } Overflow;
@@ -1384,7 +1384,7 @@ void container_layout(Widget *w, LayoutConstraint c) {
     i32 constrained_w = min_of_positives(container->widget.style.w, c.max_w);
     i32 constrained_h = min_of_positives(container->widget.style.h, c.max_h);
 
-    if (container->container_style.overflow == OVERFLOW_VISIBLE) {
+    if (container->container_style.overflow == OVERFLOW_VISIBLE_Y) {
         constrained_h = INT32_MAX;
     }
 

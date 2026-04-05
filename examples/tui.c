@@ -25,7 +25,7 @@ i32 main(i32 argc, byte *argv[]) {
     // content.container_style.direction = LAYOUT_ROW;
     content.container_style.spacing = 10;
     content.container_style.align_children = ALIGN_START;
-    content.container_style.overflow = OVERFLOW_SCROLL_Y;
+    // content.container_style.overflow = OVERFLOW_SCROLL_Y;
 
     // content.widget.style.padding = 5;
     // content.widget.style.h = 30;
@@ -39,7 +39,7 @@ i32 main(i32 argc, byte *argv[]) {
     div_add(&content, &b5.widget);
 
     Div scroll = div_new(0, 0);
-    scroll.container_style.overflow = OVERFLOW_CLIP;
+    scroll.container_style.overflow = OVERFLOW_VISIBLE_Y;
     // scroll.widget.style.border = 1;
     scroll.widget.style.align_self = ALIGN_CENTER;
     div_add(&scroll, &content.widget);
