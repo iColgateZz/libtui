@@ -1504,7 +1504,7 @@ i32 aligned_primary_pos(i32 start, i32 extra_space, Align align) {
 
 i32 aligned_secondary_pos(i32 parent_size, i32 parent_features, i32 child_size, Align align) {
     if (align == ALIGN_CENTER) {
-        return (parent_size - child_size) / 2;
+        return parent_features + ((parent_size - parent_features * 2) - child_size) / 2;
     } else if (align == ALIGN_END) {
         return parent_size - parent_features - child_size;
     } else {
