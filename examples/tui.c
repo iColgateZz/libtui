@@ -13,24 +13,31 @@ i32 main(i32 argc, byte *argv[]) {
     init_terminal();
     set_max_timeout_ms(10);
 
-    Div content = div_new(0,0);
-    Button b1 = button_new(s8("item"));
-    b1.widget.style.align_self = ALIGN_CENTER;
-    Button b2 = button_new(s8("item"));
-    Button b3 = button_new(s8("itemasdnakjsdkalsdjlnaskd"));
-    Button b4 = button_new(s8("item"));
-    Button b5 = button_new(s8("item"));
-    b5.widget.style.align_self = ALIGN_END;
+    Div scroll = div_new(0, 0);
+    scroll.container_style.overflow = OVERFLOW_SCROLL_Y;
+    // scroll.widget.style.w = 100;
+    // scroll.widget.style.border = 1;
+    // scroll.widget.style.align_self = ALIGN_CENTER;
 
+    Div content = div_new(0,0);
     // content.container_style.direction = LAYOUT_ROW;
     content.container_style.spacing = 10;
     content.container_style.align_children = ALIGN_START;
-    // content.container_style.overflow = OVERFLOW_SCROLL_Y;
+    content.container_style.overflow = OVERFLOW_VISIBLE_Y;
 
     // content.widget.style.padding = 5;
-    // content.widget.style.h = 30;
-    // content.widget.style.w = 100;
+    content.widget.style.h = 30;
+    content.widget.style.w = 100;
     content.widget.style.border = 1;
+    content.widget.style.align_self = ALIGN_CENTER;
+
+    Button b1 = button_new(s8("item"));
+    b1.widget.style.align_self = ALIGN_CENTER;
+    Button b2 = button_new(s8("item"));
+    Button b3 = button_new(s8("itemasdasdasd"));
+    Button b4 = button_new(s8("item"));
+    Button b5 = button_new(s8("item"));
+    b5.widget.style.align_self = ALIGN_END;
 
     container_add(&content.widget, &b1.widget);
     container_add(&content.widget, &b2.widget);
@@ -38,10 +45,6 @@ i32 main(i32 argc, byte *argv[]) {
     container_add(&content.widget, &b4.widget);
     container_add(&content.widget, &b5.widget);
 
-    Div scroll = div_new(0, 0);
-    scroll.container_style.overflow = OVERFLOW_SCROLL_Y;
-    // scroll.widget.style.border = 1;
-    scroll.widget.style.align_self = ALIGN_CENTER;
     container_add(&scroll.widget, &content.widget);
 
     ui_register_root(&scroll.widget);

@@ -1377,24 +1377,26 @@ i32 min_of_positives(i32 a, i32 b) {
     return MIN(a, b);
 }
 
+i32 widget_border_padding(Widget *w) {
+    return w->style.border + w->style.padding;
+}
+
 void container_layout(Widget *w, LayoutConstraint c) {
     ContainerWidget *container = container_of(w, ContainerWidget, widget);
 
-    // handle fixed size
-    i32 constrained_w = min_of_positives(container->widget.style.w, c.max_w);
-    i32 constrained_h = min_of_positives(container->widget.style.h, c.max_h);
+    i32 bp = widget_border_padding(w);
+
+    i32 constrained_w = min_of_positives(container->widget.style.w, c.max_w - bp * 2);
+    i32 constrained_h = min_of_positives(container->widget.style.h, c.max_h - bp * 2);
+
+    LayoutConstraint constraint = {
+        .max_w = constrained_w,
+        .max_h = constrained_h,
+    };
 
     if (container->container_style.overflow == OVERFLOW_VISIBLE_Y) {
-        constrained_h = INT32_MAX;
+        constraint.max_h = INT32_MAX;
     }
-
-    i32 border_padding = w->style.border + w->style.padding;
-
-    // handle container styling
-    LayoutConstraint constraint = {
-        .max_w = constrained_w - border_padding * 2,
-        .max_h = constrained_h - border_padding * 2,
-    };
 
     for (usize i = 0; i < container->children.count; i++) {
         Widget *child = container->children.items[i];
@@ -1424,23 +1426,27 @@ void container_layout_column(Widget *w, LayoutConstraint constraint) {
         }
     }
 
-    i32 border_padding = w->style.border + w->style.padding;
+    i32 bp = widget_border_padding(w);
 
-    container->content_size.w = secondary_axis_max + border_padding * 2;
-    container->content_size.h = primary_axis + border_padding * 2;
+    i32 content_w = MAX(secondary_axis_max, w->style.w);
+    i32 content_h = MAX(primary_axis, w->style.h);
 
-    w->size.w = MIN(MAX(secondary_axis_max, w->style.w), constraint.max_w) + border_padding * 2;
-    w->size.h = MIN(MAX(primary_axis, w->style.h), constraint.max_h) + border_padding * 2;
+    // Store how much is visible (including bp)
+    w->size.w = MIN(content_w, constraint.max_w) + bp * 2;
+    w->size.h = MIN(content_h, constraint.max_h) + bp * 2;
 
-    i32 content_h = primary_axis + border_padding * 2;
-    i32 extra = w->size.h - content_h;
+    // Store actual content size (that may overflow)
+    container->content_size.w = secondary_axis_max;
+    container->content_size.h = primary_axis;
 
-    i32 start = aligned_primary_pos(border_padding, extra, container->container_style.align_children);
+    i32 extra = w->size.h - primary_axis - bp * 2;
+
+    i32 start = aligned_primary_pos(bp, extra, container->container_style.align_children);
     for (usize i = 0; i < container->children.count; i++) {
         Widget *child = container->children.items[i];
         Align align = child->style.align_self;
 
-        child->offset.x = aligned_secondary_pos(w->size.w, border_padding, child->size.w, align);
+        child->offset.x = aligned_secondary_pos(w->size.w, bp, child->size.w, align);
         child->offset.y = start;
 
         start += child->size.h + container->container_style.spacing;
@@ -1508,7 +1514,7 @@ i32 aligned_secondary_pos(i32 parent_size, i32 parent_features, i32 child_size, 
 
 i32 container_max_scroll_y(Widget *w) {
     ContainerWidget *c = container_of(w, ContainerWidget, widget);
-    i32 overflow = c->content_size.h - c->widget.size.h;
+    i32 overflow = c->content_size.h - (c->widget.size.h - widget_border_padding(w) * 2);
     return MAX(0, overflow);
 }
 
