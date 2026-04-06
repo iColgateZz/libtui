@@ -1681,4 +1681,14 @@ TextInput text_input_new() {
     return t;
 }
 
+//TODO: flex layout
+//TODO: stack layout
+//TODO: text wrapping in widgets
+//TODO: list widget with scrollbar?
+//TODO: keyboard focus navigation
+//TODO: margin support
+//TODO: other css-like properties
+//TODO: generic border/margin/padding drawing
+//TODO: widget tree debugger
+
 #endif //LIBTUI_IMPL
