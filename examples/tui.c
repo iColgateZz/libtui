@@ -14,24 +14,24 @@ i32 main(i32 argc, byte *argv[]) {
     set_max_timeout_ms(10);
 
     Div scroll = div_new(0, 0);
-    scroll.container_style.overflow = OVERFLOW_SCROLL_Y;
+    scroll.container_style.overflow = OVERFLOW_VISIBLE_Y;
     // scroll.widget.style.w = 100;
     scroll.widget.style.border = 1;
     scroll.widget.style.padding = 1;
-    // scroll.widget.style.align_self = ALIGN_CENTER;
+    scroll.widget.style.align_self = ALIGN_CENTER;
 
     Div content = div_new(0,0);
-    content.container_style.direction = LAYOUT_ROW;
-    //TODO: children overflow, align_end, overflow_scoll 
+    // content.container_style.direction = LAYOUT_ROW;
+    //TODO: children overflow, align_end/center, overflow_scoll 
     //      allow to scroll down even though the overflow
     //      is above.
-    content.container_style.spacing = 20;
-    content.container_style.align_children = ALIGN_CENTER;
-    content.container_style.overflow = OVERFLOW_SCROLL_Y;
+    content.container_style.spacing = 10;
+    // content.container_style.align_children = ALIGN_CENTER;
+    content.container_style.overflow = OVERFLOW_CLIP;
 
     // content.widget.style.padding = 5;
     // content.widget.style.h = 30;
-    content.widget.style.w = 100;
+    // content.widget.style.w = 100;
     content.widget.style.border = 1;
     content.widget.style.align_self = ALIGN_CENTER;
 

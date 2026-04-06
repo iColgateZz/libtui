@@ -1394,10 +1394,6 @@ void container_layout(Widget *w, LayoutConstraint c) {
         .max_h = constrained_h,
     };
 
-    if (container->container_style.overflow == OVERFLOW_VISIBLE_Y) {
-        constraint.max_h = INT32_MAX;
-    }
-
     for (usize i = 0; i < container->children.count; i++) {
         Widget *child = container->children.items[i];
         widget_layout(child, constraint);
@@ -1433,7 +1429,8 @@ void container_layout_column(Widget *w, LayoutConstraint constraint) {
 
     // Store how much is visible (including bp)
     w->size.w = MIN(content_w, constraint.max_w) + bp * 2;
-    w->size.h = MIN(content_h, constraint.max_h) + bp * 2;
+    if (container->container_style.overflow == OVERFLOW_VISIBLE_Y) w->size.h = content_h + bp * 2;
+    else w->size.h = MIN(content_h, constraint.max_h) + bp * 2;
 
     // Store actual content size (that may overflow)
     container->content_size.w = secondary_axis_max;
