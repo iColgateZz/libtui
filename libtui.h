@@ -143,7 +143,6 @@ void debug(i32 x, i32 y, byte *fmt, ...);
 
 // TUI
 
-//TODO: Add styling
 //TODO: Heap allocate widgets
 //TODO: Apply styles with the macro trick use by 'cmd_run'
 typedef struct {
