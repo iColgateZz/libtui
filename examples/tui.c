@@ -14,7 +14,7 @@ i32 main(i32 argc, byte *argv[]) {
     set_max_timeout_ms(10);
 
     Div scroll = div_new(0, 0);
-    scroll.container_style.overflow = OVERFLOW_VISIBLE_Y;
+    scroll.container_style.overflow = OVERFLOW_SCROLL_Y;
     // scroll.widget.style.w = 100;
     scroll.widget.style.border = 1;
     scroll.widget.style.padding = 1;
@@ -22,12 +22,9 @@ i32 main(i32 argc, byte *argv[]) {
 
     Div content = div_new(0,0);
     // content.container_style.direction = LAYOUT_ROW;
-    //TODO: children overflow, align_end/center, overflow_scoll 
-    //      allow to scroll down even though the overflow
-    //      is above.
     content.container_style.spacing = 10;
-    // content.container_style.align_children = ALIGN_CENTER;
-    content.container_style.overflow = OVERFLOW_CLIP;
+    content.container_style.align_children = ALIGN_END;
+    content.container_style.overflow = OVERFLOW_SCROLL_Y;
 
     // content.widget.style.padding = 5;
     // content.widget.style.h = 30;

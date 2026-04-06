@@ -242,6 +242,7 @@ typedef struct {
     Scrollable scroll;
     ContainerStyle container_style;
     Size content_size;
+    i32 content_start_y;
 } ContainerWidget;
 
 // Children widgets meausure their sizes
@@ -1439,6 +1440,7 @@ void container_layout_column(Widget *w, LayoutConstraint constraint) {
     i32 extra = w->size.h - primary_axis - bp * 2;
 
     i32 start = aligned_primary_pos(bp, extra, container->container_style.align_children);
+    container->content_start_y = start - bp;
     for (usize i = 0; i < container->children.count; i++) {
         Widget *child = container->children.items[i];
         Align align = child->style.align_self;
@@ -1515,8 +1517,15 @@ i32 aligned_secondary_pos(i32 parent_size, i32 parent_features, i32 child_size, 
 
 i32 container_max_scroll_y(Widget *w) {
     ContainerWidget *c = container_of(w, ContainerWidget, widget);
-    i32 overflow = c->content_size.h - (c->widget.size.h - widget_border_padding(w) * 2);
-    return MAX(0, overflow);
+
+    i32 viewport = c->widget.size.h - widget_border_padding(w) * 2;
+
+    i32 content_top = c->content_start_y;
+    i32 content_bottom = content_top + c->content_size.h;
+
+    i32 max_scroll = content_bottom - viewport;
+
+    return MAX(0, max_scroll);
 }
 
 void container_scroll_incr(Widget *w) {
@@ -1531,7 +1540,8 @@ void container_scroll_incr(Widget *w) {
 void container_scroll_decr(Widget *w) {
     ContainerWidget *c = container_of(w, ContainerWidget, widget);
 
-    if (c->scroll.y_offset > 0) {
+    i32 min_scroll = c->content_start_y;
+    if (c->scroll.y_offset > min_scroll) {
         c->scroll.y_offset--;
     }
 }
