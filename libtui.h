@@ -1469,24 +1469,28 @@ void container_layout_row(Widget *w, LayoutConstraint constraint) {
         }
     }
 
-    i32 border_padding = w->style.border + w->style.padding;
+    i32 bp = widget_border_padding(w);
 
-    container->content_size.w = primary_axis + border_padding * 2;
-    container->content_size.h = secondary_axis_max + border_padding * 2;
+    i32 content_w = MAX(primary_axis, w->style.w);
+    i32 content_h = MAX(secondary_axis_max, w->style.h);
 
-    w->size.w = MIN(MAX(primary_axis, w->style.w), constraint.max_w) + border_padding * 2;
-    w->size.h = MIN(MAX(secondary_axis_max, w->style.h), constraint.max_h) + border_padding * 2;
+    // Store how much is visible (including bp)
+    w->size.w = MIN(content_w, constraint.max_w) + bp * 2;
+    w->size.h = MIN(content_h, constraint.max_h) + bp * 2;
 
-    i32 content_w = primary_axis + border_padding * 2;
-    i32 extra = w->size.w - content_w;
+    // Store actual content size (that may overflow)
+    container->content_size.w = primary_axis;
+    container->content_size.h = secondary_axis_max;
 
-    i32 start = aligned_primary_pos(border_padding, extra, container->container_style.align_children);
+    i32 extra = w->size.w - primary_axis - bp * 2;
+
+    i32 start = aligned_primary_pos(bp, extra, container->container_style.align_children);
     for (usize i = 0; i < container->children.count; i++) {
         Widget *child = container->children.items[i];
         Align align = child->style.align_self;
 
         child->offset.x = start;
-        child->offset.y = aligned_secondary_pos(w->size.h, border_padding, child->size.h, align);
+        child->offset.y = aligned_secondary_pos(w->size.h, bp, child->size.h, align);
 
         start += child->size.w + container->container_style.spacing;
     }
