@@ -159,6 +159,9 @@ Transform peek_transform();
 
 typedef struct {
     i32 y_offset;
+    i32 content_start;
+    i32 content_size;
+    i32 viewport_size;
 } Scrollable;
 
 void scroll_apply(Scrollable *s) {
@@ -167,6 +170,24 @@ void scroll_apply(Scrollable *s) {
 
 void scroll_pop() {
     pop_transform();
+}
+
+i32 scroll_min(Scrollable *s) {
+    return s->content_start;
+}
+
+i32 scroll_max(Scrollable *s) {
+    return s->content_start + s->content_size - s->viewport_size;
+}
+
+void scroll_incr(Scrollable *s) {
+    if (s->y_offset < scroll_max(s))
+        s->y_offset++;
+}
+
+void scroll_decr(Scrollable *s) {
+    if (s->y_offset > scroll_min(s))
+        s->y_offset--;
 }
 
 typedef struct {
@@ -241,8 +262,6 @@ typedef struct {
     WidgetList children;
     Scrollable scroll;
     ContainerStyle container_style;
-    Size content_size;
-    i32 content_start_y;
 } ContainerWidget;
 
 // Children widgets meausure their sizes
@@ -263,9 +282,6 @@ Widget *default_hit_test(Widget *w);
 void default_update(Widget *w);
 
 void container_layout(Widget *w, LayoutConstraint c);
-i32 container_max_scroll_y(Widget *w);
-void container_scroll_incr(Widget *w);
-void container_scroll_decr(Widget *w);
 void container_add(Widget *c, Widget *w);
 
 Rectangle absolute_rect(Widget *w);
@@ -1433,14 +1449,13 @@ void container_layout_column(Widget *w, LayoutConstraint constraint) {
     if (container->container_style.overflow == OVERFLOW_VISIBLE_Y) w->size.h = content_h + bp * 2;
     else w->size.h = MIN(content_h, constraint.max_h) + bp * 2;
 
-    // Store actual content size (that may overflow)
-    container->content_size.w = secondary_axis_max;
-    container->content_size.h = primary_axis;
-
     i32 extra = w->size.h - primary_axis - bp * 2;
-
     i32 start = aligned_primary_pos(bp, extra, container->container_style.align_children);
-    container->content_start_y = start - bp;
+
+    container->scroll.content_size = primary_axis;
+    container->scroll.content_start = start - bp;
+    container->scroll.viewport_size = w->size.h - bp * 2;
+
     for (usize i = 0; i < container->children.count; i++) {
         Widget *child = container->children.items[i];
         Align align = child->style.align_self;
@@ -1477,13 +1492,9 @@ void container_layout_row(Widget *w, LayoutConstraint constraint) {
     w->size.w = MIN(content_w, constraint.max_w) + bp * 2;
     w->size.h = MIN(content_h, constraint.max_h) + bp * 2;
 
-    // Store actual content size (that may overflow)
-    container->content_size.w = primary_axis;
-    container->content_size.h = secondary_axis_max;
-
     i32 extra = w->size.w - primary_axis - bp * 2;
-
     i32 start = aligned_primary_pos(bp, extra, container->container_style.align_children);
+
     for (usize i = 0; i < container->children.count; i++) {
         Widget *child = container->children.items[i];
         Align align = child->style.align_self;
@@ -1512,37 +1523,6 @@ i32 aligned_secondary_pos(i32 parent_size, i32 parent_features, i32 child_size, 
         return parent_size - parent_features - child_size;
     } else {
         return parent_features;
-    }
-}
-
-i32 container_max_scroll_y(Widget *w) {
-    ContainerWidget *c = container_of(w, ContainerWidget, widget);
-
-    i32 viewport = c->widget.size.h - widget_border_padding(w) * 2;
-
-    i32 content_top = c->content_start_y;
-    i32 content_bottom = content_top + c->content_size.h;
-
-    i32 max_scroll = content_bottom - viewport;
-
-    return MAX(0, max_scroll);
-}
-
-void container_scroll_incr(Widget *w) {
-    ContainerWidget *c = container_of(w, ContainerWidget, widget);
-
-    i32 max_scoll = container_max_scroll_y(w);
-    if (c->scroll.y_offset < max_scoll) {
-        c->scroll.y_offset++;
-    }
-}
-
-void container_scroll_decr(Widget *w) {
-    ContainerWidget *c = container_of(w, ContainerWidget, widget);
-
-    i32 min_scroll = c->content_start_y;
-    if (c->scroll.y_offset > min_scroll) {
-        c->scroll.y_offset--;
     }
 }
 
@@ -1606,12 +1586,12 @@ void div_event(Widget *w) {
     if (div->container_style.overflow != OVERFLOW_SCROLL_Y) return;
 
     if (is_event(EScrollDown)) {
-        container_scroll_incr(&div->widget);
+        scroll_incr(&div->scroll);
         event_consume();
     }
 
     if (is_event(EScrollUp)) {
-        container_scroll_decr(&div->widget);
+        scroll_decr(&div->scroll);
         event_consume();
     }
 }
