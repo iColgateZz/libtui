@@ -321,7 +321,7 @@ Widget *div_hit_test(Widget *w);
 void div_event(Widget *w);
 void div_update(Widget *w);
 void div_draw(Widget *w);
-Div div_new(u32 padding, u32 spacing);
+Div *div_new(u32 padding, u32 spacing);
 
 static const WidgetVTable div_methods = {
     .layout = container_layout,
@@ -1237,17 +1237,21 @@ i32 aligned_secondary_pos(i32 parent_size, i32 parent_features, i32 child_size, 
 
 static struct {
     TransformStack transforms;
-    ContainerWidget root;
+    ContainerWidget *root;
     Widget *focus;
+    Arena allocator;
 } UI = {0};
+
+void ui_init() {
+    UI.allocator = arena_init(MB(16));
+    da_append(&UI.transforms, ((Transform){0,0}));
+}
 
 void ui_register_root(Widget *w) {
     UI.root = div_new(0, 0);
-    UI.root.container_style.direction = LAYOUT_COLUMN;
-    UI.root.container_style.overflow = OVERFLOW_SCROLL_Y;
-    container_add(&UI.root.widget, w);
-
-    da_append(&UI.transforms, ((Transform){0,0}));
+    UI.root->container_style.direction = LAYOUT_COLUMN;
+    UI.root->container_style.overflow = OVERFLOW_SCROLL_Y;
+    container_add(&UI.root->widget, w);
 }
 
 void ui_set_focus(Widget *w) {
@@ -1282,14 +1286,14 @@ void ui_run() {
         .max_w = get_terminal_width(),
     };
 
-    UI.root.widget.style.w = get_terminal_width();
-    UI.root.widget.style.h = get_terminal_height();
+    UI.root->widget.style.w = get_terminal_width();
+    UI.root->widget.style.h = get_terminal_height();
 
-    widget_layout(&UI.root.widget, c);
-    Widget *hit = widget_hit_test(&UI.root.widget);
+    widget_layout(&UI.root->widget, c);
+    Widget *hit = widget_hit_test(&UI.root->widget);
     ui_dispatch_event(hit);
-    widget_update(&UI.root.widget);
-    widget_draw(&UI.root.widget);
+    widget_update(&UI.root->widget);
+    widget_draw(&UI.root->widget);
 }
 
 void ui_put_cp(i32 x, i32 y, CodePoint cp) {
@@ -1622,13 +1626,14 @@ void div_draw(Widget *w) {
     scroll_pop();
 }
 
-Div div_new(u32 padding, u32 spacing) {
-    Div b = {0};
+Div *div_new(u32 padding, u32 spacing) {
+    Div *b = arena_push(&UI.allocator, Div);
+    assert(b);
 
-    b.widget.style.padding = padding;
-    b.container_style.spacing = spacing;
+    b->widget.style.padding = padding;
+    b->container_style.spacing = spacing;
 
-    b.widget.vtable = &div_methods;
+    b->widget.vtable = &div_methods;
 
     return b;
 }
