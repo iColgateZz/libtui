@@ -341,7 +341,7 @@ typedef struct {
 void text_input_layout(Widget *w, LayoutConstraint c);
 void text_input_event(Widget *w);
 void text_input_draw(Widget *w);
-TextInput text_input_new();
+TextInput *text_input_new();
 
 static const WidgetVTable text_input_methods = {
     .layout = text_input_layout,
@@ -1685,9 +1685,9 @@ void text_input_draw(Widget *w) {
     }
 }
 
-TextInput text_input_new() {
-    TextInput t = {0};
-    t.widget.vtable = &text_input_methods;
+TextInput *text_input_new() {
+    TextInput *t = arena_push(&UI.allocator, TextInput);
+    t->widget.vtable = &text_input_methods;
     return t;
 }
 
