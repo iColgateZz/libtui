@@ -305,7 +305,7 @@ typedef struct {
 void button_layout(Widget *w, LayoutConstraint c);
 void button_event(Widget *w);
 void button_draw(Widget *w);
-Button button_new(s8 label);
+Button *button_new(s8 label);
 
 static const WidgetVTable button_methods = {
     .layout = button_layout,
@@ -1561,9 +1561,14 @@ void button_draw(Widget *w) {
     if (b->state) ui_put_str(1, 1, b->label.s, b->label.len);
 }
 
-Button button_new(s8 label) {
-    Widget wid = { .vtable = &button_methods };
-    return (Button) { .label = label, .widget = wid};
+Button *button_new(s8 label) {
+    Button *b = arena_push(&UI.allocator, Button);
+    assert(b);
+
+    b->label = label;
+    b->widget.vtable = &button_methods;
+
+    return b;
 }
 
 Widget *div_hit_test(Widget *w) {

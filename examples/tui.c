@@ -33,19 +33,19 @@ i32 main(i32 argc, byte *argv[]) {
     content->widget.style.border = 1;
     content->widget.style.align_self = ALIGN_CENTER;
 
-    Button b1 = button_new(s8("item"));
-    b1.widget.style.align_self = ALIGN_CENTER;
-    Button b2 = button_new(s8("item"));
-    Button b3 = button_new(s8("itemasdasdasd"));
-    Button b4 = button_new(s8("item"));
-    Button b5 = button_new(s8("item"));
-    b5.widget.style.align_self = ALIGN_END;
+    Button *b1 = button_new(s8("item"));
+    b1->widget.style.align_self = ALIGN_CENTER;
+    Button *b2 = button_new(s8("item"));
+    Button *b3 = button_new(s8("itemasdasdasd"));
+    Button *b4 = button_new(s8("item"));
+    Button *b5 = button_new(s8("item"));
+    b5->widget.style.align_self = ALIGN_END;
 
-    container_add(&content->widget, &b1.widget);
-    container_add(&content->widget, &b2.widget);
-    container_add(&content->widget, &b3.widget);
-    container_add(&content->widget, &b4.widget);
-    container_add(&content->widget, &b5.widget);
+    container_add(&content->widget, &b1->widget);
+    container_add(&content->widget, &b2->widget);
+    container_add(&content->widget, &b3->widget);
+    container_add(&content->widget, &b4->widget);
+    container_add(&content->widget, &b5->widget);
 
     container_add(&scroll->widget, &content->widget);
 
@@ -69,14 +69,14 @@ void e1() {
     s8 label2 = s8("Transponster");
     s8 label3 = s8("That's not even a word..");
 
-    Button b  = button_new(label1);
-    Button b2 = button_new(label2);
-    Button b3 = button_new(label3);
+    Button *b  = button_new(label1);
+    Button *b2 = button_new(label2);
+    Button *b3 = button_new(label3);
 
     ui_register_root(&layout->widget);
-    container_add(&layout->widget, &b.widget);
-    container_add(&layout->widget, &b2.widget);
-    container_add(&layout->widget, &b3.widget);
+    container_add(&layout->widget, &b->widget);
+    container_add(&layout->widget, &b2->widget);
+    container_add(&layout->widget, &b3->widget);
 }
 
 void e2() {
@@ -87,10 +87,10 @@ void e3() {
     Div *root = div_new(1,1);
     root->widget.style.border = 1;
 
-    Button b = button_new(s8("Click"));
+    Button *b = button_new(s8("Click"));
     TextInput input = text_input_new();
 
-    container_add(&root->widget, &b.widget);
+    container_add(&root->widget, &b->widget);
     container_add(&root->widget, &input.widget);
 
     ui_register_root(&root->widget);
