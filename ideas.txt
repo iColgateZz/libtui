@@ -1,10 +1,25 @@
-1. weather app that fetches some info and draws rain or snow or whatever
-2. game of life or something simmilar
-3. something with mouse clicks and dragging
-4. picture/video to ascii
-5. math & coordinate transformation
-6. some 3D stuff in terminal
-7. something like btop
-8. simple text editor
-9. infinite map/pattern, can go up, down, left, right
-10. UI framework
+TUI ideas:
+    1. weather app that fetches some info and draws rain or snow or whatever
+    2. game of life or something simmilar
+    3. something with mouse clicks and dragging
+    4. picture/video to ascii
+    5. math & coordinate transformation
+    6. some 3D stuff in terminal
+    7. something like btop
+    8. simple text editor
+    9. infinite map/pattern, can go up, down, left, right
+    10. UI framework
+
+C ideas:
+    1. package manager?
+    2. build system?
+    3. more advanced preprocessor:
+        a. runs before standard C preprocessor
+        b. generates function declarations (functions at the top of the file can reference ones below)
+        c. more advanced macros (comp-time AST-based code generation, simple reflection)
+        d. not a new language, not fixing C, just adding syntactic sugar
+        e. full compatibility with C (as it just generates C code)
+        f. user can use '.', preprocessor automatically replaces it with '->' when needed?
+        g. automaticly generated implementations (e.g. enum -> string function, struct initializer function)
+        h. defer?
+        i. a module system?
