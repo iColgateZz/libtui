@@ -12,6 +12,8 @@ typedef struct {
     u8 display_width;
 } CodePoint;
 
+list_def(CodePoint);
+
 #define cp(s)      cp_from_utf8(s, sizeof(s) - 1)
 CodePoint cp_from_utf8(byte *s, u8 len);
 CodePoint cp_from_raw(byte *raw, u8 raw_len, u8 display_width);
@@ -149,7 +151,7 @@ typedef struct {
     i32 y;
 } Transform;
 
-da_typedef(TransformStack, Transform);
+list_def(Transform);
 
 void push_transform(i32 dx, i32 dy);
 Transform pop_transform();
@@ -235,7 +237,8 @@ struct Widget {
     const WidgetVTable *vtable;
 };
 
-da_typedef(WidgetList, Widget *);
+typedef Widget * WidgetPtr;
+list_def(WidgetPtr);
 
 typedef enum {
     LAYOUT_COLUMN,
@@ -257,7 +260,7 @@ typedef struct {
 
 typedef struct {
     Widget widget;
-    WidgetList children;
+    List(WidgetPtr) children;
     Scrollable scroll;
     ContainerStyle container_style;
 } ContainerWidget;
@@ -330,11 +333,9 @@ static const WidgetVTable div_methods = {
     .draw = div_draw,
 };
 
-da_typedef(CodePoints, CodePoint);
-
 typedef struct {
     Widget widget;
-    CodePoints text;
+    List(CodePoint) text;
 } TextInput;
 
 void text_input_layout(Widget *w, LayoutConstraint c);
@@ -368,9 +369,9 @@ static const WidgetVTable text_input_methods = {
 #define MIN(a, b)     ((a) < (b) ? (a) : (b))
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
 
-da_typedef(CellBuffer, Cell);
-da_typedef(ClipStack, Clip);
-da_typedef(ByteBuffer, byte);
+list_def(Cell);
+list_def(Clip);
+list_def(byte);
 
 struct {
     struct termios orig_term;
@@ -378,11 +379,11 @@ struct {
     i32 timeout;
     Event event;
     u64 saved_time, dt;
-    CellBuffer frontbuffer;
-    CellBuffer backbuffer;
-    ByteBuffer frame_cmds;
+    List(Cell) frontbuffer;
+    List(Cell) backbuffer;
+    List(byte) frame_cmds;
     Arena tmp;
-    ClipStack clips;
+    List(Clip) clips;
     u32 width, height;
 } Terminal = {0};
 
@@ -420,8 +421,8 @@ void write_str_len(byte *str, usize len);
 void write_strf_impl(byte *fmt, ...);
 #define write_str(s)        write_str_len(s, sizeof(s) - 1)
 #define write_strf(...)     write_strf_impl(__VA_ARGS__)
-void generate_absolute_cursor_move(ByteBuffer *a, u32 row, u32 col);
-void generate_relative_cursor_move(ByteBuffer *a, u32 step);
+void generate_absolute_cursor_move(List(byte) *a, u32 row, u32 col);
+void generate_relative_cursor_move(List(byte) *a, u32 step);
 void render();
 void update_root_scope();
 
@@ -429,7 +430,7 @@ b32 try_parse_mouse(byte *str, isize n, Event *e);
 b32 try_parse_term_key(byte *str, isize n, Event *e);
 b32 try_parse_text(byte *str, isize n, Event *e);
 void fix_wide_char(i32 x, i32 y);
-void emit_cells(ByteBuffer *out, Cell *cells, usize start, usize len);
+void emit_cells(List(byte) *out, Cell *cells, usize start, usize len);
 
 typedef enum {
     UTF8_OK = 0,
@@ -506,13 +507,13 @@ void init_terminal() {
     sa.sa_flags = SA_RESTART;
     sigaction(SIGWINCH, &sa, NULL);
 
-    da_resize(&Terminal.backbuffer, Terminal.width * Terminal.height);
-    da_resize(&Terminal.frontbuffer, Terminal.width * Terminal.height);
-    da_resize(&Terminal.frame_cmds, Terminal.width * Terminal.height);
+    list_resize(&Terminal.backbuffer, Terminal.width * Terminal.height);
+    list_resize(&Terminal.frontbuffer, Terminal.width * Terminal.height);
+    list_resize(&Terminal.frame_cmds, Terminal.width * Terminal.height);
 
     // manually add the terminal scope
     Rectangle r = {.w = Terminal.width, .h = Terminal.height};
-    da_append(&Terminal.clips, (Clip) {.rect = r});
+    list_append(&Terminal.clips, (Clip) {.rect = r});
 
     Terminal.tmp = arena_init(MB(16));
 }
@@ -542,10 +543,10 @@ void restore_term() {
     fd_close(Terminal.pipe.read_fd);
     fd_close(Terminal.pipe.write_fd);
 
-    da_free(Terminal.backbuffer);
-    da_free(Terminal.frontbuffer);
-    da_free(Terminal.frame_cmds);
-    da_free(Terminal.clips);
+    list_free(Terminal.backbuffer);
+    list_free(Terminal.frontbuffer);
+    list_free(Terminal.frame_cmds);
+    list_free(Terminal.clips);
 
     arena_destroy(Terminal.tmp);
 }
@@ -554,8 +555,8 @@ void handle_sigwinch(i32 signo) {
     update_screen_dimensions();
 
     u32 new_size = Terminal.width * Terminal.height;
-    da_resize(&Terminal.backbuffer, new_size);
-    da_resize(&Terminal.frontbuffer, new_size);
+    list_resize(&Terminal.backbuffer, new_size);
+    list_resize(&Terminal.frontbuffer, new_size);
 
     update_root_scope();
 
@@ -572,7 +573,7 @@ void begin_frame() {
     save_timestamp();
 
     arena_clear(&Terminal.tmp);
-    da_clear(&Terminal.frame_cmds);
+    list_clear(&Terminal.frame_cmds);
     for (usize i = 0; i < Terminal.backbuffer.count; ++i)
         Terminal.backbuffer.items[i] = cell_empty();
 
@@ -647,29 +648,29 @@ void render() {
     }
 }
 
-void emit_cells(ByteBuffer *out, Cell *cells, usize start, usize len) {
+void emit_cells(List(byte) *out, Cell *cells, usize start, usize len) {
     for (usize i = 0; i < len; i++) {
         Cell c = cells[start + i];
         if (c.flags & CELL_CONTINUATION) continue;
 
-        da_append_many(out, c.cp.raw, c.cp.raw_len);
+        list_append_many(out, c.cp.raw, c.cp.raw_len);
     }
 }
 
-void generate_absolute_cursor_move(ByteBuffer *a, u32 row, u32 col) {
+void generate_absolute_cursor_move(List(byte) *a, u32 row, u32 col) {
     Stream s = arena_stream_start(&Terminal.tmp, 64);
     stream_fmt(&s, "\33[%u;%uH", row + 1, col + 1);
     s8 result = stream_end(s);
 
-    da_append_many(a, result.s, result.len);
+    list_append_many(a, result.s, result.len);
 }
 
-void generate_relative_cursor_move(ByteBuffer *a, u32 step) {
+void generate_relative_cursor_move(List(byte) *a, u32 step) {
     Stream s = arena_stream_start(&Terminal.tmp, 64);
     stream_fmt(&s, "\33[%uC", step);
     s8 result = stream_end(s);
 
-    da_append_many(a, result.s, result.len);
+    list_append_many(a, result.s, result.len);
 }
 
 void poll_event(Event *e) {
@@ -1000,15 +1001,15 @@ void clip_push(i32 x, i32 y, i32 w, i32 h) {
 void clip_push_rect(Rectangle r) {
     Clip parent = clip_peek();
     Rectangle clipped = rect_intersect(parent.rect, r);
-    da_append(&Terminal.clips, (Clip){.rect = clipped});
+    list_append(&Terminal.clips, (Clip){.rect = clipped});
 }
 
 Clip clip_pop() { 
-    return da_pop(&Terminal.clips);
+    return list_pop(&Terminal.clips);
 }
 
 Clip clip_peek() {
-    return da_last(&Terminal.clips);
+    return list_last(&Terminal.clips);
 }
 
 b32 point_in_rect(i32 x, i32 y, Rectangle r) {
@@ -1235,7 +1236,7 @@ i32 aligned_primary_pos(i32 start, i32 extra_space, Align align);
 i32 aligned_secondary_pos(i32 parent_size, i32 parent_features, i32 child_size, Align align);
 
 static struct {
-    TransformStack transforms;
+    List(Transform) transforms;
     ContainerWidget *root;
     Widget *focus;
     Arena allocator;
@@ -1243,7 +1244,7 @@ static struct {
 
 void ui_init() {
     UI.allocator = arena_init(MB(16));
-    da_append(&UI.transforms, ((Transform){0,0}));
+    list_append(&UI.transforms, ((Transform){0,0}));
 }
 
 void ui_register_root(Widget *w) {
@@ -1318,21 +1319,21 @@ void ui_draw_box(Rectangle r) {
 }
 
 void push_transform(i32 dx, i32 dy) {
-    Transform parent = da_last(&UI.transforms);
+    Transform parent = list_last(&UI.transforms);
     Transform t = {
         parent.x + dx,
         parent.y + dy
     };
 
-    da_append(&UI.transforms, t);
+    list_append(&UI.transforms, t);
 }
 
 Transform pop_transform() {
-    return da_pop(&UI.transforms);
+    return list_pop(&UI.transforms);
 }
 
 Transform peek_transform() {
-    return da_last(&UI.transforms);
+    return list_last(&UI.transforms);
 }
 
 Rectangle absolute_rect(Widget *w) {
@@ -1531,7 +1532,7 @@ i32 aligned_secondary_pos(i32 parent_size, i32 parent_features, i32 child_size, 
 void container_add(Widget *c, Widget *w) {
     ContainerWidget *container = container_of(c, ContainerWidget, widget);
     w->parent = c;
-    da_append(&container->children, w);
+    list_append(&container->children, w);
 }
 
 void button_layout(Widget *w, LayoutConstraint c) {
@@ -1654,7 +1655,7 @@ void text_input_event(Widget *w) {
 
     if (is_event(ECodePoint)) {
         CodePoint cp = get_codepoint();
-        da_append(&t->text, cp);
+        list_append(&t->text, cp);
         event_consume();
     }
 
