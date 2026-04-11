@@ -23,3 +23,4 @@ C ideas:
         g. automaticly generated implementations (e.g. enum -> string function, struct initializer function)
         h. defer?
         i. a module system?
+        j. generics
