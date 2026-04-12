@@ -90,7 +90,10 @@ void e3() {
     root->widget.style.border = 1;
 
     Button *b = button_new(s8("Click"));
+    b->widget.style.border = 1;
+
     TextInput *input = text_input_new();
+    input->widget.style.border = 1;
 
     container_add(&root->widget, &b->widget);
     container_add(&root->widget, &input->widget);

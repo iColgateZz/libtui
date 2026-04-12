@@ -285,7 +285,8 @@ void default_update(Widget *w);
 void container_layout(Widget *w, LayoutConstraint c);
 void container_add(Widget *c, Widget *w);
 
-Rectangle absolute_rect(Widget *w);
+Rectangle content_rect(Widget *w);
+Rectangle content_bp_rect(Widget *w);
 
 void ui_register_root(Widget *w);
 void ui_set_focus(Widget *w);
@@ -1336,10 +1337,10 @@ Transform peek_transform() {
     return list_last(&UI.transforms);
 }
 
-Rectangle absolute_rect(Widget *w) {
+Rectangle content_rect(Widget *w) {
     Transform t = peek_transform();
 
-    return (Rectangle){
+    return (Rectangle) {
         .x = t.x,
         .y = t.y,
         .w = w->size.w,
@@ -1347,8 +1348,16 @@ Rectangle absolute_rect(Widget *w) {
     };
 }
 
+Rectangle content_bp_rect(Widget *w) {
+    Rectangle r = content_rect(w);
+    u8 bp = w->style.border + w->style.padding;
+    r.w += 2 * bp;
+    r.h += 2 * bp;
+    return r;
+}
+
 b32 is_hit(Widget *w) {
-    Rectangle r = absolute_rect(w);
+    Rectangle r = content_bp_rect(w);
     return point_in_rect(get_mouse_x(), get_mouse_y(), r);
 }
 
@@ -1358,7 +1367,16 @@ void widget_layout(Widget *w, LayoutConstraint c) {
 
 Widget *widget_hit_test(Widget *w) {
     push_transform(w->offset.x, w->offset.y);
+    u8 m = w->style.margin;
+    u8 b = w->style.border;
+    u8 p = w->style.padding;
+    push_transform(m , m);
+    push_transform(b, b);
+    push_transform(p, p);
     Widget *res = w->vtable->hit_test(w);
+    pop_transform(); // p
+    pop_transform(); // b
+    pop_transform(); // m
     pop_transform();
     return res;
 }
@@ -1377,12 +1395,34 @@ void widget_update(Widget *w) {
 
 void widget_draw(Widget *w) { 
     push_transform(w->offset.x, w->offset.y);
-    clip_push_rect(absolute_rect(w));
+
+    u8 m = w->style.margin;
+    u8 b = w->style.border;
+    u8 p = w->style.padding;
+
+    push_transform(m , m);
+
+    if (b) {
+        Rectangle r = {
+            0, 0,
+            w->size.w + 2 * (b + p),
+            w->size.h + 2 * (b + p)
+        };
+        ui_draw_box(r);
+    }
+
+    push_transform(b, b);
+    push_transform(p, p);
+
+    clip_push_rect(content_rect(w));
 
     w->vtable->draw(w);
 
     clip_pop();
-    pop_transform();
+    pop_transform(); // p
+    pop_transform(); // b
+    pop_transform(); // m
+    pop_transform(); // offset
 }
 
 Widget *default_hit_test(Widget *w) {
@@ -1397,27 +1437,22 @@ i32 min_of_positives(i32 a, i32 b) {
     return MIN(a, b);
 }
 
-i32 widget_border_padding(Widget *w) {
-    return w->style.border + w->style.padding;
-}
+i32 widget_mbp(Widget *w) { return w->style.margin + w->style.border + w->style.padding; }
+i32 widget_total_width(Widget *w) { return w->size.w + 2 * widget_mbp(w); }
+i32 widget_total_height(Widget *w) { return w->size.h + 2 * widget_mbp(w); }
 
 void container_layout(Widget *w, LayoutConstraint c) {
     ContainerWidget *container = container_of(w, ContainerWidget, widget);
 
-    i32 bp = widget_border_padding(w);
-
-    i32 constrained_w = min_of_positives(container->widget.style.w, c.max_w - bp * 2);
-    i32 constrained_h = min_of_positives(container->widget.style.h, c.max_h - bp * 2);
+    i32 mbp = widget_mbp(w);
 
     LayoutConstraint constraint = {
-        .max_w = constrained_w,
-        .max_h = constrained_h,
+        .max_w = min_of_positives(container->widget.style.w, c.max_w - mbp * 2),
+        .max_h = min_of_positives(container->widget.style.h, c.max_h - mbp * 2),
     };
 
-    for (usize i = 0; i < container->children.count; i++) {
-        Widget *child = container->children.items[i];
-        widget_layout(child, constraint);
-    }
+    for (usize i = 0; i < container->children.count; i++)
+        widget_layout(container->children.items[i], constraint);
 
     if (container->container_style.direction == LAYOUT_COLUMN) {
         container_layout_column(w, constraint);
@@ -1434,39 +1469,37 @@ void container_layout_column(Widget *w, LayoutConstraint constraint) {
     for (usize i = 0; i < container->children.count; i++) {
         Widget *child = container->children.items[i];
 
-        primary_axis += child->size.h;
-        secondary_axis_max = MAX(secondary_axis_max, child->size.w);
+        primary_axis += widget_total_height(child);
+        secondary_axis_max = MAX(secondary_axis_max, widget_total_width(child));
 
         if (i < container->children.count - 1) {
             primary_axis += container->container_style.spacing;
         }
     }
 
-    i32 bp = widget_border_padding(w);
-
     i32 content_w = MAX(secondary_axis_max, w->style.w);
     i32 content_h = MAX(primary_axis, w->style.h);
 
-    // Store how much is visible (including bp)
-    w->size.w = MIN(content_w, constraint.max_w) + bp * 2;
-    if (container->container_style.overflow == OVERFLOW_VISIBLE_Y) w->size.h = content_h + bp * 2;
-    else w->size.h = MIN(content_h, constraint.max_h) + bp * 2;
+    // Store how much space is needed for content
+    w->size.w = MIN(content_w, constraint.max_w);
+    if (container->container_style.overflow == OVERFLOW_VISIBLE_Y) w->size.h = content_h;
+    else w->size.h = MIN(content_h, constraint.max_h);
 
-    i32 extra = w->size.h - primary_axis - bp * 2;
-    i32 start = aligned_primary_pos(bp, extra, container->container_style.align_children);
+    i32 extra = w->size.h - primary_axis;
+    i32 start = aligned_primary_pos(0, extra, container->container_style.align_children);
 
     container->scroll.content_size = primary_axis;
-    container->scroll.content_start = start - bp;
-    container->scroll.viewport_size = w->size.h - bp * 2;
+    container->scroll.content_start = start;
+    container->scroll.viewport_size = w->size.h;
 
     for (usize i = 0; i < container->children.count; i++) {
         Widget *child = container->children.items[i];
         Align align = child->style.align_self;
 
-        child->offset.x = aligned_secondary_pos(w->size.w, bp, child->size.w, align);
+        child->offset.x = aligned_secondary_pos(w->size.w, 0, widget_total_width(child), align);
         child->offset.y = start;
 
-        start += child->size.h + container->container_style.spacing;
+        start += widget_total_height(child) + container->container_style.spacing;
     }
 }
 
@@ -1486,7 +1519,7 @@ void container_layout_row(Widget *w, LayoutConstraint constraint) {
         }
     }
 
-    i32 bp = widget_border_padding(w);
+    i32 bp = widget_mbp(w);
 
     i32 content_w = MAX(primary_axis, w->style.w);
     i32 content_h = MAX(secondary_axis_max, w->style.h);
@@ -1539,8 +1572,8 @@ void button_layout(Widget *w, LayoutConstraint c) {
     Button *b = container_of(w, Button, widget);
 
     //TODO: account for text wrapping
-    w->size.h = 3;
-    w->size.w = MIN(b->label.len + 2, (u32)c.max_w);
+    w->size.h = 1;
+    w->size.w = MIN(b->label.len, (u32)c.max_w);
 }
 
 void button_event(Widget *w) {
@@ -1555,10 +1588,7 @@ void button_event(Widget *w) {
 void button_draw(Widget *w) {
     Button *b = container_of(w, Button, widget);
 
-    Rectangle r = {0, 0, w->size.w, w->size.h};
-    ui_draw_box(r);
-
-    if (b->state) ui_put_str(1, 1, b->label.s, b->label.len);
+    if (b->state) ui_put_str(0, 0, b->label.s, b->label.len);
 }
 
 Button *button_new(s8 label) {
@@ -1618,11 +1648,6 @@ void div_update(Widget *w) {
 void div_draw(Widget *w) {
     Div *div = container_of(w, Div, widget);
 
-    if (w->style.border) {
-        Rectangle r = {0, 0, w->size.w, w->size.h};
-        ui_draw_box(r);
-    }
-
     scroll_apply(&div->scroll);
     for (usize i = 0; i < div->children.count; i++) {
         Widget *child = div->children.items[i];
@@ -1644,7 +1669,7 @@ Div *div_new(u32 padding, u32 spacing) {
 }
 
 void text_input_layout(Widget *w, LayoutConstraint c) {
-    w->size.h = 3;
+    w->size.h = 1;
     w->size.w = MIN(20, c.max_w);
 }
 
@@ -1670,18 +1695,15 @@ void text_input_event(Widget *w) {
 void text_input_draw(Widget *w) {
     TextInput *t = container_of(w, TextInput, widget);
 
-    Rectangle r = {0, 0, w->size.w, w->size.h};
-    ui_draw_box(r);
-
-    i32 x = 1;
+    i32 x = 0;
     for (usize i = 0; i < t->text.count; i++) {
         CodePoint cp = t->text.items[i];
-        ui_put_cp(x, 1, cp);
+        ui_put_cp(x, 0, cp);
         x += cp.display_width;
     }
 
     if (ui_is_focused(w)) {
-        ui_put_cp(x, 1, cp("_"));
+        ui_put_cp(x, 0, cp("_"));
     }
 }
 
