@@ -14,8 +14,8 @@ i32 main(i32 argc, byte *argv[]) {
     set_max_timeout_ms(10);
     ui_init();
 
-    e1();
-    // e2();
+    // e1();
+    e2();
     // e3();
 
     while (!is_codepoint(cp("q"))) {
@@ -52,11 +52,12 @@ void e1() {
 
 void e2() {
    Div *scroll = div_new(0, 0);
-    scroll->container_style.overflow = OVERFLOW_VISIBLE_Y;
+    scroll->container_style.overflow = OVERFLOW_SCROLL_Y;
     // scroll.widget.style.w = 100;
     scroll->widget.style.border = 1;
     scroll->widget.style.padding = 1;
     scroll->widget.style.align_self = ALIGN_CENTER;
+    // scroll->widget.style.margin = 3;
 
     Div *content = div_new(0,0);
     // content.container_style.direction = LAYOUT_ROW;
@@ -65,6 +66,7 @@ void e2() {
     content->container_style.overflow = OVERFLOW_VISIBLE_Y;
 
     // content->widget.style.padding = 5;
+    // content->widget.style.margin = 2;
     // content->widget.style.h = 30;
     // content->widget.style.w = 100;
     content->widget.style.border = 1;
@@ -72,11 +74,16 @@ void e2() {
 
     Button *b1 = button_new(s8("item"));
     b1->widget.style.align_self = ALIGN_CENTER;
+    b1->widget.style.border = 1;
     Button *b2 = button_new(s8("item"));
+    b2->widget.style.border = 1;
     Button *b3 = button_new(s8("itemasdasdasd"));
+    b3->widget.style.border = 1;
     Button *b4 = button_new(s8("item"));
+    b4->widget.style.border = 1;
     Button *b5 = button_new(s8("item"));
     b5->widget.style.align_self = ALIGN_END;
+    b5->widget.style.border = 1;
 
     container_add(&content->widget, &b1->widget);
     container_add(&content->widget, &b2->widget);

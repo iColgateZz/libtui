@@ -1350,8 +1350,7 @@ Rectangle content_rect(Widget *w) {
 
 Rectangle content_bp_rect(Widget *w) {
     Rectangle r = content_rect(w);
-    // add border to make hitbox larger
-    u8 pad = w->style.padding;
+    u8 pad = w->style.padding + w->style.border;
     r.x -= pad;
     r.y -= pad;
     r.w += 2 * pad;
