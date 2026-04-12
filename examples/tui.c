@@ -86,7 +86,7 @@ void e2() {
 }
 
 void e3() {
-    Div *root = div_new(1,1);
+    Div *root = div_new(1,0);
     root->widget.style.border = 1;
 
     Button *b = button_new(s8("Click"));
@@ -94,6 +94,7 @@ void e3() {
 
     TextInput *input = text_input_new();
     input->widget.style.border = 1;
+    input->widget.style.padding = 1;
 
     container_add(&root->widget, &b->widget);
     container_add(&root->widget, &input->widget);

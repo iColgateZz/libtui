@@ -1350,9 +1350,11 @@ Rectangle content_rect(Widget *w) {
 
 Rectangle content_bp_rect(Widget *w) {
     Rectangle r = content_rect(w);
-    u8 bp = w->style.border + w->style.padding;
-    r.w += 2 * bp;
-    r.h += 2 * bp;
+    u8 pad = w->style.padding;
+    r.x -= pad;
+    r.y -= pad;
+    r.w += 2 * pad;
+    r.h += 2 * pad;
     return r;
 }
 
