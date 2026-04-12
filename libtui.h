@@ -1660,6 +1660,7 @@ void div_draw(Widget *w) {
     scroll_pop();
 }
 
+//TODO: accept Style & ContainerStyle as params?
 Div *div_new(u32 padding, u32 spacing) {
     Div *b = arena_push(&UI.allocator, Div);
     assert(b);
