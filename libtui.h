@@ -1382,15 +1382,15 @@ Widget *widget_hit_test(Widget *w) {
 }
 
 void widget_event(Widget *w) {
-    push_transform(w->offset.x, w->offset.y);
+    // push_transform(w->offset.x, w->offset.y);
     w->vtable->event(w);
-    pop_transform();
+    // pop_transform();
 }
 
 void widget_update(Widget *w) { 
-    push_transform(w->offset.x, w->offset.y);
+    // push_transform(w->offset.x, w->offset.y);
     w->vtable->update(w);
-    pop_transform();
+    // pop_transform();
 }
 
 void widget_draw(Widget *w) { 
@@ -1638,12 +1638,12 @@ void div_event(Widget *w) {
 void div_update(Widget *w) {
     Div *div = container_of(w, Div, widget);
 
-    scroll_apply(&div->scroll);
+    // scroll_apply(&div->scroll);
     for (usize i = 0; i < div->children.count; i++) {
         Widget *child = div->children.items[i];
         widget_update(child);
     }
-    scroll_pop();
+    // scroll_pop();
 }
 
 void div_draw(Widget *w) {
