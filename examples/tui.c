@@ -14,9 +14,9 @@ i32 main(i32 argc, byte *argv[]) {
     set_max_timeout_ms(10);
     ui_init();
 
-    // e1();
+    e1();
     // e2();
-    e3();
+    // e3();
 
     while (!is_codepoint(cp("q"))) {
         begin_frame();
@@ -31,14 +31,18 @@ i32 main(i32 argc, byte *argv[]) {
 
 void e1() {
     Div *layout = div_new(5, 1);
+    layout->widget.style.border = 1;
 
     s8 label1 = s8("What is Chandler Bing's job?");
     s8 label2 = s8("Transponster");
     s8 label3 = s8("That's not even a word..");
 
     Button *b  = button_new(label1);
+    b->widget.style.border = 1;
     Button *b2 = button_new(label2);
+    b2->widget.style.border = 1;
     Button *b3 = button_new(label3);
+    b3->widget.style.border = 1;
 
     ui_register_root(&layout->widget);
     container_add(&layout->widget, &b->widget);
