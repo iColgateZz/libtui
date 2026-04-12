@@ -1542,6 +1542,7 @@ void container_layout_row(Widget *w, LayoutConstraint constraint) {
     }
 }
 
+//TODO: simplify
 i32 aligned_primary_pos(i32 start, i32 extra_space, Align align) {
     if (align == ALIGN_CENTER) {
         return start + extra_space / 2;
