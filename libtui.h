@@ -343,6 +343,20 @@ void text_input_event(Widget *w);
 void text_input_draw(Widget *w);
 TextInput *text_input_new();
 
+typedef struct {
+    CodePoint *start;
+    CodePoint *end;
+    i32 max_width;
+} WrapIter;
+
+typedef struct {
+    CodePoint *ptr;
+    usize len;
+} WrapSlice;
+
+WrapIter wrap_iter_new(List(CodePoint) *text, i32 width);
+WrapSlice wrap_iter_next(WrapIter *it);
+
 static const WidgetVTable text_input_methods = {
     .layout = text_input_layout,
     .hit_test = default_hit_test,
@@ -1703,6 +1717,41 @@ TextInput *text_input_new() {
     return t;
 }
 
+WrapIter wrap_iter_new(List(CodePoint) *text, i32 width) {
+    return (WrapIter) {
+        .start = text->items,
+        .end = text->items + text->count,
+        .max_width = width,
+    };
+}
+
+WrapSlice wrap_iter_next(WrapIter *it) {
+    if (it->start >= it->end) {
+        return (WrapSlice) {0};
+    }
+
+    CodePoint *line_start = it->start;
+    CodePoint *p = it->start;
+
+    i32 width = 0;
+    while (p < it->end) {
+        CodePoint cp = *p;
+
+        if (width + cp.display_width > it->max_width)
+            break;
+
+        width += cp.display_width;
+        p++;
+    }
+
+    CodePoint *line_end = p;
+    it->start = p;
+
+    return (WrapSlice) {
+        .ptr = line_start,
+        .len = line_end - line_start,
+    };
+}
 
 //TODO: flex layout
 //TODO: stack layout
