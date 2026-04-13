@@ -60,7 +60,7 @@ void e2() {
     // scroll->widget.style.margin = 3;
 
     Div *content = div_new(0,0);
-    content->container_style.direction = LAYOUT_ROW;
+    // content->container_style.direction = LAYOUT_ROW;
     content->container_style.spacing = 10;
     content->container_style.align_children = ALIGN_START;
     content->container_style.overflow = OVERFLOW_SCROLL_Y;

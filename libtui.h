@@ -1233,8 +1233,8 @@ void draw_box(Rectangle r) {
 
 void container_layout_column(Widget *w, LayoutConstraint constraint);
 void container_layout_row(Widget *w, LayoutConstraint constraint);
-i32 aligned_primary_pos(i32 start, i32 extra_space, Align align);
-i32 aligned_secondary_pos(i32 parent_size, i32 parent_features, i32 child_size, Align align);
+i32 aligned_primary_pos(i32 extra_space, Align align);
+i32 aligned_secondary_pos(i32 parent_size, i32 child_size, Align align);
 
 static struct {
     List(Transform) transforms;
@@ -1485,7 +1485,7 @@ void container_layout_column(Widget *w, LayoutConstraint constraint) {
     else w->size.h = MIN(content_h, constraint.max_h);
 
     i32 extra = w->size.h - primary_axis;
-    i32 start = aligned_primary_pos(0, extra, container->container_style.align_children);
+    i32 start = aligned_primary_pos(extra, container->container_style.align_children);
 
     container->scroll.content_size = primary_axis;
     container->scroll.content_start = start;
@@ -1495,7 +1495,7 @@ void container_layout_column(Widget *w, LayoutConstraint constraint) {
         Widget *child = container->children.items[i];
         Align align = child->style.align_self;
 
-        child->offset.x = aligned_secondary_pos(w->size.w, 0, widget_total_width(child), align);
+        child->offset.x = aligned_secondary_pos(w->size.w, widget_total_width(child), align);
         child->offset.y = start;
 
         start += widget_total_height(child) + container->container_style.spacing;
@@ -1525,37 +1525,32 @@ void container_layout_row(Widget *w, LayoutConstraint constraint) {
     w->size.h = MIN(content_h, constraint.max_h);
 
     i32 extra = w->size.w - primary_axis;
-    i32 start = aligned_primary_pos(0, extra, container->container_style.align_children);
+    i32 start = aligned_primary_pos(extra, container->container_style.align_children);
 
     for (usize i = 0; i < container->children.count; i++) {
         Widget *child = container->children.items[i];
         Align align = child->style.align_self;
 
         child->offset.x = start;
-        child->offset.y = aligned_secondary_pos(w->size.h, 0, widget_total_height(child), align);
+        child->offset.y = aligned_secondary_pos(w->size.h, widget_total_height(child), align);
 
         start += widget_total_width(child) + container->container_style.spacing;
     }
 }
 
-//TODO: simplify
-i32 aligned_primary_pos(i32 start, i32 extra_space, Align align) {
-    if (align == ALIGN_CENTER) {
-        return start + extra_space / 2;
-    } else if (align == ALIGN_END) {
-        return start + extra_space;
-    } else {
-        return start;
+i32 aligned_primary_pos(i32 extra_space, Align align) {
+    switch (align) {
+        case ALIGN_CENTER: return extra_space / 2;
+        case ALIGN_END: return extra_space;
+        case ALIGN_START: return 0;
     }
 }
 
-i32 aligned_secondary_pos(i32 parent_size, i32 parent_features, i32 child_size, Align align) {
-    if (align == ALIGN_CENTER) {
-        return parent_features + ((parent_size - parent_features * 2) - child_size) / 2;
-    } else if (align == ALIGN_END) {
-        return parent_size - parent_features - child_size;
-    } else {
-        return parent_features;
+i32 aligned_secondary_pos(i32 parent_size, i32 child_size, Align align) {
+    switch (align) {
+        case ALIGN_CENTER: return (parent_size - child_size) / 2;
+        case ALIGN_END: return parent_size -  child_size;
+        case ALIGN_START: return 0;
     }
 }
 
