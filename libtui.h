@@ -1747,7 +1747,6 @@ s8 next(s8_iter *self) {
 //TODO: keyboard focus navigation
 //TODO: margin support
 //TODO: other css-like properties
-//TODO: generic border/margin/padding drawing
 //TODO: widget tree debugger
 
 #endif //LIBTUI_IMPL
