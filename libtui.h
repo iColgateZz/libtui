@@ -216,7 +216,7 @@ typedef struct {
     Align align_self;
     u8 padding, margin;
     u8 border;
-} Style;
+} WidgetStyle;
 
 typedef struct Widget Widget;
 
@@ -232,7 +232,7 @@ struct Widget {
     Position offset;
     Size size;
     Widget *parent;
-    Style style;
+    WidgetStyle style;
     const WidgetVTable *vtable;
 };
 
