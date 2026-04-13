@@ -145,7 +145,6 @@ void debug(i32 x, i32 y, byte *fmt, ...);
 
 // TUI
 
-//TODO: Apply styles with the macro trick use by 'cmd_run'
 typedef struct {
     i32 x;
     i32 y;
