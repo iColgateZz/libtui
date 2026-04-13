@@ -1732,7 +1732,6 @@ s8 next(s8_iter *self) {
 //TODO: text wrapping in widgets
 //TODO: list widget with scrollbar?
 //TODO: keyboard focus navigation
-//TODO: margin support
 //TODO: other css-like properties
 //TODO: widget tree debugger
 
