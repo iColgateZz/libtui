@@ -1430,8 +1430,7 @@ Widget *default_hit_test(Widget *w) {
 
 void default_update(Widget *w) { UNUSED(w); }
 
-//TODO: better name
-i32 min_of_positives(i32 a, i32 b) {
+i32 apply_min_wh_constraint(i32 a, i32 b) {
     if (a == 0) return b;
     return MIN(a, b);
 }
@@ -1446,8 +1445,8 @@ void container_layout(Widget *w, LayoutConstraint c) {
     i32 mbp = widget_mbp(w);
 
     LayoutConstraint constraint = {
-        .max_w = min_of_positives(container->widget.style.w, c.max_w - mbp * 2),
-        .max_h = min_of_positives(container->widget.style.h, c.max_h - mbp * 2),
+        .max_w = apply_min_wh_constraint(container->widget.style.w, c.max_w - mbp * 2),
+        .max_h = apply_min_wh_constraint(container->widget.style.h, c.max_h - mbp * 2),
     };
 
     for (usize i = 0; i < container->children.count; i++)
