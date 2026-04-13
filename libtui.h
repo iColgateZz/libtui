@@ -297,7 +297,7 @@ void ui_run();
 void ui_put_cp(i32 x, i32 y, CodePoint cp);
 void ui_put_str(i32 x, i32 y, byte *s, usize len);
 void ui_draw_line(i32 x0, i32 y0, i32 x1, i32 y1, CodePoint cp);
-void ui_draw_box(Rectangle r);
+void ui_draw_box(i32 w, i32 h);
 
 typedef struct {
     Widget widget;
@@ -1312,10 +1312,9 @@ void ui_draw_line(i32 x0, i32 y0, i32 x1, i32 y1, CodePoint cp) {
     draw_line(x0 + t.x, y0 + t.y, x1 + t.x, y1 + t.y, cp);
 }
 
-void ui_draw_box(Rectangle r) {
+void ui_draw_box(i32 w, i32 h) {
     Transform t = peek_transform();
-    r.x += t.x;
-    r.y += t.y;
+    Rectangle r = {t.x, t.y, w, h};
     draw_box(r);
 }
 
@@ -1405,12 +1404,10 @@ void widget_draw(Widget *w) {
     push_transform(m , m);
 
     if (b) {
-        Rectangle r = {
-            0, 0,
+        ui_draw_box(
             w->size.w + 2 * (b + p),
             w->size.h + 2 * (b + p)
-        };
-        ui_draw_box(r);
+        );
     }
 
     push_transform(b, b);

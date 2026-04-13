@@ -63,7 +63,7 @@ void e2() {
     // content.container_style.direction = LAYOUT_ROW;
     content->container_style.spacing = 10;
     content->container_style.align_children = ALIGN_START;
-    content->container_style.overflow = OVERFLOW_VISIBLE_Y;
+    content->container_style.overflow = OVERFLOW_SCROLL_Y;
 
     // content->widget.style.padding = 5;
     // content->widget.style.margin = 2;
