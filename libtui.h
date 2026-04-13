@@ -1502,7 +1502,6 @@ void container_layout_column(Widget *w, LayoutConstraint constraint) {
     }
 }
 
-//TODO: fix
 void container_layout_row(Widget *w, LayoutConstraint constraint) {
     ContainerWidget *container = container_of(w, ContainerWidget, widget);
 
@@ -1511,34 +1510,31 @@ void container_layout_row(Widget *w, LayoutConstraint constraint) {
     for (usize i = 0; i < container->children.count; i++) {
         Widget *child = container->children.items[i];
 
-        primary_axis += child->size.w;
-        secondary_axis_max = MAX(secondary_axis_max, child->size.h);
+        primary_axis += widget_total_width(child);
+        secondary_axis_max = MAX(secondary_axis_max, widget_total_height(child));
 
         if (i < container->children.count - 1) {
             primary_axis += container->container_style.spacing;
         }
     }
 
-    i32 bp = widget_mbp(w);
-
     i32 content_w = MAX(primary_axis, w->style.w);
     i32 content_h = MAX(secondary_axis_max, w->style.h);
 
-    // Store how much is visible (including bp)
-    w->size.w = MIN(content_w, constraint.max_w) + bp * 2;
-    w->size.h = MIN(content_h, constraint.max_h) + bp * 2;
+    w->size.w = MIN(content_w, constraint.max_w);
+    w->size.h = MIN(content_h, constraint.max_h);
 
-    i32 extra = w->size.w - primary_axis - bp * 2;
-    i32 start = aligned_primary_pos(bp, extra, container->container_style.align_children);
+    i32 extra = w->size.w - primary_axis;
+    i32 start = aligned_primary_pos(0, extra, container->container_style.align_children);
 
     for (usize i = 0; i < container->children.count; i++) {
         Widget *child = container->children.items[i];
         Align align = child->style.align_self;
 
         child->offset.x = start;
-        child->offset.y = aligned_secondary_pos(w->size.h, bp, child->size.h, align);
+        child->offset.y = aligned_secondary_pos(w->size.h, 0, widget_total_height(child), align);
 
-        start += child->size.w + container->container_style.spacing;
+        start += widget_total_width(child) + container->container_style.spacing;
     }
 }
 
