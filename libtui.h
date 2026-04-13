@@ -1703,27 +1703,6 @@ TextInput *text_input_new() {
     return t;
 }
 
-typedef struct {
-    byte *start;
-    byte *end;
-    isize chop_len;
-} s8_iter;
-
-s8_iter s8_iter_new(s8 str, isize chop_len) {
-    return (s8_iter) {
-        .start = str.s,
-        .end = str.s + str.len,
-        .chop_len = chop_len,
-    };
-}
-
-s8 next(s8_iter *self) {
-    isize len = MIN(self->end - self->start, self->chop_len);
-    s8 ret = {.len = len, .s = self->start};
-
-    self->start += len;
-    return ret;
-}
 
 //TODO: flex layout
 //TODO: stack layout
