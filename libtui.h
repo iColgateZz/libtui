@@ -118,7 +118,6 @@ u32 get_terminal_width();
 u32 get_terminal_height();
 
 typedef u32 Unicode;
-Unicode utf8_decode(byte *s, usize len);
 u8 unicode_width(Unicode ch);
 
 void put_str(i32 x, i32 y, byte *str, usize len);
@@ -446,19 +445,7 @@ b32 try_parse_text(byte *str, isize n, Event *e);
 void fix_wide_char(i32 x, i32 y);
 void emit_cells(List(byte) *out, Cell *cells, usize start, usize len);
 
-typedef enum {
-    UTF8_OK = 0,
-    UTF8_INCOMPLETE,
-    UTF8_FAIL,
-} Utf8Status;
-
-typedef struct {
-    Utf8Status status;
-    usize consumed_bytes;
-    CodePoint cp;
-} Utf8Result;
-
-Utf8Result utf8_next(byte *s, usize len);
+CodePoint utf8_next(byte **start, byte *end);
 
 static CodePoint UTF8_REPLACEMENT = {
     .raw = {0xEF, 0xBF, 0xBD},
@@ -805,84 +792,60 @@ b32 try_parse_term_key(byte *str, isize n, Event *e) {
 
 b32 try_parse_text(byte *str, isize n, Event *e) {
     if (1 <= n && n <= 4) {
-        Utf8Result res = utf8_next(str, n);
-        if (res.status == UTF8_INCOMPLETE) return false;
-        
         e->type = ECodePoint;
-        e->parsed_cp = res.cp;
+        e->parsed_cp = utf8_next(&str, str + n);
         return true;
     }
 
     return false;
 }
 
-Utf8Result utf8_next(byte *s, usize len) {
-    assert(len > 0 && "invalid length");
+CodePoint utf8_next(byte **p, byte *end) {
+    byte *s = *p;
+
+    if (s >= end) {
+        return UTF8_REPLACEMENT;
+    }
 
     u8 first = s[0];
     if (first < 0x80) {
-        return (Utf8Result) {
-            .status = UTF8_OK,
-            .consumed_bytes = 1,
-            .cp = cp_from_byte(first),
-        };
+        *p += 1;
+        return cp_from_byte(first);
     }
 
-    usize expected_len = 0;
-    if ((first & 0xE0) == 0xC0) expected_len = 2;
-    else if ((first & 0xF0) == 0xE0) expected_len = 3;
-    else if ((first & 0xF8) == 0xF0) expected_len = 4;
-    else {
-        return (Utf8Result) {
-            .consumed_bytes = 1,
-            .status = UTF8_FAIL,
-            .cp = UTF8_REPLACEMENT,
-        };
+    usize len = 0;
+    Unicode value = 0;
+
+    if ((first & 0xE0) == 0xC0) {
+        len = 2;
+        value = first & 0x1F;
+    } else if ((first & 0xF0) == 0xE0) {
+        len = 3;
+        value = first & 0x0F;
+    } else if ((first & 0xF8) == 0xF0) {
+        len = 4;
+        value = first & 0x07;
+    } else {
+        *p += 1;
+        return UTF8_REPLACEMENT;
     }
 
-    if (expected_len > len) {
-        return (Utf8Result) { 
-            .consumed_bytes = 0,
-            .status = UTF8_INCOMPLETE,
-            .cp = UTF8_REPLACEMENT,
-        };
+    if (s + len > end) {
+        *p = end; // consume rest
+        return UTF8_REPLACEMENT;
     }
 
-    for (usize i = 1; i < expected_len; i++) {
+    for (usize i = 1; i < len; i++) {
         if ((s[i] & 0xC0) != 0x80) {
-            return (Utf8Result) {
-                .consumed_bytes = i,
-                .status = UTF8_FAIL,
-                .cp = UTF8_REPLACEMENT,
-            };
+            *p += i;
+            return UTF8_REPLACEMENT;
         }
+        value = (value << 6) | (s[i] & 0x3F);
     }
 
-    return (Utf8Result) {
-        .consumed_bytes = expected_len,
-        .status = UTF8_OK,
-        .cp = cp_from_utf8(s, expected_len),
-    };
-}
-
-Unicode utf8_decode(byte *s, usize len) {
-    switch (len) {
-        case 1: return s[0];
-        case 2:
-            return ((s[0] & 0x1F) << 6) |
-                   (s[1] & 0x3F);
-        case 3:
-            return ((s[0] & 0x0F) << 12) |
-                   ((s[1] & 0x3F) << 6) |
-                   (s[2] & 0x3F);
-        case 4:
-            return ((s[0] & 0x07) << 18) |
-                   ((s[1] & 0x3F) << 12) |
-                   ((s[2] & 0x3F) << 6) |
-                   (s[3] & 0x3F);
-    }
-
-    return 0xFFFD; // decoded replacement character
+    CodePoint cp = cp_from_raw(s, len, unicode_width(value));
+    *p += len;
+    return cp;
 }
 
 u8 unicode_width(Unicode ch) {
@@ -915,8 +878,7 @@ u8 unicode_width(Unicode ch) {
 }
 
 CodePoint cp_from_utf8(byte *s, u8 len) {
-    Unicode value = utf8_decode(s, len);
-    return cp_from_raw(s, len, unicode_width(value));
+    return utf8_next(&s, s + len);
 }
 
 CodePoint cp_from_raw(byte *raw, u8 raw_len, u8 display_width) {
@@ -950,16 +912,13 @@ Cell cell_empty() { return (Cell) { .cp = cp_from_byte(' ') }; }
 b32 cell_equal(Cell a, Cell b) { return a.flags == b.flags && cp_equal(a.cp, b.cp); }
 
 void put_str(i32 x, i32 y, byte *s, usize len) {
-    usize i = 0;
-    while (i < len) {
-        Utf8Result res = utf8_next(s + i, len - i);
+    byte *p = s;
+    byte *end = s + len;
 
-        if (res.status == UTF8_INCOMPLETE) break;
-
-        put_codepoint(x, y, res.cp);
-
-        i += res.consumed_bytes;
-        x += res.cp.display_width;
+    while (p < end) {
+        CodePoint cp = utf8_next(&p, end);
+        put_codepoint(x, y, cp);
+        x += cp.display_width;
     }
 }
 
