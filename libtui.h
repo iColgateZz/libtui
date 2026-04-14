@@ -1673,8 +1673,16 @@ Div *div_new(u32 padding, u32 spacing) {
 }
 
 void text_input_layout(Widget *w, LayoutConstraint c) {
-    w->size.h = 1;
+    TextInput *t = container_of(w, TextInput, widget);
+
     w->size.w = MIN(20, c.max_w);
+
+    WrapIter it = wrap_iter_new(&t->text, w->size.w);
+
+    i32 lines = 0;
+    while (wrap_iter_next(&it).len > 0) lines++;
+
+    w->size.h = MAX(1, lines);
 }
 
 void text_input_event(Widget *w) {
@@ -1699,15 +1707,27 @@ void text_input_event(Widget *w) {
 void text_input_draw(Widget *w) {
     TextInput *t = container_of(w, TextInput, widget);
 
+    WrapIter it = wrap_iter_new(&t->text, w->size.w);
+
+    i32 y = 0;
     i32 x = 0;
-    for (usize i = 0; i < t->text.count; i++) {
-        CodePoint cp = t->text.items[i];
-        ui_put_cp(x, 0, cp);
-        x += cp.display_width;
+    while (1) {
+        WrapSlice slice = wrap_iter_next(&it);
+        if (slice.len == 0) break;
+
+        x = 0;
+        for (usize i = 0; i < slice.len; i++) {
+            CodePoint cp = slice.ptr[i];
+
+            ui_put_cp(x, y, cp);
+            x += cp.display_width;
+        }
+
+        y++;
     }
 
     if (ui_is_focused(w)) {
-        ui_put_cp(x, 0, cp("_"));
+        ui_put_cp(x, y, cp("_"));
     }
 }
 

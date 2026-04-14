@@ -15,8 +15,8 @@ i32 main(i32 argc, byte *argv[]) {
     ui_init();
 
     // e1();
-    e2();
-    // e3();
+    // e2();
+    e3();
 
     while (!is_codepoint(cp("q"))) {
         begin_frame();
