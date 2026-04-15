@@ -662,6 +662,10 @@ void render() {
 }
 
 void emit_cells(List(byte) *out, Cell *cells, usize start, usize len) {
+    Cell cell = cells[start];
+    cell.front = (RGB) {127, 255, 100};
+    emit_foreground(out, cell.front);
+    emit_background(out, cell.back);
 
     for (usize i = 0; i < len; i++) {
         Cell c = cells[start + i];
@@ -669,6 +673,8 @@ void emit_cells(List(byte) *out, Cell *cells, usize start, usize len) {
 
         list_append_many(out, c.cp.raw, c.cp.raw_len);
     }
+
+    reset_color(out);
 }
 
 void emit_foreground(List(byte) *out, RGB c) { emit_color(out, c, 38); }
