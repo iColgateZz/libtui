@@ -1685,6 +1685,8 @@ void text_input_draw(Widget *w) {
         y++;
     }
 
+    if (y > 0) y--;
+
     if (ui_is_focused(w)) {
         ui_put_cp(x, y, cp("_"));
     }
