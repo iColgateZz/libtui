@@ -26,10 +26,18 @@ b32 cp_equal(CodePoint a, CodePoint b);
 #define CELL_CONTINUATION   0x01
 #define CELL_WIDE_LEAD      0x02
 
+typedef struct {
+    u8 r, g, b;
+} RGB;
+
+b32 rgb_equal(RGB a, RGB b) { return memcmp(&a, &b, sizeof a); }
+
 //TODO: add color support
 typedef struct {
     CodePoint cp;
     u8 flags;
+    RGB front;
+    RGB back;
 } Cell;
 
 Cell cell(CodePoint cp);
@@ -650,12 +658,28 @@ void render() {
 }
 
 void emit_cells(List(byte) *out, Cell *cells, usize start, usize len) {
+
     for (usize i = 0; i < len; i++) {
         Cell c = cells[start + i];
         if (c.flags & CELL_CONTINUATION) continue;
 
         list_append_many(out, c.cp.raw, c.cp.raw_len);
     }
+}
+
+void emit_foreground(List(byte) *out, RGB c) { emit_color(out, c, 38); }
+void emit_background(List(byte) *out, RGB c) { emit_color(out, c, 48); }
+
+void emit_color(List(byte) *out, RGB c, u8 mode) {
+    Stream s = arena_stream_start(&Terminal.tmp, 64);
+    stream_fmt(&s, "\33[%u;2;%u;%u;%um", mode, c.r, c.g, c.b);
+    s8 result = stream_end(s);
+    list_append_many(out, result.s, result.len);
+}
+
+void reset_color(List(byte) *out) {
+    s8 result = s8("\33[0m");
+    list_append_many(out, result.s, result.len);
 }
 
 void generate_absolute_cursor_move(List(byte) *a, u32 row, u32 col) {
@@ -909,7 +933,12 @@ Cell cell(CodePoint cp) { return (Cell) { .cp = cp }; }
 Cell cell_lead(CodePoint cp) { return (Cell) { .cp = cp, .flags = CELL_WIDE_LEAD }; }
 Cell cell_cont() { return (Cell) { .flags = CELL_CONTINUATION }; }
 Cell cell_empty() { return (Cell) { .cp = cp_from_byte(' ') }; }
-b32 cell_equal(Cell a, Cell b) { return a.flags == b.flags && cp_equal(a.cp, b.cp); }
+b32 cell_equal(Cell a, Cell b) { 
+    return a.flags == b.flags && 
+        cp_equal(a.cp, b.cp) && 
+        rgb_equal(a.front, b.front) && 
+        rgb_equal(b.back, a.back);
+}
 
 void put_str(i32 x, i32 y, byte *s, usize len) {
     byte *p = s;
