@@ -1734,7 +1734,6 @@ WrapSlice wrap_iter_next(WrapIter *it) {
 
 //TODO: flex layout
 //TODO: stack layout
-//TODO: text wrapping in widgets
 //TODO: list widget with scrollbar?
 //TODO: keyboard focus navigation
 //TODO: other css-like properties
