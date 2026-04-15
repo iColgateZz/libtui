@@ -452,6 +452,10 @@ b32 try_parse_term_key(byte *str, isize n, Event *e);
 b32 try_parse_text(byte *str, isize n, Event *e);
 void fix_wide_char(i32 x, i32 y);
 void emit_cells(List(byte) *out, Cell *cells, usize start, usize len);
+void emit_foreground(List(byte) *out, RGB c);
+void emit_background(List(byte) *out, RGB c);
+void emit_color(List(byte) *out, RGB c, u8 mode);
+void reset_color(List(byte) *out);
 
 CodePoint utf8_next(byte **start, byte *end);
 
