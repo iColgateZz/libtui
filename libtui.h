@@ -22,22 +22,36 @@ b32 cp_equal(CodePoint a, CodePoint b);
 
 #define ctrl(x) cp_from_byte((x) & 0x1F)
 
-#define CELL_REGULAR        0x00
-#define CELL_CONTINUATION   0x01
-#define CELL_WIDE_LEAD      0x02
-
 typedef struct {
     u8 r, g, b;
 } RGB;
 
-b32 rgb_equal(RGB a, RGB b) { return memcmp(&a, &b, sizeof a); }
+enum {
+    EFFECT_FG               = 1 << 0,
+    EFFECT_BG               = 1 << 1,
+    EFFECT_BOLD             = 1 << 2,
+    EFFECT_DIM              = 1 << 3,
+    EFFECT_ITALIC           = 1 << 4,
+    EFFECT_UNDERLINE        = 1 << 5,
+    EFFECT_INVERSE          = 1 << 6,
+    EFFECT_STRIKETHROUGH    = 1 << 7,
+};
+
+typedef struct {
+    RGB fg;
+    RGB bg;
+    u8 flags;
+} Effect;
+
+#define CELL_REGULAR        0x00
+#define CELL_CONTINUATION   0x01
+#define CELL_WIDE_LEAD      0x02
 
 //TODO: add color support
 typedef struct {
     CodePoint cp;
     u8 flags;
-    RGB front;
-    RGB back;
+    Effect effect;
 } Cell;
 
 Cell cell(CodePoint cp);
@@ -452,10 +466,8 @@ b32 try_parse_term_key(byte *str, isize n, Event *e);
 b32 try_parse_text(byte *str, isize n, Event *e);
 void fix_wide_char(i32 x, i32 y);
 void emit_cells(List(byte) *out, Cell *cells, usize start, usize len);
-void emit_foreground(List(byte) *out, RGB c);
-void emit_background(List(byte) *out, RGB c);
-void emit_color(List(byte) *out, RGB c, u8 mode);
-void reset_color(List(byte) *out);
+void emit_effect(List(byte) *out, Effect e);
+void reset_effect(List(byte) *out);
 
 CodePoint utf8_next(byte **start, byte *end);
 
@@ -662,10 +674,8 @@ void render() {
 }
 
 void emit_cells(List(byte) *out, Cell *cells, usize start, usize len) {
-    Cell cell = cells[start];
-    cell.front = (RGB) {127, 255, 100};
-    emit_foreground(out, cell.front);
-    emit_background(out, cell.back);
+    cells[start].effect.flags |= EFFECT_INVERSE;
+    emit_effect(out, cells[start].effect);
 
     for (usize i = 0; i < len; i++) {
         Cell c = cells[start + i];
@@ -674,20 +684,34 @@ void emit_cells(List(byte) *out, Cell *cells, usize start, usize len) {
         list_append_many(out, c.cp.raw, c.cp.raw_len);
     }
 
-    reset_color(out);
+    reset_effect(out);
 }
 
-void emit_foreground(List(byte) *out, RGB c) { emit_color(out, c, 38); }
-void emit_background(List(byte) *out, RGB c) { emit_color(out, c, 48); }
+void emit_effect(List(byte) *out, Effect e) {
+    if (e.flags == 0) return;
 
-void emit_color(List(byte) *out, RGB c, u8 mode) {
     Stream s = arena_stream_start(&Terminal.tmp, 64);
-    stream_fmt(&s, "\33[%u;2;%u;%u;%um", mode, c.r, c.g, c.b);
+    stream_fmt(&s, "\33[");
+
+    if (e.flags & EFFECT_BOLD)          stream_fmt(&s, "1;");
+    if (e.flags & EFFECT_DIM)           stream_fmt(&s, "2;");
+    if (e.flags & EFFECT_ITALIC)        stream_fmt(&s, "3;");
+    if (e.flags & EFFECT_UNDERLINE)     stream_fmt(&s, "4;");
+    if (e.flags & EFFECT_INVERSE)       stream_fmt(&s, "7;");
+    if (e.flags & EFFECT_STRIKETHROUGH) stream_fmt(&s, "9;");
+
+    if (e.flags & EFFECT_FG)
+        stream_fmt(&s, "38;2;%u;%u;%u;", e.fg.r, e.fg.g, e.fg.b);
+    if (e.flags & EFFECT_BG)
+        stream_fmt(&s, "48;2;%u;%u;%u;", e.bg.r, e.bg.g, e.bg.b);
+
+    // replace ';' with 'm'
+    *(s.p - 1) = 'm';
     s8 result = stream_end(s);
     list_append_many(out, result.s, result.len);
 }
 
-void reset_color(List(byte) *out) {
+void reset_effect(List(byte) *out) {
     s8 result = s8("\33[0m");
     list_append_many(out, result.s, result.len);
 }
@@ -943,12 +967,7 @@ Cell cell(CodePoint cp) { return (Cell) { .cp = cp }; }
 Cell cell_lead(CodePoint cp) { return (Cell) { .cp = cp, .flags = CELL_WIDE_LEAD }; }
 Cell cell_cont() { return (Cell) { .flags = CELL_CONTINUATION }; }
 Cell cell_empty() { return (Cell) { .cp = cp_from_byte(' ') }; }
-b32 cell_equal(Cell a, Cell b) { 
-    return a.flags == b.flags && 
-        cp_equal(a.cp, b.cp) && 
-        rgb_equal(a.front, b.front) && 
-        rgb_equal(b.back, a.back);
-}
+b32 cell_equal(Cell a, Cell b) { return memcmp(&a, &b, sizeof a) == 0; }
 
 void put_str(i32 x, i32 y, byte *s, usize len) {
     byte *p = s;
