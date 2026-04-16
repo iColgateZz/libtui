@@ -674,7 +674,8 @@ void render() {
 }
 
 void emit_cells(List(byte) *out, Cell *cells, usize start, usize len) {
-    cells[start].effect.flags |= EFFECT_INVERSE;
+    cells[start].effect.flags |=  EFFECT_BOLD | EFFECT_FG;
+    cells[start].effect.fg = (RGB) {123, 123, 231};
     emit_effect(out, cells[start].effect);
 
     for (usize i = 0; i < len; i++) {
@@ -980,6 +981,7 @@ void put_str(i32 x, i32 y, byte *s, usize len) {
     }
 }
 
+//TODO: add version with Effect, use macro trick as with arena_push
 void put_codepoint(i32 x, i32 y, CodePoint cp) {
     Clip parent = clip_peek();
 
