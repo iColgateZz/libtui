@@ -984,7 +984,6 @@ void put_str(i32 x, i32 y, byte *s, usize len) {
     }
 }
 
-//TODO: add version with Effect, use macro trick as with arena_push
 void put_cp_(i32 x, i32 y, CodePoint cp, Effect e) {
     Clip parent = clip_peek();
 
