@@ -54,7 +54,7 @@ typedef struct {
     Effect effect;
 } Cell;
 
-Cell cell(CodePoint cp);
+Cell cell(CodePoint cp, Effect e);
 Cell cell_cont();
 Cell cell_empty();
 b32 cell_equal(Cell a, Cell b);
@@ -143,7 +143,12 @@ typedef u32 Unicode;
 u8 unicode_width(Unicode ch);
 
 void put_str(i32 x, i32 y, byte *str, usize len);
-void put_codepoint(i32 x, i32 y, CodePoint cp);
+void put_cp_(i32 x, i32 y, CodePoint cp, Effect e);
+
+#define put_cp(...)                 putx_(__VA_ARGS__, put2_, put1_)(__VA_ARGS__)
+#define putx_(a, b, c, d, e, ...)   e
+#define put1_(x, y, cp)             put_cp_(x, y, cp, (Effect) {0})
+#define put2_(x, y, cp, ef)         put_cp_(x, y, cp, ef)
 
 byte *vfmt(byte *p, byte *end, byte *f, va_list args);
 byte *fmt(byte *p, byte *end, byte *f, ...);
@@ -587,7 +592,7 @@ void handle_sigwinch(i32 signo) {
 
     // trigger full redraw
     for (usize i = 0; i < Terminal.frontbuffer.count; ++i)
-        Terminal.frontbuffer.items[i] = cell(cp_from_byte(0xFF));
+        Terminal.frontbuffer.items[i] = cell(cp_from_byte(0xFF), (Effect) {0});
 
     write(Terminal.pipe.write_fd, &signo, sizeof signo);
 }
@@ -964,8 +969,8 @@ b32 cp_equal(CodePoint a, CodePoint b) {
     return memcmp(a.raw, b.raw, a.raw_len) == 0;
 }
 
-Cell cell(CodePoint cp) { return (Cell) { .cp = cp }; }
-Cell cell_lead(CodePoint cp) { return (Cell) { .cp = cp, .flags = CELL_WIDE_LEAD }; }
+Cell cell(CodePoint cp, Effect e) { return (Cell) { .cp = cp, .effect = e }; }
+Cell cell_lead(CodePoint cp, Effect e) { return (Cell) { .cp = cp, .flags = CELL_WIDE_LEAD, .effect = e }; }
 Cell cell_cont() { return (Cell) { .flags = CELL_CONTINUATION }; }
 Cell cell_empty() { return (Cell) { .cp = cp_from_byte(' ') }; }
 b32 cell_equal(Cell a, Cell b) { return memcmp(&a, &b, sizeof a) == 0; }
@@ -976,13 +981,13 @@ void put_str(i32 x, i32 y, byte *s, usize len) {
 
     while (p < end) {
         CodePoint cp = utf8_next(&p, end);
-        put_codepoint(x, y, cp);
+        put_cp(x, y, cp);
         x += cp.display_width;
     }
 }
 
 //TODO: add version with Effect, use macro trick as with arena_push
-void put_codepoint(i32 x, i32 y, CodePoint cp) {
+void put_cp_(i32 x, i32 y, CodePoint cp, Effect e) {
     Clip parent = clip_peek();
 
     if (x < 0 || y < 0) return;
@@ -993,7 +998,7 @@ void put_codepoint(i32 x, i32 y, CodePoint cp) {
 
     if (cp.display_width == 1) {
         fix_wide_char(x, y);
-        cells[x + y * w] = cell(cp);
+        cells[x + y * w] = cell(cp, e);
         return;
     }
 
@@ -1003,7 +1008,7 @@ void put_codepoint(i32 x, i32 y, CodePoint cp) {
         fix_wide_char(x, y);
         fix_wide_char(x + 1, y);
 
-        cells[x + y * w] = cell_lead(cp);
+        cells[x + y * w] = cell_lead(cp, e);
         cells[(x + 1) + y * w] = cell_cont();
         return;
     }
@@ -1226,7 +1231,7 @@ void draw_line(i32 x0, i32 y0, i32 x1, i32 y1, CodePoint cp) {
         }
 
         for (i32 y = y0; y <= y1; y++) {
-            put_codepoint(x0, y, cp);
+            put_cp(x0, y, cp);
         }
     }
     else if (y0 == y1) { // horizontal
@@ -1237,7 +1242,7 @@ void draw_line(i32 x0, i32 y0, i32 x1, i32 y1, CodePoint cp) {
         }
 
         for (i32 x = x0; x <= x1; x++) {
-            put_codepoint(x, y0, cp);
+            put_cp(x, y0, cp);
         }
     }
 }
@@ -1250,10 +1255,10 @@ void draw_box(Rectangle r) {
     i32 x1 = r.x + r.w - 1;
     i32 y1 = r.y + r.h - 1;
 
-    put_codepoint(x0, y0, cp("┌"));
-    put_codepoint(x1, y0, cp("┐"));
-    put_codepoint(x0, y1, cp("└"));
-    put_codepoint(x1, y1, cp("┘"));
+    put_cp(x0, y0, cp("┌"));
+    put_cp(x1, y0, cp("┐"));
+    put_cp(x0, y1, cp("└"));
+    put_cp(x1, y1, cp("┘"));
 
     draw_line(x0 + 1, y0, x1 - 1, y0, cp("─"));
     draw_line(x0 + 1, y1, x1 - 1, y1, cp("─"));
@@ -1331,7 +1336,7 @@ void ui_run() {
 
 void ui_put_cp(i32 x, i32 y, CodePoint cp) {
     Transform t = peek_transform();
-    put_codepoint(x + t.x, y + t.y, cp);
+    put_cp(x + t.x, y + t.y, cp);
 }
 
 void ui_put_str(i32 x, i32 y, byte *s, usize len) {
