@@ -679,8 +679,6 @@ void render() {
 }
 
 void emit_cells(List(byte) *out, Cell *cells, usize start, usize len) {
-    cells[start].effect.flags |=  EFFECT_BOLD | EFFECT_FG;
-    cells[start].effect.fg = (RGB) {123, 123, 231};
     emit_effect(out, cells[start].effect);
 
     for (usize i = 0; i < len; i++) {
