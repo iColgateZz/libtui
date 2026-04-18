@@ -1370,8 +1370,6 @@ void ui_init() {
 void ui_register_root(Widget *w) {
     UI.root = div_new();
     style(UI.root, direction(LAYOUT_COLUMN), overflow(OVERFLOW_SCROLL_Y));
-    UI.root->container_style.direction = LAYOUT_COLUMN;
-    UI.root->container_style.overflow = OVERFLOW_SCROLL_Y;
     container_add(&UI.root->widget, w);
 }
 
