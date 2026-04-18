@@ -254,6 +254,9 @@ typedef struct {
     void (*draw)(Widget *self);
 } WidgetVTable;
 
+//TODO: add flags
+//      container / leaf
+//      hidden? disabled? focusable?
 struct Widget {
     Position offset;
     Size size;
