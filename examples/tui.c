@@ -31,18 +31,26 @@ i32 main(i32 argc, byte *argv[]) {
 
 void e1() {
     Div *layout = div_new();
-    layout->widget.style.border = 1;
+    style(layout, 
+        border_width(1),
+    );
 
     s8 label1 = s8("What is Chandler Bing's job?");
     s8 label2 = s8("Transponster");
     s8 label3 = s8("That's not even a word..");
 
     Button *b  = button_new(label1);
-    b->widget.style.border = 1;
+    style(b, 
+        border_width(1),
+    );
     Button *b2 = button_new(label2);
-    b2->widget.style.border = 1;
+    style(b2, 
+        border_width(1),
+    );
     Button *b3 = button_new(label3);
-    b3->widget.style.border = 1;
+    style(b3, 
+        border_width(1),
+    );
 
     ui_register_root(&layout->widget);
     container_add(&layout->widget, &b->widget);
@@ -55,7 +63,7 @@ void e2() {
     style(scroll, 
         overflow(OVERFLOW_SCROLL_Y),
         // width(100),
-        border(1),
+        border_width(1),
         padding(1),
         align_self(ALIGN_CENTER),
         // margin(3),
@@ -71,12 +79,12 @@ void e2() {
         // margin(2),
         // height(30),
         // width(100),
-        border(1),
+        border_width(1),
         align_self(ALIGN_CENTER),
     );
 
     StyleArgs args = style_new(
-        border(1),
+        border_width(1),
     );
 
     Button *b1 = button_new(s8("item"));
@@ -111,14 +119,13 @@ void e2() {
 
 void e3() {
     Div *root = div_new();
-    root->widget.style.border = 1;
+    style(root, border_width(1));
 
     Button *b = button_new(s8("Click"));
-    b->widget.style.border = 1;
+    style(b, border_width(1));
 
     TextInput *input = text_input_new();
-    input->widget.style.border = 1;
-    input->widget.style.padding = 1;
+    style(input, border_width(1), padding(1));
 
     container_add(&root->widget, &b->widget);
     container_add(&root->widget, &input->widget);

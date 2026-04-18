@@ -236,13 +236,20 @@ enum {
 };
 typedef u8 Align;
 
+typedef struct BorderStyle BorderStyle;
+struct BorderStyle {
+    u8 width;
+    void (*draw)(Rectangle rect, BorderStyle *self);
+    Effect effect;
+};
+
 //TODO: use less memory
 typedef struct {
     i32 w, h; // fixed size
     Effect effect;
     Align align_self;
     u8 padding, margin;
-    u8 border;
+    BorderStyle border;
 } WidgetStyle;
 
 typedef struct Widget Widget;
@@ -340,7 +347,6 @@ typedef enum {
     STYLE_HEIGHT,
     STYLE_PADDING,
     STYLE_MARGIN,
-    STYLE_BORDER,
     STYLE_ALIGN_SELF,
     STYLE_BG,
     
@@ -351,13 +357,19 @@ typedef enum {
     STYLE_OVERFLOW,
     
     // text style
-    STYLE_TEXT_COLOR,
+    STYLE_TEXT_FG,
+    STYLE_TEXT_BG,
     STYLE_BOLD,
     STYLE_DIM,
     STYLE_ITALIC,
     STYLE_UNDERLINE,
     STYLE_INVERSE,
     STYLE_STRIKETHROUGH,
+
+    // border style
+    STYLE_BORDER_WIDTH,
+    STYLE_BORDER_FN,
+    //TODO: add border color, ...
 } StyleProp;
 
 typedef struct {
@@ -370,6 +382,7 @@ typedef struct {
         LayoutDirection direction;
         Overflow overflow;
         RGB rgb;
+        void *p;
     };
 } StyleArg;
 
@@ -382,7 +395,6 @@ typedef struct {
 #define height(v)           ((StyleArg){ .prop = STYLE_HEIGHT,         .i = (v) })
 #define padding(v)          ((StyleArg){ .prop = STYLE_PADDING,        .u = (v) })
 #define margin(v)           ((StyleArg){ .prop = STYLE_MARGIN,         .u = (v) })
-#define border(v)           ((StyleArg){ .prop = STYLE_BORDER,         .u = (v) })
 #define align_self(v)       ((StyleArg){ .prop = STYLE_ALIGN_SELF,     .align = (v) })
 #define bg(r, g, b)         ((StyleArg){ .prop = STYLE_BG,             .rgb = { (r), (g), (b) } })
 
@@ -391,13 +403,17 @@ typedef struct {
 #define spacing(v)          ((StyleArg){ .prop = STYLE_SPACING,        .u = (v) })
 #define overflow(v)         ((StyleArg){ .prop = STYLE_OVERFLOW,       .overflow = (v) })
 
-#define text_color(r, g, b) ((StyleArg){ .prop = STYLE_TEXT_COLOR,     .rgb = { (r), (g), (b) } })
-#define bold(v)             ((StyleArg){ .prop = STYLE_BOLD,           .b = (v) })
-#define dim(v)              ((StyleArg){ .prop = STYLE_DIM,            .b = (v) })
-#define italic(v)           ((StyleArg){ .prop = STYLE_ITALIC,         .b = (v) })
-#define underline(v)        ((StyleArg){ .prop = STYLE_UNDERLINE,      .b = (v) })
-#define inverse(v)          ((StyleArg){ .prop = STYLE_INVERSE,        .b = (v) })
-#define strikethrough(v)    ((StyleArg){ .prop = STYLE_STRIKETHROUGH,  .b = (v) })
+#define text_fg(r, g, b)         ((StyleArg){ .prop = STYLE_TEXT_FG,     .rgb = { (r), (g), (b) } })
+#define text_bg(r, g, b)         ((StyleArg){ .prop = STYLE_TEXT_BG,     .rgb = { (r), (g), (b) } })
+#define text_bold(v)             ((StyleArg){ .prop = STYLE_BOLD,           .b = (v) })
+#define text_dim(v)              ((StyleArg){ .prop = STYLE_DIM,            .b = (v) })
+#define text_italic(v)           ((StyleArg){ .prop = STYLE_ITALIC,         .b = (v) })
+#define text_underline(v)        ((StyleArg){ .prop = STYLE_UNDERLINE,      .b = (v) })
+#define text_inverse(v)          ((StyleArg){ .prop = STYLE_INVERSE,        .b = (v) })
+#define text_strikethrough(v)    ((StyleArg){ .prop = STYLE_STRIKETHROUGH,  .b = (v) })
+
+#define border_width(v)     ((StyleArg){ .prop = STYLE_BORDER_WIDTH,    .u = (v) })
+#define border_fn(v)        ((StyleArg){ .prop = STYLE_BORDER_FN,       .p = (v) })
 
 #define MAX(a, b)     ((a) > (b) ? (a) : (b))
 #define MIN(a, b)     ((a) < (b) ? (a) : (b))
@@ -1477,7 +1493,7 @@ Rectangle content_rect(Widget *w) {
 
 Rectangle content_bp_rect(Widget *w) {
     Rectangle r = content_rect(w);
-    u8 pad = w->style.padding + w->style.border;
+    u8 pad = w->style.padding + w->style.border.width;
     r.x -= pad;
     r.y -= pad;
     r.w += 2 * pad;
@@ -1497,7 +1513,7 @@ void widget_layout(Widget *w, LayoutConstraint c) {
 Widget *widget_hit_test(Widget *w) {
     push_transform(w->offset.x, w->offset.y);
     u8 m = w->style.margin;
-    u8 b = w->style.border;
+    u8 b = w->style.border.width;
     u8 p = w->style.padding;
     push_transform(m , m);
     push_transform(b, b);
@@ -1526,12 +1542,13 @@ void widget_draw(Widget *w) {
     push_transform(w->offset.x, w->offset.y);
 
     u8 m = w->style.margin;
-    u8 b = w->style.border;
+    u8 b = w->style.border.width;
     u8 p = w->style.padding;
 
     push_transform(m , m);
 
     if (b) {
+        //TODO: use function in border style
         ui_draw_box(
             w->size.w + 2 * (b + p),
             w->size.h + 2 * (b + p)
@@ -1577,7 +1594,6 @@ void style_apply(Widget *w, StyleArg *args, usize count) {
             case STYLE_HEIGHT: ws->h = arg.i; break;
             case STYLE_PADDING: ws->padding = arg.u; break;
             case STYLE_MARGIN: ws->margin = arg.u; break;
-            case STYLE_BORDER: ws->border = arg.u; break;
             case STYLE_ALIGN_SELF: ws->align_self = arg.align; break;
             case STYLE_BG:
                 ws->effect.bg = arg.rgb;
@@ -1603,9 +1619,13 @@ void style_apply(Widget *w, StyleArg *args, usize count) {
                 break;
 
             // Text properties
-            case STYLE_TEXT_COLOR:
+            case STYLE_TEXT_FG:
                 ws->effect.fg = arg.rgb;
                 ws->effect.flags |= EFFECT_FG;
+                break;
+            case STYLE_TEXT_BG:
+                ws->effect.bg = arg.rgb;
+                ws->effect.flags |= EFFECT_BG;
                 break;
             case STYLE_BOLD: u8_flag(&ws->effect.flags, EFFECT_BOLD, arg.b); break;
             case STYLE_DIM: u8_flag(&ws->effect.flags, EFFECT_DIM, arg.b); break;
@@ -1613,6 +1633,9 @@ void style_apply(Widget *w, StyleArg *args, usize count) {
             case STYLE_UNDERLINE: u8_flag(&ws->effect.flags, EFFECT_UNDERLINE, arg.b); break;
             case STYLE_INVERSE: u8_flag(&ws->effect.flags, EFFECT_INVERSE, arg.b); break;
             case STYLE_STRIKETHROUGH: u8_flag(&ws->effect.flags, EFFECT_STRIKETHROUGH, arg.b); break;
+
+            case STYLE_BORDER_WIDTH: ws->border.width = arg.u; break;
+            case STYLE_BORDER_FN: ws->border.draw = arg.p; break;
 
             default: assert(false && "unknown style property"); break;
         }
@@ -1630,7 +1653,7 @@ i32 apply_min_wh_constraint(i32 a, i32 b) {
     return MIN(a, b);
 }
 
-i32 widget_mbp(Widget *w) { return w->style.margin + w->style.border + w->style.padding; }
+i32 widget_mbp(Widget *w) { return w->style.margin + w->style.border.width + w->style.padding; }
 i32 widget_total_width(Widget *w) { return w->size.w + 2 * widget_mbp(w); }
 i32 widget_total_height(Widget *w) { return w->size.h + 2 * widget_mbp(w); }
 
