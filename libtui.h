@@ -1555,7 +1555,7 @@ b32 widget_is_container(Widget *w) {
     return w->vtable == &div_methods;
 }
 
-void effect_set_flag(u8 *flags, u8 bit, b32 enabled) {
+void u8_flag(u8 *flags, u8 bit, b32 enabled) {
     if (enabled) *flags |= bit;
     else *flags &= ~bit;
 }
@@ -1608,12 +1608,12 @@ void style_apply(Widget *w, StyleArg *args, usize count) {
                 ws->effect.fg = arg.rgb;
                 ws->effect.flags |= EFFECT_FG;
                 break;
-            case STYLE_BOLD: effect_set_flag(&ws->effect.flags, EFFECT_BOLD, arg.b); break;
-            case STYLE_DIM: effect_set_flag(&ws->effect.flags, EFFECT_DIM, arg.b); break;
-            case STYLE_ITALIC: effect_set_flag(&ws->effect.flags, EFFECT_ITALIC, arg.b); break;
-            case STYLE_UNDERLINE: effect_set_flag(&ws->effect.flags, EFFECT_UNDERLINE, arg.b); break;
-            case STYLE_INVERSE: effect_set_flag(&ws->effect.flags, EFFECT_INVERSE, arg.b); break;
-            case STYLE_STRIKETHROUGH: effect_set_flag(&ws->effect.flags, EFFECT_STRIKETHROUGH, arg.b); break;
+            case STYLE_BOLD: u8_flag(&ws->effect.flags, EFFECT_BOLD, arg.b); break;
+            case STYLE_DIM: u8_flag(&ws->effect.flags, EFFECT_DIM, arg.b); break;
+            case STYLE_ITALIC: u8_flag(&ws->effect.flags, EFFECT_ITALIC, arg.b); break;
+            case STYLE_UNDERLINE: u8_flag(&ws->effect.flags, EFFECT_UNDERLINE, arg.b); break;
+            case STYLE_INVERSE: u8_flag(&ws->effect.flags, EFFECT_INVERSE, arg.b); break;
+            case STYLE_STRIKETHROUGH: u8_flag(&ws->effect.flags, EFFECT_STRIKETHROUGH, arg.b); break;
 
             default: assert(false && "unknown style property"); break;
         }
