@@ -229,18 +229,18 @@ typedef struct {
     i32 max_h;
 } LayoutConstraint;
 
-typedef enum {
+enum {
     ALIGN_START,
     ALIGN_CENTER,
     ALIGN_END,
-} Align;
-//TODO: typedef u8, u16 as Align, ... to use less space
+};
+typedef u8 Align;
 
 //TODO: use less memory
 typedef struct {
     i32 w, h; // fixed size
-    Align align_self;
     Effect effect;
+    Align align_self;
     u8 padding, margin;
     u8 border;
 } WidgetStyle;
@@ -259,28 +259,28 @@ typedef struct {
 //      container / leaf
 //      hidden? disabled? focusable?
 struct Widget {
+    WidgetStyle style;
     Position offset;
     Size size;
     Widget *parent;
-    WidgetStyle style;
     const WidgetVTable *vtable;
 };
-
-int a = sizeof(WidgetStyle);
 
 typedef Widget * WidgetPtr;
 list_def(WidgetPtr);
 
-typedef enum {
+enum {
     LAYOUT_COLUMN,
     LAYOUT_ROW,
-} LayoutDirection;
+};
+typedef u8 LayoutDirection;
 
-typedef enum {
+enum {
     OVERFLOW_VISIBLE_Y,
     OVERFLOW_CLIP,
     OVERFLOW_SCROLL_Y,
-} Overflow;
+};
+typedef u8 Overflow;
 
 typedef struct {
     LayoutDirection direction;
@@ -407,11 +407,13 @@ void style_apply(Widget *w, StyleArg *args, usize n);
         StyleArg _style_args[] = { __VA_ARGS__ }; \
         style_apply((Widget *)(w), _style_args, ARRAY_SIZE(_style_args)); \
     } while (0)
+
 #define style_new(...) \
     ((StyleArgs){ \
         .items = (StyleArg[]){ __VA_ARGS__ }, \
         .count = sizeof((StyleArg[]){ __VA_ARGS__ }) / sizeof(StyleArg) \
     })
+
 #define style_args(w, args, ...) \
     do { \
         style_apply((Widget *)w, args.items, args.count); \
@@ -464,6 +466,14 @@ void text_input_event(Widget *w);
 void text_input_draw(Widget *w);
 TextInput *text_input_new();
 
+static const WidgetVTable text_input_methods = {
+    .layout = text_input_layout,
+    .hit_test = default_hit_test,
+    .event = text_input_event,
+    .update = default_update,
+    .draw = text_input_draw,
+};
+
 typedef struct {
     CodePoint *start;
     CodePoint *end;
@@ -477,14 +487,6 @@ typedef struct {
 
 WrapIter wrap_iter_new(List(CodePoint) *text, i32 width);
 WrapSlice wrap_iter_next(WrapIter *it);
-
-static const WidgetVTable text_input_methods = {
-    .layout = text_input_layout,
-    .hit_test = default_hit_test,
-    .event = text_input_event,
-    .update = default_update,
-    .draw = text_input_draw,
-};
 
 #endif //LIBTUI_INCLUDE
 
