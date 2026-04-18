@@ -255,15 +255,17 @@ typedef struct {
     void (*draw)(Widget *self);
 } WidgetVTable;
 
-//TODO: add flags
-//      container / leaf
-//      hidden? disabled? focusable?
 struct Widget {
     WidgetStyle style;
     Position offset;
     Size size;
     Widget *parent;
     const WidgetVTable *vtable;
+    u8 metadata;
+};
+
+enum {
+    WIDGET_CONTAINER = 1,
 };
 
 typedef Widget * WidgetPtr;
@@ -1550,10 +1552,7 @@ void widget_draw(Widget *w) {
     pop_transform(); // offset
 }
 
-//TODO: add tag to widget
-b32 widget_is_container(Widget *w) {
-    return w->vtable == &div_methods;
-}
+b32 widget_is_container(Widget *w) { return w->metadata & WIDGET_CONTAINER; }
 
 void u8_flag(u8 *flags, u8 bit, b32 enabled) {
     if (enabled) *flags |= bit;
@@ -1846,6 +1845,7 @@ Div *div_new(void) {
     Div *b = arena_push(&UI.allocator, Div);
     assert(b);
     b->widget.vtable = &div_methods;
+    u8_flag(&b->widget.metadata, WIDGET_CONTAINER, true);
     return b;
 }
 
