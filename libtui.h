@@ -241,6 +241,7 @@ typedef struct {
     Align align_self;
     u8 padding, margin;
     u8 border;
+    Effect effect;
 } WidgetStyle;
 
 typedef struct Widget Widget;
@@ -303,6 +304,8 @@ void widget_update(Widget *w);
 // Draw widget
 void widget_draw(Widget *w);
 
+b32 widget_is_container(Widget *w);
+
 Widget *default_hit_test(Widget *w);
 void default_update(Widget *w);
 
@@ -322,6 +325,93 @@ void ui_put_cp(i32 x, i32 y, CodePoint cp);
 void ui_put_str(i32 x, i32 y, byte *s, usize len);
 void ui_draw_line(i32 x0, i32 y0, i32 x1, i32 y1, CodePoint cp);
 void ui_draw_box(i32 w, i32 h);
+
+typedef enum {
+    // widget style
+    STYLE_WIDTH,
+    STYLE_HEIGHT,
+    STYLE_PADDING,
+    STYLE_MARGIN,
+    STYLE_BORDER,
+    STYLE_ALIGN_SELF,
+    STYLE_BG,
+    
+    /// container style
+    STYLE_DIRECTION,
+    STYLE_ALIGN_CHILDREN,
+    STYLE_SPACING,
+    STYLE_OVERFLOW,
+    
+    // text style
+    STYLE_TEXT_COLOR,
+    STYLE_BOLD,
+    STYLE_DIM,
+    STYLE_ITALIC,
+    STYLE_UNDERLINE,
+    STYLE_INVERSE,
+    STYLE_STRIKETHROUGH,
+} StyleProp;
+
+typedef struct {
+    StyleProp prop;
+    union {
+        i32 i;
+        u32 u;
+        b32 b;
+        Align align;
+        LayoutDirection direction;
+        Overflow overflow;
+        RGB rgb;
+    };
+} StyleArg;
+
+typedef struct {
+    StyleArg *items;
+    usize count;
+} StyleArgs;
+
+#define width(v)            ((StyleArg){ .prop = STYLE_WIDTH,          .i = (v) })
+#define height(v)           ((StyleArg){ .prop = STYLE_HEIGHT,         .i = (v) })
+#define padding(v)          ((StyleArg){ .prop = STYLE_PADDING,        .u = (v) })
+#define margin(v)           ((StyleArg){ .prop = STYLE_MARGIN,         .u = (v) })
+#define border(v)           ((StyleArg){ .prop = STYLE_BORDER,         .u = (v) })
+#define align_self(v)       ((StyleArg){ .prop = STYLE_ALIGN_SELF,     .align = (v) })
+#define bg(r, g, b)         ((StyleArg){ .prop = STYLE_BG,             .rgb = { (r), (g), (b) } })
+
+#define direction(v)        ((StyleArg){ .prop = STYLE_DIRECTION,      .direction = (v) })
+#define align_children(v)   ((StyleArg){ .prop = STYLE_ALIGN_CHILDREN, .align = (v) })
+#define spacing(v)          ((StyleArg){ .prop = STYLE_SPACING,        .u = (v) })
+#define overflow(v)         ((StyleArg){ .prop = STYLE_OVERFLOW,       .overflow = (v) })
+
+#define text_color(r, g, b) ((StyleArg){ .prop = STYLE_TEXT_COLOR,     .rgb = { (r), (g), (b) } })
+#define bold(v)             ((StyleArg){ .prop = STYLE_BOLD,           .b = (v) })
+#define dim(v)              ((StyleArg){ .prop = STYLE_DIM,            .b = (v) })
+#define italic(v)           ((StyleArg){ .prop = STYLE_ITALIC,         .b = (v) })
+#define underline(v)        ((StyleArg){ .prop = STYLE_UNDERLINE,      .b = (v) })
+#define inverse(v)          ((StyleArg){ .prop = STYLE_INVERSE,        .b = (v) })
+#define strikethrough(v)    ((StyleArg){ .prop = STYLE_STRIKETHROUGH,  .b = (v) })
+
+#define MAX(a, b)     ((a) > (b) ? (a) : (b))
+#define MIN(a, b)     ((a) < (b) ? (a) : (b))
+#define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
+
+void style_apply(Widget *w, StyleArg *args, usize n);
+#define style(w, ...) \
+    do { \
+        StyleArg _style_args[] = { __VA_ARGS__ }; \
+        style_apply((Widget *)(w), _style_args, ARRAY_SIZE(_style_args)); \
+    } while (0)
+#define style_new(...) \
+    ((StyleArgs){ \
+        .items = (StyleArg[]){ __VA_ARGS__ }, \
+        .count = sizeof((StyleArg[]){ __VA_ARGS__ }) / sizeof(StyleArg) \
+    })
+#define style_args(w, args, ...) \
+    do { \
+        style_apply((Widget *)w, args.items, args.count); \
+        StyleArg _style_args[] = { __VA_ARGS__ }; \
+        style_apply((Widget *)(w), _style_args, ARRAY_SIZE(_style_args)); \
+    } while (0)
 
 typedef struct {
     Widget widget;
@@ -348,7 +438,7 @@ Widget *div_hit_test(Widget *w);
 void div_event(Widget *w);
 void div_update(Widget *w);
 void div_draw(Widget *w);
-Div *div_new(u32 padding, u32 spacing);
+Div *div_new();
 
 static const WidgetVTable div_methods = {
     .layout = container_layout,
@@ -403,10 +493,6 @@ static const WidgetVTable text_input_methods = {
 #include <signal.h>
 #include <errno.h>
 #include <string.h>
-
-#define MAX(a, b)     ((a) > (b) ? (a) : (b))
-#define MIN(a, b)     ((a) < (b) ? (a) : (b))
-#define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
 
 list_def(Cell);
 list_def(Clip);
@@ -1282,7 +1368,8 @@ void ui_init() {
 }
 
 void ui_register_root(Widget *w) {
-    UI.root = div_new(0, 0);
+    UI.root = div_new();
+    style(UI.root, direction(LAYOUT_COLUMN), overflow(OVERFLOW_SCROLL_Y));
     UI.root->container_style.direction = LAYOUT_COLUMN;
     UI.root->container_style.overflow = OVERFLOW_SCROLL_Y;
     container_add(&UI.root->widget, w);
@@ -1455,6 +1542,76 @@ void widget_draw(Widget *w) {
     pop_transform(); // b
     pop_transform(); // m
     pop_transform(); // offset
+}
+
+//TODO: add tag to widget
+b32 widget_is_container(Widget *w) {
+    return w->vtable == &div_methods;
+}
+
+void effect_set_flag(u8 *flags, u8 bit, b32 enabled) {
+    if (enabled) *flags |= bit;
+    else *flags &= ~bit;
+}
+
+void style_apply(Widget *w, StyleArg *args, usize count) {
+    assert(w);
+    WidgetStyle *ws = &w->style;
+
+    ContainerStyle *cs = NULL;
+    if (widget_is_container(w)) {
+        ContainerWidget *container = container_of(w, ContainerWidget, widget);
+        cs = &container->container_style;
+    }
+
+    for (usize i = 0; i < count; i++) {
+        StyleArg arg = args[i];
+        switch (arg.prop) {
+            // WidgetStyle properties
+            case STYLE_WIDTH: ws->w = arg.i; break;
+            case STYLE_HEIGHT: ws->h = arg.i; break;
+            case STYLE_PADDING: ws->padding = arg.u; break;
+            case STYLE_MARGIN: ws->margin = arg.u; break;
+            case STYLE_BORDER: ws->border = arg.u; break;
+            case STYLE_ALIGN_SELF: ws->align_self = arg.align; break;
+            case STYLE_BG:
+                ws->effect.bg = arg.rgb;
+                ws->effect.flags |= EFFECT_BG;
+                break;
+
+            // ContainerStyle properties
+            case STYLE_DIRECTION:
+                assert(cs && "STYLE_DIRECTION applied to non-container widget");
+                cs->direction = arg.direction;
+                break;
+            case STYLE_ALIGN_CHILDREN:
+                assert(cs && "STYLE_ALIGN_CHILDREN applied to non-container widget");
+                cs->align_children = arg.align;
+                break;
+            case STYLE_SPACING:
+                assert(cs && "STYLE_SPACING applied to non-container widget");
+                cs->spacing = (u8)arg.u;
+                break;
+            case STYLE_OVERFLOW:
+                assert(cs && "STYLE_OVERFLOW applied to non-container widget");
+                cs->overflow = arg.overflow;
+                break;
+
+            // Text properties
+            case STYLE_TEXT_COLOR:
+                ws->effect.fg = arg.rgb;
+                ws->effect.flags |= EFFECT_FG;
+                break;
+            case STYLE_BOLD: effect_set_flag(&ws->effect.flags, EFFECT_BOLD, arg.b); break;
+            case STYLE_DIM: effect_set_flag(&ws->effect.flags, EFFECT_DIM, arg.b); break;
+            case STYLE_ITALIC: effect_set_flag(&ws->effect.flags, EFFECT_ITALIC, arg.b); break;
+            case STYLE_UNDERLINE: effect_set_flag(&ws->effect.flags, EFFECT_UNDERLINE, arg.b); break;
+            case STYLE_INVERSE: effect_set_flag(&ws->effect.flags, EFFECT_INVERSE, arg.b); break;
+            case STYLE_STRIKETHROUGH: effect_set_flag(&ws->effect.flags, EFFECT_STRIKETHROUGH, arg.b); break;
+
+            default: assert(false && "unknown style property"); break;
+        }
+    }
 }
 
 Widget *default_hit_test(Widget *w) {
@@ -1679,16 +1836,10 @@ void div_draw(Widget *w) {
     scroll_pop();
 }
 
-//TODO: accept Style & ContainerStyle as params?
-Div *div_new(u32 padding, u32 spacing) {
+Div *div_new(void) {
     Div *b = arena_push(&UI.allocator, Div);
     assert(b);
-
-    b->widget.style.padding = padding;
-    b->container_style.spacing = spacing;
-
     b->widget.vtable = &div_methods;
-
     return b;
 }
 

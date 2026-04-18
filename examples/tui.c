@@ -15,8 +15,8 @@ i32 main(i32 argc, byte *argv[]) {
     ui_init();
 
     // e1();
-    // e2();
-    e3();
+    e2();
+    // e3();
 
     while (!is_codepoint(cp("q"))) {
         begin_frame();
@@ -30,7 +30,7 @@ i32 main(i32 argc, byte *argv[]) {
 }
 
 void e1() {
-    Div *layout = div_new(5, 1);
+    Div *layout = div_new();
     layout->widget.style.border = 1;
 
     s8 label1 = s8("What is Chandler Bing's job?");
@@ -51,39 +51,52 @@ void e1() {
 }
 
 void e2() {
-   Div *scroll = div_new(0, 0);
-    scroll->container_style.overflow = OVERFLOW_SCROLL_Y;
-    // scroll.widget.style.w = 100;
-    scroll->widget.style.border = 1;
-    scroll->widget.style.padding = 1;
-    scroll->widget.style.align_self = ALIGN_CENTER;
-    // scroll->widget.style.margin = 3;
+    Div *scroll = div_new();
+    style(scroll, 
+        overflow(OVERFLOW_SCROLL_Y),
+        // width(100),
+        border(1),
+        padding(1),
+        align_self(ALIGN_CENTER),
+        // margin(3),
+    );
 
-    Div *content = div_new(0,0);
-    // content->container_style.direction = LAYOUT_ROW;
-    content->container_style.spacing = 10;
-    content->container_style.align_children = ALIGN_START;
-    content->container_style.overflow = OVERFLOW_SCROLL_Y;
+    Div *content = div_new();
+    style(content,
+        // direction(LAYOUT_ROW),
+        spacing(10),
+        align_children(ALIGN_START),
+        overflow(OVERFLOW_SCROLL_Y),
+        // padding(5),
+        // margin(2),
+        // height(30),
+        // width(100),
+        border(1),
+        align_self(ALIGN_CENTER),
+    );
 
-    // content->widget.style.padding = 5;
-    // content->widget.style.margin = 2;
-    // content->widget.style.h = 30;
-    // content->widget.style.w = 100;
-    content->widget.style.border = 1;
-    content->widget.style.align_self = ALIGN_CENTER;
+    StyleArgs args = style_new(
+        border(1),
+    );
 
     Button *b1 = button_new(s8("item"));
-    b1->widget.style.align_self = ALIGN_CENTER;
-    b1->widget.style.border = 1;
+    style_args(b1, args,
+        align_self(ALIGN_CENTER),
+    );
+
     Button *b2 = button_new(s8("item"));
-    b2->widget.style.border = 1;
+    style_args(b2, args);
+
     Button *b3 = button_new(s8("itemasdasdasd"));
-    b3->widget.style.border = 1;
+    style_args(b3, args);
+
     Button *b4 = button_new(s8("item"));
-    b4->widget.style.border = 1;
+    style_args(b4, args);
+
     Button *b5 = button_new(s8("item"));
-    b5->widget.style.align_self = ALIGN_END;
-    b5->widget.style.border = 1;
+    style_args(b5, args,
+        align_self(ALIGN_END),
+    );
 
     container_add(&content->widget, &b1->widget);
     container_add(&content->widget, &b2->widget);
@@ -97,7 +110,7 @@ void e2() {
 }
 
 void e3() {
-    Div *root = div_new(1,0);
+    Div *root = div_new();
     root->widget.style.border = 1;
 
     Button *b = button_new(s8("Click"));
