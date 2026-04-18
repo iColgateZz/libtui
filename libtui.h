@@ -234,14 +234,15 @@ typedef enum {
     ALIGN_CENTER,
     ALIGN_END,
 } Align;
+//TODO: typedef u8, u16 as Align, ... to use less space
 
 //TODO: use less memory
 typedef struct {
     i32 w, h; // fixed size
     Align align_self;
+    Effect effect;
     u8 padding, margin;
     u8 border;
-    Effect effect;
 } WidgetStyle;
 
 typedef struct Widget Widget;
@@ -264,6 +265,8 @@ struct Widget {
     WidgetStyle style;
     const WidgetVTable *vtable;
 };
+
+int a = sizeof(WidgetStyle);
 
 typedef Widget * WidgetPtr;
 list_def(WidgetPtr);
