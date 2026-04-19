@@ -239,7 +239,7 @@ typedef u8 Align;
 typedef struct BorderStyle BorderStyle;
 struct BorderStyle {
     u8 width;
-    void (*draw)(Rectangle rect, BorderStyle *self);
+    void (*draw)(Rectangle r, BorderStyle *self);
     Effect effect;
 };
 
@@ -262,6 +262,7 @@ typedef struct {
     void (*draw)(Widget *self);
 } WidgetVTable;
 
+//TODO: now it makes sense to add a constructor for widget
 struct Widget {
     WidgetStyle style;
     Position offset;
@@ -438,6 +439,8 @@ void style_apply(Widget *w, StyleArg *args, usize n);
         StyleArg _style_args[] = { __VA_ARGS__ }; \
         style_apply((Widget *)(w), _style_args, ARRAY_SIZE(_style_args)); \
     } while (0)
+
+void default_border(Rectangle r, BorderStyle *self);
 
 typedef struct {
     Widget widget;
@@ -1548,11 +1551,9 @@ void widget_draw(Widget *w) {
     push_transform(m , m);
 
     if (b) {
-        //TODO: use function in border style
-        ui_draw_box(
-            w->size.w + 2 * (b + p),
-            w->size.h + 2 * (b + p)
-        );
+        Transform t = peek_transform();
+        Rectangle r = {t.x, t.y, w->size.w + 2 * (b + p), w->size.h + 2 * (b + p)};
+        w->style.border.draw(r, &w->style.border);
     }
 
     push_transform(b, b);
@@ -1647,6 +1648,14 @@ Widget *default_hit_test(Widget *w) {
 }
 
 void default_update(Widget *w) { UNUSED(w); }
+
+//TODO: maybe it would be better to pass only w and h
+//      all drawing can be done using ui_put* functions
+//      which handle x and y coordinates
+void default_border(Rectangle r, BorderStyle *self) {
+    draw_box(r);
+    UNUSED(self);
+}
 
 i32 apply_min_wh_constraint(i32 a, i32 b) {
     if (a == 0) return b;
@@ -1805,6 +1814,7 @@ Button *button_new(s8 label) {
 
     b->label = label;
     b->widget.vtable = &button_methods;
+    b->widget.style.border.draw = default_border;
 
     return b;
 }
@@ -1868,6 +1878,7 @@ Div *div_new(void) {
     Div *b = arena_push(&UI.allocator, Div);
     assert(b);
     b->widget.vtable = &div_methods;
+    b->widget.style.border.draw = default_border;
     u8_flag(&b->widget.metadata, WIDGET_CONTAINER, true);
     return b;
 }
@@ -1936,6 +1947,7 @@ void text_input_draw(Widget *w) {
 TextInput *text_input_new() {
     TextInput *t = arena_push(&UI.allocator, TextInput);
     t->widget.vtable = &text_input_methods;
+    t->widget.style.border.draw = default_border;
     return t;
 }
 
