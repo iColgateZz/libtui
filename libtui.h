@@ -629,8 +629,7 @@ void write_str_len(byte *str, usize len);
 void write_strf_impl(byte *fmt, ...);
 #define write_str(s)        write_str_len(s, sizeof(s) - 1)
 #define write_strf(...)     write_strf_impl(__VA_ARGS__)
-void generate_absolute_cursor_move(List(byte) *a, u32 row, u32 col);
-void generate_relative_cursor_move(List(byte) *a, u32 step);
+void emit_absolute_cursor_move(List(byte) *a, u32 row, u32 col);
 void render();
 void update_root_scope();
 
@@ -796,10 +795,6 @@ void end_frame() {
 
 //TODO: maybe hash each row and compare hashes?
 void render() {
-    struct {
-        u32 x, y;
-    } cursor = {0};
-    
     Cell *back_items = Terminal.backbuffer.items;
     Cell *front_items = Terminal.frontbuffer.items;
     u32 screen_w = Terminal.width;
@@ -809,8 +804,6 @@ void render() {
         usize row_end   = row_start + screen_w;
 
         usize pos = row_start;
-        b32 first_in_row = true;
-
         while (pos < row_end) {
             if (cell_equal(back_items[pos], front_items[pos])) {
                 pos++;
@@ -821,25 +814,15 @@ void render() {
             Effect run_effect = back_items[run_start].effect;
             while (pos < row_end && 
                 !cell_equal(back_items[pos], front_items[pos]) &&
-                effect_equal(back_items[pos].effect, run_effect)
-            ) {
+                effect_equal(back_items[pos].effect, run_effect)) {
                 pos++;
             }
 
             usize run_len = pos - run_start;
             u32 new_row = run_start / screen_w;
             u32 new_col = run_start % screen_w;
-
-            if (first_in_row) {
-                first_in_row = false;
-                generate_absolute_cursor_move(&Terminal.frame_cmds, new_row, new_col);
-            } else {
-                generate_relative_cursor_move(&Terminal.frame_cmds, new_col - cursor.x);
-            }
-
+            emit_absolute_cursor_move(&Terminal.frame_cmds, new_row, new_col);
             emit_cells(&Terminal.frame_cmds, back_items, run_start, run_len);
-            cursor.y = pos / screen_w;
-            cursor.x = pos % screen_w;
 
             memcpy(
                 front_items + run_start,
@@ -892,17 +875,9 @@ void reset_effect(List(byte) *out) {
     list_append_many(out, result.s, result.len);
 }
 
-void generate_absolute_cursor_move(List(byte) *a, u32 row, u32 col) {
+void emit_absolute_cursor_move(List(byte) *a, u32 row, u32 col) {
     Stream s = arena_stream_start(&Terminal.tmp, 64);
     stream_fmt(&s, "\33[%u;%uH", row + 1, col + 1);
-    s8 result = stream_end(s);
-
-    list_append_many(a, result.s, result.len);
-}
-
-void generate_relative_cursor_move(List(byte) *a, u32 step) {
-    Stream s = arena_stream_start(&Terminal.tmp, 64);
-    stream_fmt(&s, "\33[%uC", step);
     s8 result = stream_end(s);
 
     list_append_many(a, result.s, result.len);

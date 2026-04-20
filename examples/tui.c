@@ -67,8 +67,8 @@ void e2() {
         padding(1),
         align_self(ALIGN_CENTER),
         // margin(3),
-        // border_bg(127, 10, 15),
-        // border_bold(true),
+        border_bg(127, 10, 15),
+        border_bold(true),
     );
 
     Div *content = div_new();
