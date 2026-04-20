@@ -239,7 +239,7 @@ typedef u8 Align;
 typedef struct BorderStyle BorderStyle;
 struct BorderStyle {
     u8 width;
-    void (*draw)(Rectangle r, BorderStyle *self);
+    void (*draw)(i32 w, i32 h, BorderStyle *self);
     Effect effect;
 };
 
@@ -440,7 +440,7 @@ void style_apply(Widget *w, StyleArg *args, usize n);
         style_apply((Widget *)(w), _style_args, ARRAY_SIZE(_style_args)); \
     } while (0)
 
-void default_border(Rectangle r, BorderStyle *self);
+void default_border(i32 w, i32 h, BorderStyle *self);
 
 typedef struct {
     Widget widget;
@@ -1551,9 +1551,12 @@ void widget_draw(Widget *w) {
     push_transform(m , m);
 
     if (b) {
-        Transform t = peek_transform();
-        Rectangle r = {t.x, t.y, w->size.w + 2 * (b + p), w->size.h + 2 * (b + p)};
-        w->style.border.draw(r, &w->style.border);
+        assert(w->style.border.draw && "border function not set");
+        w->style.border.draw(
+            w->size.w + 2 * (b + p),
+            w->size.h + 2 * (b + p),
+            &w->style.border
+        );
     }
 
     push_transform(b, b);
@@ -1649,11 +1652,8 @@ Widget *default_hit_test(Widget *w) {
 
 void default_update(Widget *w) { UNUSED(w); }
 
-//TODO: maybe it would be better to pass only w and h
-//      all drawing can be done using ui_put* functions
-//      which handle x and y coordinates
-void default_border(Rectangle r, BorderStyle *self) {
-    draw_box(r);
+void default_border(i32 w, i32 h, BorderStyle *self) {
+    ui_draw_box(w, h);
     UNUSED(self);
 }
 
@@ -1769,6 +1769,7 @@ i32 aligned_primary_pos(i32 extra_space, Align align) {
         case ALIGN_CENTER: return extra_space / 2;
         case ALIGN_END: return extra_space;
         case ALIGN_START: return 0;
+        default: assert(false && "unknown align value");
     }
 }
 
@@ -1777,6 +1778,7 @@ i32 aligned_secondary_pos(i32 parent_size, i32 child_size, Align align) {
         case ALIGN_CENTER: return (parent_size - child_size) / 2;
         case ALIGN_END: return parent_size -  child_size;
         case ALIGN_START: return 0;
+        default: assert(false && "unknown align value");
     }
 }
 
