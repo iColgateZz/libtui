@@ -319,12 +319,30 @@ typedef struct {
     Overflow overflow;
 } ContainerStyle;
 
+//TODO: rename to Div. Refactor into Div widget + Container interface.
 typedef struct {
     Widget widget;
     List(WidgetPtr) children;
     Scrollable scroll;
     ContainerStyle container_style;
 } ContainerWidget;
+
+//TODO: add an interface for text handling
+
+// something like this
+// typedef struct {
+//     List(WidgetPtr) children;
+//     Scrollable scroll;
+//     ContainerStyle style;
+// } Container;
+
+// typedef struct {
+//     List(CodePoint) text;
+//     Effect effect;
+//     void (*measure_and_place)(Widget *owner, struct TextBlock *self, LayoutConstraint c);
+//     void (*draw)(Widget *owner, struct TextBlock *self);
+//     Size measured;
+// } TextBlock;
 
 // Children widgets meausure their sizes
 // Parents set children's relative coordinates
