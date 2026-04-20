@@ -43,6 +43,10 @@ typedef struct {
     u8 flags;
 } Effect;
 
+b32 effect_equal(Effect a, Effect b) {
+    return memcmp(&a, &b, sizeof a) == 0;
+}
+
 #define CELL_REGULAR        0x00
 #define CELL_CONTINUATION   0x01
 #define CELL_WIDE_LEAD      0x02
@@ -141,13 +145,29 @@ u32 get_terminal_height();
 typedef u32 Unicode;
 u8 unicode_width(Unicode ch);
 
-void put_str(i32 x, i32 y, byte *str, usize len);
 void put_cp_(i32 x, i32 y, CodePoint cp, Effect e);
-
 #define put_cp(...)                 putx_(__VA_ARGS__, put2_, put1_)(__VA_ARGS__)
 #define putx_(a, b, c, d, e, ...)   e
 #define put1_(x, y, cp)             put_cp_(x, y, cp, (Effect) {0})
 #define put2_(x, y, cp, ef)         put_cp_(x, y, cp, ef)
+
+void put_str_(i32 x, i32 y, byte *str, usize len, Effect e);
+#define put_str(...)                 putstrx_(__VA_ARGS__, putstr2_, putstr1_)(__VA_ARGS__)
+#define putstrx_(a, b, c, d, e, f, ...) f
+#define putstr1_(x, y, s, len)       put_str_(x, y, s, len, (Effect){0})
+#define putstr2_(x, y, s, len, ef)   put_str_(x, y, s, len, ef)
+
+void draw_line_(i32 x0, i32 y0, i32 x1, i32 y1, CodePoint cp, Effect e);
+#define draw_line(...)               drawlinex_(__VA_ARGS__, drawline2_, drawline1_)(__VA_ARGS__)
+#define drawlinex_(a,b,c,d,e,f,g,...) g
+#define drawline1_(x0,y0,x1,y1,cp)   draw_line_(x0,y0,x1,y1,cp,(Effect){0})
+#define drawline2_(x0,y0,x1,y1,cp,ef) draw_line_(x0,y0,x1,y1,cp,ef)
+
+void draw_box_(Rectangle r, Effect e);
+#define draw_box(...)                drawboxx_(__VA_ARGS__, drawbox2_, drawbox1_)(__VA_ARGS__)
+#define drawboxx_(a,b,c,...)         c
+#define drawbox1_(r)                 draw_box_(r, (Effect){0})
+#define drawbox2_(r, ef)             draw_box_(r, ef)
 
 byte *vfmt(byte *p, byte *end, byte *f, va_list args);
 byte *fmt(byte *p, byte *end, byte *f, ...);
@@ -337,10 +357,29 @@ b32 ui_is_focused(Widget *w);
 void ui_dispatch_event(Widget *hit);
 void ui_run();
 
-void ui_put_cp(i32 x, i32 y, CodePoint cp);
-void ui_put_str(i32 x, i32 y, byte *s, usize len);
-void ui_draw_line(i32 x0, i32 y0, i32 x1, i32 y1, CodePoint cp);
-void ui_draw_box(i32 w, i32 h);
+void ui_put_cp_(i32 x, i32 y, CodePoint cp, Effect e);
+#define ui_put_cp(...)                  uiputx_(__VA_ARGS__, uiput2_, uiput1_)(__VA_ARGS__)
+#define uiputx_(a,b,c,d,e,...)          e
+#define uiput1_(x, y, cp)               ui_put_cp_(x, y, cp, (Effect){0})
+#define uiput2_(x, y, cp, ef)           ui_put_cp_(x, y, cp, ef)
+
+void ui_put_str_(i32 x, i32 y, byte *s, usize len, Effect e);
+#define ui_put_str(...)                 uiputstrx_(__VA_ARGS__, uiputstr2_, uiputstr1_)(__VA_ARGS__)
+#define uiputstrx_(a,b,c,d,e,f,...)     f
+#define uiputstr1_(x,y,s,len)           ui_put_str_(x,y,s,len,(Effect){0})
+#define uiputstr2_(x,y,s,len,ef)        ui_put_str_(x,y,s,len,ef)
+
+void ui_draw_line_(i32 x0, i32 y0, i32 x1, i32 y1, CodePoint cp, Effect e);
+#define ui_draw_line(...)               uidrawlinex_(__VA_ARGS__, uidrawline2_, uidrawline1_)(__VA_ARGS__)
+#define uidrawlinex_(a,b,c,d,e,f,g,...) g
+#define uidrawline1_(x0,y0,x1,y1,cp)    ui_draw_line_(x0,y0,x1,y1,cp,(Effect){0})
+#define uidrawline2_(x0,y0,x1,y1,cp,ef) ui_draw_line_(x0,y0,x1,y1,cp,ef)
+
+void ui_draw_box_(i32 w, i32 h, Effect e);
+#define ui_draw_box(...)                uidrawboxx_(__VA_ARGS__, uidrawbox2_, uidrawbox1_)(__VA_ARGS__)
+#define uidrawboxx_(a,b,c,d,...)        d
+#define uidrawbox1_(w,h)                ui_draw_box_(w,h,(Effect){0})
+#define uidrawbox2_(w,h,ef)             ui_draw_box_(w,h,ef)
 
 typedef enum {
     // widget style
@@ -365,7 +404,9 @@ typedef enum {
     // border style
     STYLE_BORDER_WIDTH,
     STYLE_BORDER_FN,
-    //TODO: add border color, ...
+    STYLE_BORDER_FG,
+    STYLE_BORDER_BG,
+    STYLE_BORDER_FLAG,
 } StyleProp;
 
 typedef struct {
@@ -403,8 +444,8 @@ typedef struct {
 #define spacing(v)          ((StyleArg){ .prop = STYLE_SPACING,        .u = (v) })
 #define overflow(v)         ((StyleArg){ .prop = STYLE_OVERFLOW,       .overflow = (v) })
 
-#define text_fg(r, g, b)         ((StyleArg){ .prop = STYLE_TEXT_FG,     .rgb = { (r), (g), (b) } })
-#define text_bg(r, g, b)         ((StyleArg){ .prop = STYLE_TEXT_BG,     .rgb = { (r), (g), (b) } })
+#define text_fg(r, g, b)    ((StyleArg){ .prop = STYLE_TEXT_FG,        .rgb = { (r), (g), (b) } })
+#define text_bg(r, g, b)    ((StyleArg){ .prop = STYLE_TEXT_BG,        .rgb = { (r), (g), (b) } })
 
 #define text_flag(bit_, enabled_) \
     ((StyleArg){ .prop = STYLE_TEXT_FLAG, .flag = {.bit = bit_, .enabled = enabled_} })
@@ -415,8 +456,19 @@ typedef struct {
 #define text_inverse(v)          text_flag(EFFECT_INVERSE, v)
 #define text_strikethrough(v)    text_flag(EFFECT_STRIKETHROUGH, v)
 
-#define border_width(v)     ((StyleArg){ .prop = STYLE_BORDER_WIDTH,    .u = (v) })
-#define border_fn(v)        ((StyleArg){ .prop = STYLE_BORDER_FN,       .p = (v) })
+#define border_width(v)           ((StyleArg){ .prop = STYLE_BORDER_WIDTH,    .u = (v) })
+#define border_fn(v)              ((StyleArg){ .prop = STYLE_BORDER_FN,       .p = (v) })
+#define border_fg(r, g, b)        ((StyleArg){ .prop = STYLE_BORDER_FG,       .rgb = { (r), (g), (b) } })
+#define border_bg(r, g, b)        ((StyleArg){ .prop = STYLE_BORDER_BG,       .rgb = { (r), (g), (b) } })
+
+#define border_flag(bit_, enabled_) \
+    ((StyleArg){ .prop = STYLE_BORDER_FLAG, .flag = {.bit = bit_, .enabled = enabled_} })
+#define border_bold(v)             border_flag(EFFECT_BOLD, v)
+#define border_dim(v)              border_flag(EFFECT_DIM, v)
+#define border_italic(v)           border_flag(EFFECT_ITALIC, v)
+#define border_underline(v)        border_flag(EFFECT_UNDERLINE, v)
+#define border_inverse(v)          border_flag(EFFECT_INVERSE, v)
+#define border_strikethrough(v)    border_flag(EFFECT_STRIKETHROUGH, v)
 
 #define MAX(a, b)     ((a) > (b) ? (a) : (b))
 #define MIN(a, b)     ((a) < (b) ? (a) : (b))
@@ -766,7 +818,11 @@ void render() {
             }
 
             usize run_start = pos;
-            while (pos < row_end && !cell_equal(back_items[pos], front_items[pos])) {
+            Effect run_effect = back_items[run_start].effect;
+            while (pos < row_end && 
+                !cell_equal(back_items[pos], front_items[pos]) &&
+                effect_equal(back_items[pos].effect, run_effect)
+            ) {
                 pos++;
             }
 
@@ -1089,13 +1145,13 @@ Cell cell_cont() { return (Cell) { .flags = CELL_CONTINUATION }; }
 Cell cell_empty() { return (Cell) { .cp = cp_from_byte(' ') }; }
 b32 cell_equal(Cell a, Cell b) { return memcmp(&a, &b, sizeof a) == 0; }
 
-void put_str(i32 x, i32 y, byte *s, usize len) {
+void put_str_(i32 x, i32 y, byte *s, usize len, Effect e) {
     byte *p = s;
     byte *end = s + len;
 
     while (p < end) {
         CodePoint cp = utf8_next(&p, end);
-        put_cp(x, y, cp);
+        put_cp(x, y, cp, e);
         x += cp.display_width;
     }
 }
@@ -1323,6 +1379,12 @@ Stream arena_stream_start(Arena *arena, usize size) {
     return stream_start(buffer, size);
 }
 
+void put_cp_debug(i32 x, i32 y, CodePoint cp) {
+    u32 w = Terminal.width;
+    Cell *cells = Terminal.backbuffer.items;
+    cells[x + y * w] = cell(cp, (Effect) {0});
+}
+
 void debug(i32 x, i32 y, byte *fmt, ...) {
     Stream s = arena_stream_start(&Terminal.tmp, 256);
 
@@ -1332,10 +1394,11 @@ void debug(i32 x, i32 y, byte *fmt, ...) {
     va_end(args);
 
     s8 str = stream_end(s);
-    put_str(x, y, str.s, str.len);
+    for (usize i = 0; i < str.len; i++)
+        put_cp_debug(x + i, y, cp_from_byte(str.s[i]));
 }
 
-void draw_line(i32 x0, i32 y0, i32 x1, i32 y1, CodePoint cp) {
+void draw_line_(i32 x0, i32 y0, i32 x1, i32 y1, CodePoint cp, Effect e) {
     if (x0 == x1) { // vertical
         if (y1 < y0) {
             i32 tmp = y0;
@@ -1344,7 +1407,7 @@ void draw_line(i32 x0, i32 y0, i32 x1, i32 y1, CodePoint cp) {
         }
 
         for (i32 y = y0; y <= y1; y++) {
-            put_cp(x0, y, cp);
+            put_cp(x0, y, cp, e);
         }
     }
     else if (y0 == y1) { // horizontal
@@ -1355,12 +1418,12 @@ void draw_line(i32 x0, i32 y0, i32 x1, i32 y1, CodePoint cp) {
         }
 
         for (i32 x = x0; x <= x1; x++) {
-            put_cp(x, y0, cp);
+            put_cp(x, y0, cp, e);
         }
     }
 }
 
-void draw_box(Rectangle r) {
+void draw_box_(Rectangle r, Effect e) {
     if (r.w < 2 || r.h < 2) return;
 
     i32 x0 = r.x;
@@ -1368,15 +1431,15 @@ void draw_box(Rectangle r) {
     i32 x1 = r.x + r.w - 1;
     i32 y1 = r.y + r.h - 1;
 
-    put_cp(x0, y0, cp("┌"));
-    put_cp(x1, y0, cp("┐"));
-    put_cp(x0, y1, cp("└"));
-    put_cp(x1, y1, cp("┘"));
+    put_cp(x0, y0, cp("┌"), e);
+    put_cp(x1, y0, cp("┐"), e);
+    put_cp(x0, y1, cp("└"), e);
+    put_cp(x1, y1, cp("┘"), e);
 
-    draw_line(x0 + 1, y0, x1 - 1, y0, cp("─"));
-    draw_line(x0 + 1, y1, x1 - 1, y1, cp("─"));
-    draw_line(x0, y0 + 1, x0, y1 - 1, cp("│"));
-    draw_line(x1, y0 + 1, x1, y1 - 1, cp("│"));
+    draw_line(x0 + 1, y0, x1 - 1, y0, cp("─"), e);
+    draw_line(x0 + 1, y1, x1 - 1, y1, cp("─"), e);
+    draw_line(x0, y0 + 1, x0, y1 - 1, cp("│"), e);
+    draw_line(x1, y0 + 1, x1, y1 - 1, cp("│"), e);
 }
 
 // TUI
@@ -1446,25 +1509,25 @@ void ui_run() {
     widget_draw(&UI.root->widget);
 }
 
-void ui_put_cp(i32 x, i32 y, CodePoint cp) {
+void ui_put_cp_(i32 x, i32 y, CodePoint cp, Effect e) {
     Transform t = peek_transform();
-    put_cp(x + t.x, y + t.y, cp);
+    put_cp(x + t.x, y + t.y, cp, e);
 }
 
-void ui_put_str(i32 x, i32 y, byte *s, usize len) {
+void ui_put_str_(i32 x, i32 y, byte *s, usize len, Effect e) {
     Transform t = peek_transform();
-    put_str(x + t.x, y + t.y, s, len);
+    put_str(x + t.x, y + t.y, s, len, e);
 }
 
-void ui_draw_line(i32 x0, i32 y0, i32 x1, i32 y1, CodePoint cp) {
+void ui_draw_line_(i32 x0, i32 y0, i32 x1, i32 y1, CodePoint cp, Effect e) {
     Transform t = peek_transform();
-    draw_line(x0 + t.x, y0 + t.y, x1 + t.x, y1 + t.y, cp);
+    draw_line(x0 + t.x, y0 + t.y, x1 + t.x, y1 + t.y, cp, e);
 }
 
-void ui_draw_box(i32 w, i32 h) {
+void ui_draw_box_(i32 w, i32 h, Effect e) {
     Transform t = peek_transform();
     Rectangle r = {t.x, t.y, w, h};
-    draw_box(r);
+    draw_box(r, e);
 }
 
 void push_transform(i32 dx, i32 dy) {
@@ -1638,6 +1701,15 @@ void style_apply(Widget *w, StyleArg *args, usize count) {
             // Border properties
             case STYLE_BORDER_WIDTH: ws->border.width = arg.u; break;
             case STYLE_BORDER_FN: ws->border.draw = arg.p; break;
+            case STYLE_BORDER_FG:
+                ws->border.effect.fg = arg.rgb;
+                ws->border.effect.flags |= EFFECT_FG;
+                break;
+            case STYLE_BORDER_BG:
+                ws->border.effect.bg = arg.rgb;
+                ws->border.effect.flags |= EFFECT_BG;
+                break;
+            case STYLE_BORDER_FLAG: u8_flag(&ws->border.effect.flags, arg.flag.bit, arg.flag.enabled); break;
 
             default: assert(false && "unknown style property"); break;
         }
@@ -1651,8 +1723,7 @@ Widget *default_hit_test(Widget *w) {
 void default_update(Widget *w) { UNUSED(w); }
 
 void default_border(i32 w, i32 h, BorderStyle *self) {
-    ui_draw_box(w, h);
-    UNUSED(self);
+    ui_draw_box(w, h, self->effect);
 }
 
 i32 apply_min_wh_constraint(i32 a, i32 b) {
