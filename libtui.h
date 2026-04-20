@@ -1711,6 +1711,7 @@ i32 widget_total_width(Widget *w) { return w->size.w + 2 * widget_mbp(w); }
 i32 widget_total_height(Widget *w) { return w->size.h + 2 * widget_mbp(w); }
 
 void container_layout(Widget *w, LayoutConstraint c) {
+    assert(widget_is_container(w));
     ContainerWidget *container = container_of(w, ContainerWidget, widget);
 
     i32 mbp = widget_mbp(w);
@@ -1827,6 +1828,7 @@ i32 aligned_secondary_pos(i32 parent_size, i32 child_size, Align align) {
 }
 
 void container_add(Widget *c, Widget *w) {
+    assert(widget_is_container(w));
     ContainerWidget *container = container_of(c, ContainerWidget, widget);
     w->parent = c;
     list_append(&container->children, w);

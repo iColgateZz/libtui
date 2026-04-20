@@ -68,7 +68,7 @@ void e2() {
         align_self(ALIGN_CENTER),
         // margin(3),
         border_bg(127, 10, 15),
-        border_bold(true),
+        // border_bold(true),
     );
 
     Div *content = div_new();
@@ -84,7 +84,7 @@ void e2() {
         border_width(1),
         align_self(ALIGN_CENTER),
     );
-
+    
     StyleArgs args = style_new(
         border_width(1),
     );
@@ -98,7 +98,10 @@ void e2() {
     style_args(b2, args);
 
     Button *b3 = button_new(s8("itemasdasdasd"));
-    style_args(b3, args);
+    style_args(b3, args,
+        border_fg(127, 10, 15),
+        text_bold(true),
+    );
 
     Button *b4 = button_new(s8("item"));
     style_args(b4, args);
