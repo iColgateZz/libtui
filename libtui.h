@@ -360,12 +360,7 @@ typedef enum {
     // text style
     STYLE_TEXT_FG,
     STYLE_TEXT_BG,
-    STYLE_BOLD,
-    STYLE_DIM,
-    STYLE_ITALIC,
-    STYLE_UNDERLINE,
-    STYLE_INVERSE,
-    STYLE_STRIKETHROUGH,
+    STYLE_TEXT_FLAG,
 
     // border style
     STYLE_BORDER_WIDTH,
@@ -384,6 +379,10 @@ typedef struct {
         Overflow overflow;
         RGB rgb;
         void *p;
+        struct {
+            u8 bit;
+            b32 enabled;
+        } flag;
     };
 } StyleArg;
 
@@ -406,12 +405,15 @@ typedef struct {
 
 #define text_fg(r, g, b)         ((StyleArg){ .prop = STYLE_TEXT_FG,     .rgb = { (r), (g), (b) } })
 #define text_bg(r, g, b)         ((StyleArg){ .prop = STYLE_TEXT_BG,     .rgb = { (r), (g), (b) } })
-#define text_bold(v)             ((StyleArg){ .prop = STYLE_BOLD,           .b = (v) })
-#define text_dim(v)              ((StyleArg){ .prop = STYLE_DIM,            .b = (v) })
-#define text_italic(v)           ((StyleArg){ .prop = STYLE_ITALIC,         .b = (v) })
-#define text_underline(v)        ((StyleArg){ .prop = STYLE_UNDERLINE,      .b = (v) })
-#define text_inverse(v)          ((StyleArg){ .prop = STYLE_INVERSE,        .b = (v) })
-#define text_strikethrough(v)    ((StyleArg){ .prop = STYLE_STRIKETHROUGH,  .b = (v) })
+
+#define text_flag(bit_, enabled_) \
+    ((StyleArg){ .prop = STYLE_TEXT_FLAG, .flag = {.bit = bit_, .enabled = enabled_} })
+#define text_bold(v)             text_flag(EFFECT_BOLD, v)
+#define text_dim(v)              text_flag(EFFECT_DIM, v)
+#define text_italic(v)           text_flag(EFFECT_ITALIC, v)
+#define text_underline(v)        text_flag(EFFECT_UNDERLINE, v)
+#define text_inverse(v)          text_flag(EFFECT_INVERSE, v)
+#define text_strikethrough(v)    text_flag(EFFECT_STRIKETHROUGH, v)
 
 #define border_width(v)     ((StyleArg){ .prop = STYLE_BORDER_WIDTH,    .u = (v) })
 #define border_fn(v)        ((StyleArg){ .prop = STYLE_BORDER_FN,       .p = (v) })
@@ -1631,13 +1633,9 @@ void style_apply(Widget *w, StyleArg *args, usize count) {
                 ws->effect.bg = arg.rgb;
                 ws->effect.flags |= EFFECT_BG;
                 break;
-            case STYLE_BOLD: u8_flag(&ws->effect.flags, EFFECT_BOLD, arg.b); break;
-            case STYLE_DIM: u8_flag(&ws->effect.flags, EFFECT_DIM, arg.b); break;
-            case STYLE_ITALIC: u8_flag(&ws->effect.flags, EFFECT_ITALIC, arg.b); break;
-            case STYLE_UNDERLINE: u8_flag(&ws->effect.flags, EFFECT_UNDERLINE, arg.b); break;
-            case STYLE_INVERSE: u8_flag(&ws->effect.flags, EFFECT_INVERSE, arg.b); break;
-            case STYLE_STRIKETHROUGH: u8_flag(&ws->effect.flags, EFFECT_STRIKETHROUGH, arg.b); break;
+            case STYLE_TEXT_FLAG: u8_flag(&ws->effect.flags, arg.flag.bit, arg.flag.enabled); break;
 
+            // Border properties
             case STYLE_BORDER_WIDTH: ws->border.width = arg.u; break;
             case STYLE_BORDER_FN: ws->border.draw = arg.p; break;
 
