@@ -546,15 +546,15 @@ void text_style_apply(TextStyle *s, TextStyleArg *args, usize count);
         text_style_apply(&(t)->style, _args, ARRAY_SIZE(_args)); \
     } while (0)
 
-void text_block_layout(Text *self, LayoutConstraint c);
-void text_block_draw(Text *self, i32 parent_width);
+void text_layout(Text *self, LayoutConstraint c);
+void text_draw(Text *self, i32 parent_width);
 
-void default_text_block_layout(Text *self, LayoutConstraint c);
-void default_text_block_draw(Text *self, i32 parent_width);
+void default_text_layout(Text *self, LayoutConstraint c);
+void default_text_draw(Text *self, i32 parent_width);
 
 static const TextVTable text_methods = {
-    .layout = default_text_block_layout,
-    .draw = default_text_block_draw,
+    .layout = default_text_layout,
+    .draw = default_text_draw,
 };
 
 typedef struct {
@@ -1783,10 +1783,10 @@ void text_style_apply(TextStyle *s, TextStyleArg *args, usize count) {
     }
 }
 
-void text_block_layout(Text *self, LayoutConstraint c) { self->vtable->layout(self, c); }
-void text_block_draw(Text *self, i32 parent_width) { self->vtable->draw(self, parent_width); }
+void text_layout(Text *self, LayoutConstraint c) { self->vtable->layout(self, c); }
+void text_draw(Text *self, i32 parent_width) { self->vtable->draw(self, parent_width); }
 
-void default_text_block_layout(Text *self, LayoutConstraint c) {
+void default_text_layout(Text *self, LayoutConstraint c) {
     WrapIter it = wrap_iter_new(&self->text, c.max_w);
 
     i32 lines = 0;
@@ -1796,7 +1796,7 @@ void default_text_block_layout(Text *self, LayoutConstraint c) {
     self->measured.h = MAX(1, lines);
 }
 
-void default_text_block_draw(Text *self, i32 parent_width) {
+void default_text_draw(Text *self, i32 parent_width) {
     WrapIter it = wrap_iter_new(&self->text, self->measured.w);
 
     i32 y = 0;
@@ -2059,7 +2059,7 @@ Div *div_new(void) {
 void text_input_layout(Widget *w, LayoutConstraint c) {
     TextInput *t = container_of(w, TextInput, widget);
 
-    text_block_layout(&t->input, (LayoutConstraint) {
+    text_layout(&t->input, (LayoutConstraint) {
         .max_w = MIN(20, c.max_w),
         .max_h = c.max_h,
     });
@@ -2088,7 +2088,7 @@ void text_input_event(Widget *w) {
 void text_input_draw(Widget *w) {
     TextInput *t = container_of(w, TextInput, widget);
 
-    text_block_draw(&t->input, t->widget.size.w);
+    text_draw(&t->input, t->widget.size.w);
 
     // if (ui_is_focused(w)) {
     //     ui_put_cp(x, y, cp("_"));
