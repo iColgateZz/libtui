@@ -1179,6 +1179,7 @@ void put_cp_(i32 x, i32 y, CodePoint cp, Effect e) {
     assert(false && "a codepoint with invalid width");
 }
 
+//TODO: maybe change put_cp to use this?
 void put_effect(i32 x, i32 y, Effect e) {
     Clip parent = clip_peek();
 
@@ -1630,6 +1631,7 @@ void widget_draw(Widget *w) {
 
     push_transform(b, b);
 
+    //TODO: replace with some fill_rectangle fn
     if (w->style.effect.flags & EFFECT_BG) {
         Transform t = peek_transform();
         for (usize j = 0; j < w->size.h + 2 * p; j++) {
