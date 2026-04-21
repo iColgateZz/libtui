@@ -263,6 +263,8 @@ struct BorderStyle {
     Effect effect;
 };
 
+void default_border(i32 w, i32 h, BorderStyle *self);
+
 //TODO: use less memory
 typedef struct {
     i32 w, h; // fixed size
@@ -327,22 +329,12 @@ typedef struct {
     ContainerStyle container_style;
 } ContainerWidget;
 
-//TODO: add an interface for text handling
-
 // something like this
 // typedef struct {
 //     List(WidgetPtr) children;
 //     Scrollable scroll;
 //     ContainerStyle style;
 // } Container;
-
-// typedef struct {
-//     List(CodePoint) text;
-//     Effect effect;
-//     void (*measure_and_place)(Widget *owner, struct TextBlock *self, LayoutConstraint c);
-//     void (*draw)(Widget *owner, struct TextBlock *self);
-//     Size measured;
-// } TextBlock;
 
 // Children widgets meausure their sizes
 // Parents set children's relative coordinates
@@ -407,17 +399,12 @@ typedef enum {
     STYLE_MARGIN,
     STYLE_ALIGN_SELF,
     STYLE_BG,
-    
+
     /// container style
     STYLE_DIRECTION,
     STYLE_ALIGN_CHILDREN,
     STYLE_SPACING,
     STYLE_OVERFLOW,
-    
-    // text style
-    STYLE_TEXT_FG,
-    STYLE_TEXT_BG,
-    STYLE_TEXT_FLAG,
 
     // border style
     STYLE_BORDER_WIDTH,
@@ -462,18 +449,6 @@ typedef struct {
 #define spacing(v)          ((StyleArg){ .prop = STYLE_SPACING,        .u = (v) })
 #define overflow(v)         ((StyleArg){ .prop = STYLE_OVERFLOW,       .overflow = (v) })
 
-#define text_fg(r, g, b)    ((StyleArg){ .prop = STYLE_TEXT_FG,        .rgb = { (r), (g), (b) } })
-#define text_bg(r, g, b)    ((StyleArg){ .prop = STYLE_TEXT_BG,        .rgb = { (r), (g), (b) } })
-
-#define text_flag(bit_, enabled_) \
-    ((StyleArg){ .prop = STYLE_TEXT_FLAG, .flag = {.bit = bit_, .enabled = enabled_} })
-#define text_bold(v)             text_flag(EFFECT_BOLD, v)
-#define text_dim(v)              text_flag(EFFECT_DIM, v)
-#define text_italic(v)           text_flag(EFFECT_ITALIC, v)
-#define text_underline(v)        text_flag(EFFECT_UNDERLINE, v)
-#define text_inverse(v)          text_flag(EFFECT_INVERSE, v)
-#define text_strikethrough(v)    text_flag(EFFECT_STRIKETHROUGH, v)
-
 #define border_width(v)           ((StyleArg){ .prop = STYLE_BORDER_WIDTH,    .u = (v) })
 #define border_fn(v)              ((StyleArg){ .prop = STYLE_BORDER_FN,       .p = (v) })
 #define border_fg(r, g, b)        ((StyleArg){ .prop = STYLE_BORDER_FG,       .rgb = { (r), (g), (b) } })
@@ -512,7 +487,75 @@ void style_apply(Widget *w, StyleArg *args, usize n);
         style_apply((Widget *)(w), _style_args, ARRAY_SIZE(_style_args)); \
     } while (0)
 
-void default_border(i32 w, i32 h, BorderStyle *self);
+typedef enum {
+    STYLE_TEXT_FG,
+    STYLE_TEXT_BG,
+    STYLE_TEXT_FLAG,
+    STYLE_TEXT_ALIGN_X,
+} TextStyleProp;
+
+typedef struct {
+    TextStyleProp prop;
+    union {
+        RGB rgb;
+        Align align;
+        void *p;
+        struct {
+            u8 bit;
+            b32 enabled;
+        } flag;
+    };
+} TextStyleArg;
+
+#define text_fg(r, g, b)    ((TextStyleArg){ .prop = STYLE_TEXT_FG,        .rgb = { (r), (g), (b) } })
+#define text_bg(r, g, b)    ((TextStyleArg){ .prop = STYLE_TEXT_BG,        .rgb = { (r), (g), (b) } })
+#define text_align(v)       ((TextStyleArg){ .prop = STYLE_TEXT_ALIGN_X,   .align = (v) })
+
+#define text_flag(bit_, enabled_) \
+    ((TextStyleArg){ .prop = STYLE_TEXT_FLAG, .flag = {.bit = bit_, .enabled = enabled_} })
+#define text_bold(v)             text_flag(EFFECT_BOLD, v)
+#define text_dim(v)              text_flag(EFFECT_DIM, v)
+#define text_italic(v)           text_flag(EFFECT_ITALIC, v)
+#define text_underline(v)        text_flag(EFFECT_UNDERLINE, v)
+#define text_inverse(v)          text_flag(EFFECT_INVERSE, v)
+#define text_strikethrough(v)    text_flag(EFFECT_STRIKETHROUGH, v)
+
+typedef struct {
+    Effect effect;
+    Align align_x;
+} TextStyle;
+
+typedef struct Text Text;
+
+typedef struct {
+    void (*layout)(Text *self, LayoutConstraint c);
+    void (*draw)(Text *self, i32 parent_width);
+} TextVTable;
+
+struct Text {
+    List(CodePoint) text;
+    TextStyle style;
+    Size measured;
+    TextVTable *vtable;
+};
+
+void text_style_apply(TextStyle *s, TextStyleArg *args, usize count);
+#define text_style(t, ...) \
+    do { \
+        TextStyleArg _args[] = { __VA_ARGS__ }; \
+        text_style_apply(&(t)->style, _args, ARRAY_SIZE(_args)); \
+    } while (0)
+
+void text_block_layout(Text *self, LayoutConstraint c);
+void text_block_draw(Text *self, i32 parent_width);
+
+void default_text_block_layout(Text *self, LayoutConstraint c);
+void default_text_block_draw(Text *self, i32 parent_width);
+
+static const TextVTable text_methods = {
+    .layout = default_text_block_layout,
+    .draw = default_text_block_draw,
+};
 
 typedef struct {
     Widget widget;
@@ -551,7 +594,7 @@ static const WidgetVTable div_methods = {
 
 typedef struct {
     Widget widget;
-    List(CodePoint) text;
+    Text input;
 } TextInput;
 
 void text_input_layout(Widget *w, LayoutConstraint c);
@@ -1703,17 +1746,6 @@ void style_apply(Widget *w, StyleArg *args, usize count) {
                 cs->overflow = arg.overflow;
                 break;
 
-            // Text properties
-            case STYLE_TEXT_FG:
-                ws->effect.fg = arg.rgb;
-                ws->effect.flags |= EFFECT_FG;
-                break;
-            case STYLE_TEXT_BG:
-                ws->effect.bg = arg.rgb;
-                ws->effect.flags |= EFFECT_BG;
-                break;
-            case STYLE_TEXT_FLAG: u8_flag(&ws->effect.flags, arg.flag.bit, arg.flag.enabled); break;
-
             // Border properties
             case STYLE_BORDER_WIDTH: ws->border.width = arg.u; break;
             case STYLE_BORDER_FN: ws->border.draw = arg.p; break;
@@ -1729,6 +1761,58 @@ void style_apply(Widget *w, StyleArg *args, usize count) {
 
             default: assert(false && "unknown style property"); break;
         }
+    }
+}
+
+void text_style_apply(TextStyle *s, TextStyleArg *args, usize count) {
+    for (usize i = 0; i < count; i++) {
+        TextStyleArg arg = args[i];
+        switch (arg.prop) {
+            case STYLE_TEXT_FG:
+                s->effect.fg = arg.rgb;
+                s->effect.flags |= EFFECT_FG;
+                break;
+            case STYLE_TEXT_BG:
+                s->effect.bg = arg.rgb;
+                s->effect.flags |= EFFECT_BG;
+                break;
+            case STYLE_TEXT_FLAG: u8_flag(&s->effect.flags, arg.flag.bit, arg.flag.enabled); break;
+            case STYLE_TEXT_ALIGN_X: s->align_x = arg.align; break;
+            default: assert(false && "unknown text style property");
+        }
+    }
+}
+
+void text_block_layout(Text *self, LayoutConstraint c) { self->vtable->layout(self, c); }
+void text_block_draw(Text *self, i32 parent_width) { self->vtable->draw(self, parent_width); }
+
+void default_text_block_layout(Text *self, LayoutConstraint c) {
+    WrapIter it = wrap_iter_new(&self->text, c.max_w);
+
+    i32 lines = 0;
+    while (wrap_iter_next(&it).len > 0) lines++;
+
+    self->measured.w = c.max_w;
+    self->measured.h = MAX(1, lines);
+}
+
+void default_text_block_draw(Text *self, i32 parent_width) {
+    WrapIter it = wrap_iter_new(&self->text, self->measured.w);
+
+    i32 y = 0;
+    while (1) {
+        WrapSlice slice = wrap_iter_next(&it);
+        if (slice.len == 0) break;
+
+        i32 x = aligned_secondary_pos(parent_width, self->measured.w, self->style.align_x);
+
+        for (usize i = 0; i < slice.len; i++) {
+            CodePoint cp = slice.ptr[i];
+            ui_put_cp(x, y, cp, self->style.effect);
+            x += cp.display_width;
+        }
+
+        y++;
     }
 }
 
@@ -1975,14 +2059,13 @@ Div *div_new(void) {
 void text_input_layout(Widget *w, LayoutConstraint c) {
     TextInput *t = container_of(w, TextInput, widget);
 
-    w->size.w = MIN(20, c.max_w);
+    text_block_layout(&t->input, (LayoutConstraint) {
+        .max_w = MIN(20, c.max_w),
+        .max_h = c.max_h,
+    });
 
-    WrapIter it = wrap_iter_new(&t->text, w->size.w);
-
-    i32 lines = 0;
-    while (wrap_iter_next(&it).len > 0) lines++;
-
-    w->size.h = MAX(1, lines);
+    w->size.w = MAX(t->input.measured.w, t->widget.style.w);
+    w->size.h = t->input.measured.h;
 }
 
 void text_input_event(Widget *w) {
@@ -1991,15 +2074,13 @@ void text_input_event(Widget *w) {
     if (!ui_is_focused(w)) return;
 
     if (is_event(ECodePoint)) {
-        CodePoint cp = get_codepoint();
-        list_append(&t->text, cp);
+        list_append(&t->input.text, get_codepoint());
         event_consume();
     }
 
     if (is_term_key(TERMKEY_BACKSPACE)) {
-        if (t->text.count > 0) {
-            t->text.count--;
-        }
+        if (t->input.text.count > 0)
+            t->input.text.count--;
         event_consume();
     }
 }
@@ -2007,36 +2088,18 @@ void text_input_event(Widget *w) {
 void text_input_draw(Widget *w) {
     TextInput *t = container_of(w, TextInput, widget);
 
-    WrapIter it = wrap_iter_new(&t->text, w->size.w);
+    text_block_draw(&t->input, t->widget.size.w);
 
-    i32 y = 0;
-    i32 x = 0;
-    while (1) {
-        WrapSlice slice = wrap_iter_next(&it);
-        if (slice.len == 0) break;
-
-        x = 0;
-        for (usize i = 0; i < slice.len; i++) {
-            CodePoint cp = slice.ptr[i];
-
-            ui_put_cp(x, y, cp);
-            x += cp.display_width;
-        }
-
-        y++;
-    }
-
-    if (y > 0) y--;
-
-    if (ui_is_focused(w)) {
-        ui_put_cp(x, y, cp("_"));
-    }
+    // if (ui_is_focused(w)) {
+    //     ui_put_cp(x, y, cp("_"));
+    // }
 }
 
 TextInput *text_input_new() {
     TextInput *t = arena_push(&UI.allocator, TextInput);
     t->widget.vtable = &text_input_methods;
     t->widget.style.border.draw = default_border;
+    t->input.vtable = &text_methods;
     return t;
 }
 
