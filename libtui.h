@@ -1846,7 +1846,7 @@ i32 aligned_secondary_pos(i32 parent_size, i32 child_size, Align align) {
 }
 
 void container_add(Widget *c, Widget *w) {
-    assert(widget_is_container(w));
+    assert(widget_is_container(c));
     ContainerWidget *container = container_of(c, ContainerWidget, widget);
     w->parent = c;
     list_append(&container->children, w);
