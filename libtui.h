@@ -1179,6 +1179,17 @@ void put_cp_(i32 x, i32 y, CodePoint cp, Effect e) {
     assert(false && "a codepoint with invalid width");
 }
 
+void put_effect(i32 x, i32 y, Effect e) {
+    Clip parent = clip_peek();
+
+    if (x < 0 || y < 0) return;
+    if (!point_in_rect(x, y, parent.rect)) return;
+
+    u32 w = Terminal.width;
+    Cell *cells = Terminal.backbuffer.items;
+    cells[x + y * w].effect = e;
+}
+
 void fix_wide_char(i32 x, i32 y) {
     u32 w = Terminal.width;
     Cell *cells = Terminal.backbuffer.items;
@@ -1618,6 +1629,16 @@ void widget_draw(Widget *w) {
     }
 
     push_transform(b, b);
+
+    if (w->style.effect.flags & EFFECT_BG) {
+        Transform t = peek_transform();
+        for (usize j = 0; j < w->size.h + 2 * p; j++) {
+            for (usize i = 0; i < w->size.w + 2 * p; i++) {
+                put_effect(t.x + i, t.y + j, w->style.effect);
+            }
+        }
+    }
+
     push_transform(p, p);
 
     clip_push_rect(content_rect(w));

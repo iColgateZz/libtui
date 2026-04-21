@@ -69,6 +69,7 @@ void e2() {
         // margin(3),
         border_bg(127, 10, 15),
         // border_bold(true),
+        // bg(127, 10, 15),
     );
 
     Div *content = div_new();
