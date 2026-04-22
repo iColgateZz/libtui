@@ -169,6 +169,8 @@ void draw_box_(Rectangle r, Effect e);
 #define drawbox1_(r)                 draw_box_(r, (Effect){0})
 #define drawbox2_(r, ef)             draw_box_(r, ef)
 
+void fill_box(Rectangle r, Effect e);
+
 byte *vfmt(byte *p, byte *end, byte *f, va_list args);
 byte *fmt(byte *p, byte *end, byte *f, ...);
 byte *fmt_uint(byte *p, byte *end, u64 v, u8 base);
@@ -391,6 +393,8 @@ void ui_draw_box_(i32 w, i32 h, Effect e);
 #define uidrawbox1_(w,h)                ui_draw_box_(w,h,(Effect){0})
 #define uidrawbox2_(w,h,ef)             ui_draw_box_(w,h,ef)
 
+void ui_fill_box(i32 w, i32 h, Effect e);
+
 typedef enum {
     // widget style
     STYLE_WIDTH,
@@ -552,7 +556,7 @@ void text_draw(Text *self, Rectangle bounds);
 void default_text_layout(Text *self, LayoutConstraint c);
 void default_text_draw(Text *self, Rectangle bounds);
 
-static const TextVTable text_methods = {
+static TextVTable text_methods = {
     .layout = default_text_layout,
     .draw = default_text_draw,
 };
@@ -1496,6 +1500,14 @@ void draw_box_(Rectangle r, Effect e) {
     draw_line(x1, y0 + 1, x1, y1 - 1, cp("│"), e);
 }
 
+void fill_box(Rectangle r, Effect e) {
+    for (i32 j = 0; j < r.h; ++j) {
+        for (i32 i = 0; i < r.w; ++i) {
+            put_effect(r.x + i, r.y + j, e);
+        }
+    }
+}
+
 // TUI
 
 void container_layout_column(Widget *w, LayoutConstraint constraint);
@@ -1582,6 +1594,12 @@ void ui_draw_box_(i32 w, i32 h, Effect e) {
     Transform t = peek_transform();
     Rectangle r = {t.x, t.y, w, h};
     draw_box(r, e);
+}
+
+void ui_fill_box(i32 w, i32 h, Effect e) {
+    Transform t = peek_transform();
+    Rectangle r = {t.x, t.y, w, h};
+    fill_box(r, e);
 }
 
 void push_transform(i32 dx, i32 dy) {
@@ -1680,14 +1698,8 @@ void widget_draw(Widget *w) {
 
     push_transform(b, b);
 
-    //TODO: replace with some fill_rectangle fn
     if (w->style.effect.flags & EFFECT_BG) {
-        Transform t = peek_transform();
-        for (usize j = 0; j < w->size.h + 2 * p; j++) {
-            for (usize i = 0; i < w->size.w + 2 * p; i++) {
-                put_effect(t.x + i, t.y + j, w->style.effect);
-            }
-        }
+        ui_fill_box(w->size.w + 2 * p, w->size.h + 2 * p, w->style.effect);
     }
 
     push_transform(p, p);
