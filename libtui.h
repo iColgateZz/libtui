@@ -190,6 +190,10 @@ Stream arena_stream_start(Arena *arena, usize size);
 
 void debug(i32 x, i32 y, byte *fmt, ...);
 
+#define MAX(a, b)     ((a) > (b) ? (a) : (b))
+#define MIN(a, b)     ((a) < (b) ? (a) : (b))
+#define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
+
 // TUI
 
 typedef struct {
@@ -269,7 +273,7 @@ void default_border(i32 w, i32 h, BorderStyle *self);
 
 //TODO: use less memory
 typedef struct {
-    i32 w, h; // fixed size
+    i32 w, h; // minimal size
     Effect effect;
     Align align_self;
     u8 padding, margin;
@@ -293,50 +297,7 @@ struct Widget {
     Size size;
     Widget *parent;
     WidgetVTable *vtable;
-    u8 metadata;
 };
-
-enum {
-    WIDGET_CONTAINER = 1,
-};
-
-typedef Widget * WidgetPtr;
-list_def(WidgetPtr);
-
-enum {
-    LAYOUT_COLUMN,
-    LAYOUT_ROW,
-};
-typedef u8 LayoutDirection;
-
-enum {
-    OVERFLOW_VISIBLE_Y,
-    OVERFLOW_CLIP,
-    OVERFLOW_SCROLL_Y,
-};
-typedef u8 Overflow;
-
-typedef struct {
-    LayoutDirection direction;
-    Align align_children;
-    u8 spacing;
-    Overflow overflow;
-} ContainerStyle;
-
-//TODO: rename to Div. Refactor into Div widget + Container interface.
-typedef struct {
-    Widget widget;
-    List(WidgetPtr) children;
-    Scrollable scroll;
-    ContainerStyle container_style;
-} ContainerWidget;
-
-// something like this
-// typedef struct {
-//     List(WidgetPtr) children;
-//     Scrollable scroll;
-//     ContainerStyle style;
-// } Container;
 
 // Children widgets meausure their sizes
 // Parents set children's relative coordinates
@@ -352,13 +313,8 @@ void widget_update(Widget *w);
 // Draw widget
 void widget_draw(Widget *w);
 
-b32 widget_is_container(Widget *w);
-
 Widget *default_hit_test(Widget *w);
 void default_update(Widget *w);
-
-void container_layout(Widget *w, LayoutConstraint c);
-void container_add(Widget *c, Widget *w);
 
 Rectangle content_rect(Widget *w);
 Rectangle content_bp_rect(Widget *w);
@@ -395,6 +351,19 @@ void ui_draw_box_(i32 w, i32 h, Effect e);
 
 void ui_fill_box(i32 w, i32 h, Effect e);
 
+enum {
+    LAYOUT_COLUMN,
+    LAYOUT_ROW,
+};
+typedef u8 LayoutDirection;
+
+enum {
+    OVERFLOW_VISIBLE_Y,
+    OVERFLOW_CLIP,
+    OVERFLOW_SCROLL_Y,
+};
+typedef u8 Overflow;
+
 typedef enum {
     // widget style
     STYLE_WIDTH,
@@ -403,12 +372,6 @@ typedef enum {
     STYLE_MARGIN,
     STYLE_ALIGN_SELF,
     STYLE_BG,
-
-    /// container style
-    STYLE_DIRECTION,
-    STYLE_ALIGN_CHILDREN,
-    STYLE_SPACING,
-    STYLE_OVERFLOW,
 
     // border style
     STYLE_BORDER_WIDTH,
@@ -448,11 +411,6 @@ typedef struct {
 #define align_self(v)       ((StyleArg){ .prop = STYLE_ALIGN_SELF,     .align = (v) })
 #define bg(r, g, b)         ((StyleArg){ .prop = STYLE_BG,             .rgb = { (r), (g), (b) } })
 
-#define direction(v)        ((StyleArg){ .prop = STYLE_DIRECTION,      .direction = (v) })
-#define align_children(v)   ((StyleArg){ .prop = STYLE_ALIGN_CHILDREN, .align = (v) })
-#define spacing(v)          ((StyleArg){ .prop = STYLE_SPACING,        .u = (v) })
-#define overflow(v)         ((StyleArg){ .prop = STYLE_OVERFLOW,       .overflow = (v) })
-
 #define border_width(v)           ((StyleArg){ .prop = STYLE_BORDER_WIDTH,    .u = (v) })
 #define border_fn(v)              ((StyleArg){ .prop = STYLE_BORDER_FN,       .p = (v) })
 #define border_fg(r, g, b)        ((StyleArg){ .prop = STYLE_BORDER_FG,       .rgb = { (r), (g), (b) } })
@@ -466,10 +424,6 @@ typedef struct {
 #define border_underline(v)        border_flag(EFFECT_UNDERLINE, v)
 #define border_inverse(v)          border_flag(EFFECT_INVERSE, v)
 #define border_strikethrough(v)    border_flag(EFFECT_STRIKETHROUGH, v)
-
-#define MAX(a, b)     ((a) > (b) ? (a) : (b))
-#define MIN(a, b)     ((a) < (b) ? (a) : (b))
-#define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
 
 void style_apply(Widget *w, StyleArg *args, usize n);
 #define style(w, ...) \
@@ -561,6 +515,68 @@ static TextVTable text_methods = {
     .draw = default_text_draw,
 };
 
+typedef enum {
+    STYLE_DIRECTION,
+    STYLE_ALIGN_CHILDREN,
+    STYLE_SPACING,
+    STYLE_OVERFLOW,
+} DivStyleProp;
+
+typedef struct {
+    DivStyleProp prop;
+    union {
+        u32 u;
+        Align align;
+        LayoutDirection direction;
+        Overflow overflow;
+    };
+} DivStyleArg;
+
+#define direction(v)        ((DivStyleArg){ .prop = STYLE_DIRECTION,      .direction = (v) })
+#define align_children(v)   ((DivStyleArg){ .prop = STYLE_ALIGN_CHILDREN, .align = (v) })
+#define spacing(v)          ((DivStyleArg){ .prop = STYLE_SPACING,        .u = (v) })
+#define overflow(v)         ((DivStyleArg){ .prop = STYLE_OVERFLOW,       .overflow = (v) })
+
+typedef struct {
+    LayoutDirection direction;
+    Align align_children;
+    u8 spacing;
+    Overflow overflow;
+} DivStyle;
+
+typedef Widget * WidgetPtr;
+list_def(WidgetPtr);
+
+typedef struct {
+    Widget widget;
+    List(WidgetPtr) children;
+    Scrollable scroll;
+    DivStyle style;
+} Div;
+
+void div_style_apply(Div *d, DivStyleArg *args, usize count);
+#define div_style(d, ...) \
+    do { \
+        DivStyleArg _args[] = { __VA_ARGS__ }; \
+        div_style_apply(d, _args, ARRAY_SIZE(_args)); \
+    } while (0)
+
+void div_layout(Widget *w, LayoutConstraint c);
+Widget *div_hit_test(Widget *w);
+void div_event(Widget *w);
+void div_update(Widget *w);
+void div_draw(Widget *w);
+Div *div_new();
+void div_add(Div *d, Widget *w);
+
+static WidgetVTable div_methods = {
+    .layout = div_layout,
+    .hit_test = div_hit_test,
+    .event = div_event,
+    .update = div_update,
+    .draw = div_draw,
+};
+
 typedef struct {
     Widget widget;
     s8 label;
@@ -578,22 +594,6 @@ static WidgetVTable button_methods = {
     .event = button_event,
     .update = default_update,
     .draw = button_draw,
-};
-
-typedef ContainerWidget Div;
-
-Widget *div_hit_test(Widget *w);
-void div_event(Widget *w);
-void div_update(Widget *w);
-void div_draw(Widget *w);
-Div *div_new();
-
-static WidgetVTable div_methods = {
-    .layout = container_layout,
-    .hit_test = div_hit_test,
-    .event = div_event,
-    .update = div_update,
-    .draw = div_draw,
 };
 
 typedef struct {
@@ -1510,14 +1510,14 @@ void fill_box(Rectangle r, Effect e) {
 
 // TUI
 
-void container_layout_column(Widget *w, LayoutConstraint constraint);
-void container_layout_row(Widget *w, LayoutConstraint constraint);
+void div_layout_column(Widget *w, LayoutConstraint constraint);
+void div_layout_row(Widget *w, LayoutConstraint constraint);
 i32 aligned_primary_pos(i32 extra_space, Align align);
 i32 aligned_secondary_pos(i32 parent_size, i32 child_size, Align align);
 
 static struct {
     List(Transform) transforms;
-    ContainerWidget *root;
+    Div *root;
     Widget *focus;
     Arena allocator;
 } UI = {0};
@@ -1529,8 +1529,11 @@ void ui_init() {
 
 void ui_register_root(Widget *w) {
     UI.root = div_new();
-    style(UI.root, direction(LAYOUT_COLUMN), overflow(OVERFLOW_SCROLL_Y));
-    container_add(&UI.root->widget, w);
+    div_style(UI.root, 
+        direction(LAYOUT_COLUMN), 
+        overflow(OVERFLOW_SCROLL_Y)
+    );
+    div_add(UI.root, w);
 }
 
 void ui_set_focus(Widget *w) {
@@ -1715,8 +1718,6 @@ void widget_draw(Widget *w) {
     pop_transform(); // offset
 }
 
-b32 widget_is_container(Widget *w) { return w->metadata & WIDGET_CONTAINER; }
-
 void u8_flag(u8 *flags, u8 bit, b32 enabled) {
     if (enabled) *flags |= bit;
     else *flags &= ~bit;
@@ -1725,12 +1726,6 @@ void u8_flag(u8 *flags, u8 bit, b32 enabled) {
 void style_apply(Widget *w, StyleArg *args, usize count) {
     assert(w);
     WidgetStyle *ws = &w->style;
-
-    ContainerStyle *cs = NULL;
-    if (widget_is_container(w)) {
-        ContainerWidget *container = container_of(w, ContainerWidget, widget);
-        cs = &container->container_style;
-    }
 
     for (usize i = 0; i < count; i++) {
         StyleArg arg = args[i];
@@ -1744,24 +1739,6 @@ void style_apply(Widget *w, StyleArg *args, usize count) {
             case STYLE_BG:
                 ws->effect.bg = arg.rgb;
                 ws->effect.flags |= EFFECT_BG;
-                break;
-
-            // ContainerStyle properties
-            case STYLE_DIRECTION:
-                assert(cs && "STYLE_DIRECTION applied to non-container widget");
-                cs->direction = arg.direction;
-                break;
-            case STYLE_ALIGN_CHILDREN:
-                assert(cs && "STYLE_ALIGN_CHILDREN applied to non-container widget");
-                cs->align_children = arg.align;
-                break;
-            case STYLE_SPACING:
-                assert(cs && "STYLE_SPACING applied to non-container widget");
-                cs->spacing = (u8)arg.u;
-                break;
-            case STYLE_OVERFLOW:
-                assert(cs && "STYLE_OVERFLOW applied to non-container widget");
-                cs->overflow = arg.overflow;
                 break;
 
             // Border properties
@@ -1846,6 +1823,21 @@ void default_border(i32 w, i32 h, BorderStyle *self) {
     ui_draw_box(w, h, self->effect);
 }
 
+void div_style_apply(Div *div, DivStyleArg *args, usize count) {
+    DivStyle *cs = &div->style;
+    for (usize i = 0; i < count; ++i) {
+        DivStyleArg arg = args[i];
+
+        switch(arg.prop) {
+            case STYLE_DIRECTION: cs->direction = arg.direction; break;
+            case STYLE_ALIGN_CHILDREN: cs->align_children = arg.align; break;
+            case STYLE_SPACING: cs->spacing = (u8)arg.u; break;
+            case STYLE_OVERFLOW: cs->overflow = arg.overflow; break;
+            default: assert(false && "unknown container prop");
+        }
+    }
+}
+
 i32 apply_min_wh_constraint(i32 a, i32 b) {
     if (a == 0) return b;
     return MIN(a, b);
@@ -1855,29 +1847,27 @@ i32 widget_mbp(Widget *w) { return w->style.margin + w->style.border.width + w->
 i32 widget_total_width(Widget *w) { return w->size.w + 2 * widget_mbp(w); }
 i32 widget_total_height(Widget *w) { return w->size.h + 2 * widget_mbp(w); }
 
-void container_layout(Widget *w, LayoutConstraint c) {
-    assert(widget_is_container(w));
-    ContainerWidget *container = container_of(w, ContainerWidget, widget);
-
+void div_layout(Widget *w, LayoutConstraint c) {
+    Div *container = container_of(w, Div, widget);
     i32 mbp = widget_mbp(w);
 
     LayoutConstraint constraint = {
-        .max_w = apply_min_wh_constraint(container->widget.style.w, c.max_w - mbp * 2),
-        .max_h = apply_min_wh_constraint(container->widget.style.h, c.max_h - mbp * 2),
+        .max_w = apply_min_wh_constraint(w->style.w, c.max_w - mbp * 2),
+        .max_h = apply_min_wh_constraint(w->style.h, c.max_h - mbp * 2),
     };
 
     for (usize i = 0; i < container->children.count; i++)
         widget_layout(container->children.items[i], constraint);
 
-    if (container->container_style.direction == LAYOUT_COLUMN) {
-        container_layout_column(w, constraint);
+    if (container->style.direction == LAYOUT_COLUMN) {
+        div_layout_column(w, constraint);
     } else {
-        container_layout_row(w, constraint);
+        div_layout_row(w, constraint);
     }
 }
 
-void container_layout_column(Widget *w, LayoutConstraint constraint) {
-    ContainerWidget *container = container_of(w, ContainerWidget, widget);
+void div_layout_column(Widget *w, LayoutConstraint constraint) {
+    Div *container = container_of(w, Div, widget);
 
     i32 primary_axis = 0;
     i32 secondary_axis_max = 0;
@@ -1888,7 +1878,7 @@ void container_layout_column(Widget *w, LayoutConstraint constraint) {
         secondary_axis_max = MAX(secondary_axis_max, widget_total_width(child));
 
         if (i < container->children.count - 1) {
-            primary_axis += container->container_style.spacing;
+            primary_axis += container->style.spacing;
         }
     }
 
@@ -1897,11 +1887,11 @@ void container_layout_column(Widget *w, LayoutConstraint constraint) {
 
     // Store how much space is needed for content
     w->size.w = MIN(content_w, constraint.max_w);
-    if (container->container_style.overflow == OVERFLOW_VISIBLE_Y) w->size.h = content_h;
+    if (container->style.overflow == OVERFLOW_VISIBLE_Y) w->size.h = content_h;
     else w->size.h = MIN(content_h, constraint.max_h);
 
     i32 extra = w->size.h - primary_axis;
-    i32 start = aligned_primary_pos(extra, container->container_style.align_children);
+    i32 start = aligned_primary_pos(extra, container->style.align_children);
 
     container->scroll.content_size = primary_axis;
     container->scroll.content_start = start;
@@ -1914,12 +1904,12 @@ void container_layout_column(Widget *w, LayoutConstraint constraint) {
         child->offset.x = aligned_secondary_pos(w->size.w, widget_total_width(child), align);
         child->offset.y = start;
 
-        start += widget_total_height(child) + container->container_style.spacing;
+        start += widget_total_height(child) + container->style.spacing;
     }
 }
 
-void container_layout_row(Widget *w, LayoutConstraint constraint) {
-    ContainerWidget *container = container_of(w, ContainerWidget, widget);
+void div_layout_row(Widget *w, LayoutConstraint constraint) {
+    Div *container = container_of(w, Div, widget);
 
     i32 primary_axis = 0;
     i32 secondary_axis_max = 0;
@@ -1930,7 +1920,7 @@ void container_layout_row(Widget *w, LayoutConstraint constraint) {
         secondary_axis_max = MAX(secondary_axis_max, widget_total_height(child));
 
         if (i < container->children.count - 1) {
-            primary_axis += container->container_style.spacing;
+            primary_axis += container->style.spacing;
         }
     }
 
@@ -1941,7 +1931,7 @@ void container_layout_row(Widget *w, LayoutConstraint constraint) {
     w->size.h = MIN(content_h, constraint.max_h);
 
     i32 extra = w->size.w - primary_axis;
-    i32 start = aligned_primary_pos(extra, container->container_style.align_children);
+    i32 start = aligned_primary_pos(extra, container->style.align_children);
 
     for (usize i = 0; i < container->children.count; i++) {
         Widget *child = container->children.items[i];
@@ -1950,7 +1940,7 @@ void container_layout_row(Widget *w, LayoutConstraint constraint) {
         child->offset.x = start;
         child->offset.y = aligned_secondary_pos(w->size.h, widget_total_height(child), align);
 
-        start += widget_total_width(child) + container->container_style.spacing;
+        start += widget_total_width(child) + container->style.spacing;
     }
 }
 
@@ -1970,46 +1960,6 @@ i32 aligned_secondary_pos(i32 parent_size, i32 child_size, Align align) {
         case ALIGN_START: return 0;
         default: assert(false && "unknown align value");
     }
-}
-
-void container_add(Widget *c, Widget *w) {
-    assert(widget_is_container(c));
-    ContainerWidget *container = container_of(c, ContainerWidget, widget);
-    w->parent = c;
-    list_append(&container->children, w);
-}
-
-void button_layout(Widget *w, LayoutConstraint c) {
-    Button *b = container_of(w, Button, widget);
-
-    w->size.h = 1;
-    w->size.w = MIN(b->label.len, (u32)c.max_w);
-}
-
-void button_event(Widget *w) {
-    Button *b = container_of(w, Button, widget);
-
-    if (is_event(EMouseLeft) && is_mouse_pressed()) {
-        b->state = !b->state;
-        event_consume();
-    }
-}
-
-void button_draw(Widget *w) {
-    Button *b = container_of(w, Button, widget);
-
-    if (b->state) ui_put_str(0, 0, b->label.s, b->label.len);
-}
-
-Button *button_new(s8 label) {
-    Button *b = arena_push(&UI.allocator, Button);
-    assert(b);
-
-    b->label = label;
-    b->widget.vtable = &button_methods;
-    b->widget.style.border.draw = default_border;
-
-    return b;
 }
 
 Widget *div_hit_test(Widget *w) {
@@ -2032,7 +1982,7 @@ Widget *div_hit_test(Widget *w) {
 
 void div_event(Widget *w) {
     Div *div = container_of(w, Div, widget);
-    if (div->container_style.overflow != OVERFLOW_SCROLL_Y) return;
+    if (div->style.overflow != OVERFLOW_SCROLL_Y) return;
 
     if (is_event(EScrollDown)) {
         scroll_incr(&div->scroll);
@@ -2072,7 +2022,44 @@ Div *div_new(void) {
     assert(b);
     b->widget.vtable = &div_methods;
     b->widget.style.border.draw = default_border;
-    u8_flag(&b->widget.metadata, WIDGET_CONTAINER, true);
+    return b;
+}
+
+void div_add(Div *d, Widget *w) { 
+    w->parent = &d->widget;
+    list_append(&d->children, w);
+}
+
+void button_layout(Widget *w, LayoutConstraint c) {
+    Button *b = container_of(w, Button, widget);
+
+    w->size.h = 1;
+    w->size.w = MIN(b->label.len, (u32)c.max_w);
+}
+
+void button_event(Widget *w) {
+    Button *b = container_of(w, Button, widget);
+
+    if (is_event(EMouseLeft) && is_mouse_pressed()) {
+        b->state = !b->state;
+        event_consume();
+    }
+}
+
+void button_draw(Widget *w) {
+    Button *b = container_of(w, Button, widget);
+
+    if (b->state) ui_put_str(0, 0, b->label.s, b->label.len);
+}
+
+Button *button_new(s8 label) {
+    Button *b = arena_push(&UI.allocator, Button);
+    assert(b);
+
+    b->label = label;
+    b->widget.vtable = &button_methods;
+    b->widget.style.border.draw = default_border;
+
     return b;
 }
 

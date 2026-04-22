@@ -53,15 +53,14 @@ void e1() {
     );
 
     ui_register_root(&layout->widget);
-    container_add(&layout->widget, &b->widget);
-    container_add(&layout->widget, &b2->widget);
-    container_add(&layout->widget, &b3->widget);
+    div_add(layout, &b->widget);
+    div_add(layout, &b2->widget);
+    div_add(layout, &b3->widget);
 }
 
 void e2() {
     Div *scroll = div_new();
     style(scroll, 
-        overflow(OVERFLOW_SCROLL_Y),
         // width(100),
         border_width(1),
         padding(1),
@@ -71,19 +70,24 @@ void e2() {
         // border_bold(true),
         bg(127, 10, 15),
     );
+    div_style(scroll,
+        overflow(OVERFLOW_SCROLL_Y),
+    );
 
     Div *content = div_new();
     style(content,
-        // direction(LAYOUT_ROW),
-        spacing(10),
-        align_children(ALIGN_START),
-        overflow(OVERFLOW_SCROLL_Y),
         // padding(5),
         // margin(2),
         // height(30),
         // width(100),
         border_width(1),
         align_self(ALIGN_CENTER),
+    );
+    div_style(content,
+        // direction(LAYOUT_ROW),
+        spacing(10),
+        align_children(ALIGN_START),
+        overflow(OVERFLOW_SCROLL_Y),
     );
     
     StyleArgs args = style_new(
@@ -112,13 +116,13 @@ void e2() {
         align_self(ALIGN_END),
     );
 
-    container_add(&content->widget, &b1->widget);
-    container_add(&content->widget, &b2->widget);
-    container_add(&content->widget, &b3->widget);
-    container_add(&content->widget, &b4->widget);
-    container_add(&content->widget, &b5->widget);
+    div_add(content, &b1->widget);
+    div_add(content, &b2->widget);
+    div_add(content, &b3->widget);
+    div_add(content, &b4->widget);
+    div_add(content, &b5->widget);
 
-    container_add(&scroll->widget, &content->widget);
+    div_add(scroll, &content->widget);
 
     ui_register_root(&scroll->widget);
 }
@@ -134,8 +138,8 @@ void e3() {
     style(input, border_width(1), padding(1), width(40));
     text_style(&input->input, text_align(ALIGN_CENTER));
 
-    container_add(&root->widget, &b->widget);
-    container_add(&root->widget, &input->widget);
+    div_add(root, &b->widget);
+    div_add(root, &input->widget);
 
     ui_register_root(&root->widget);
 }
