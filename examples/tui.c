@@ -132,7 +132,7 @@ void e3() {
 
     TextInput *input = text_input_new();
     style(input, border_width(1), padding(1), width(40));
-    text_style(&input->block, text_align(ALIGN_CENTER));
+    text_style(&input->input, text_align(ALIGN_CENTER));
 
     container_add(&root->widget, &b->widget);
     container_add(&root->widget, &input->widget);

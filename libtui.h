@@ -529,7 +529,7 @@ typedef struct Text Text;
 
 typedef struct {
     void (*layout)(Text *self, LayoutConstraint c);
-    void (*draw)(Text *self, i32 parent_width);
+    void (*draw)(Text *self, Rectangle bounds);
 } TextVTable;
 
 struct Text {
@@ -547,10 +547,10 @@ void text_style_apply(TextStyle *s, TextStyleArg *args, usize count);
     } while (0)
 
 void text_layout(Text *self, LayoutConstraint c);
-void text_draw(Text *self, i32 parent_width);
+void text_draw(Text *self, Rectangle bounds);
 
 void default_text_layout(Text *self, LayoutConstraint c);
-void default_text_draw(Text *self, i32 parent_width);
+void default_text_draw(Text *self, Rectangle bounds);
 
 static const TextVTable text_methods = {
     .layout = default_text_layout,
@@ -1784,7 +1784,7 @@ void text_style_apply(TextStyle *s, TextStyleArg *args, usize count) {
 }
 
 void text_layout(Text *self, LayoutConstraint c) { self->vtable->layout(self, c); }
-void text_draw(Text *self, i32 parent_width) { self->vtable->draw(self, parent_width); }
+void text_draw(Text *self, Rectangle bounds) { self->vtable->draw(self, bounds); }
 
 void default_text_layout(Text *self, LayoutConstraint c) {
     WrapIter it = wrap_iter_new(&self->text, c.max_w);
@@ -1796,15 +1796,15 @@ void default_text_layout(Text *self, LayoutConstraint c) {
     self->measured.h = MAX(1, lines);
 }
 
-void default_text_draw(Text *self, i32 parent_width) {
+void default_text_draw(Text *self, Rectangle bounds) {
     WrapIter it = wrap_iter_new(&self->text, self->measured.w);
 
-    i32 y = 0;
+    i32 y = bounds.y;
     while (1) {
         WrapSlice slice = wrap_iter_next(&it);
         if (slice.len == 0) break;
 
-        i32 x = aligned_secondary_pos(parent_width, self->measured.w, self->style.align_x);
+        i32 x = bounds.x + aligned_secondary_pos(bounds.w, self->measured.w, self->style.align_x);
 
         for (usize i = 0; i < slice.len; i++) {
             CodePoint cp = slice.ptr[i];
@@ -1813,6 +1813,8 @@ void default_text_draw(Text *self, i32 parent_width) {
         }
 
         y++;
+        // here could be some overflow policies
+        // if (y >= bounds.y + bounds.h) break;
     }
 }
 
@@ -2088,7 +2090,7 @@ void text_input_event(Widget *w) {
 void text_input_draw(Widget *w) {
     TextInput *t = container_of(w, TextInput, widget);
 
-    text_draw(&t->input, t->widget.size.w);
+    text_draw(&t->input, (Rectangle){0, 0, w->size.w, w->size.h});
 
     // if (ui_is_focused(w)) {
     //     ui_put_cp(x, y, cp("_"));
