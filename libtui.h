@@ -58,7 +58,7 @@ typedef struct {
 } Cell;
 
 Cell cell(CodePoint cp, Effect e);
-Cell cell_cont();
+Cell cell_cont(Effect e);
 Cell cell_empty();
 b32 cell_equal(Cell a, Cell b);
 
@@ -1177,7 +1177,7 @@ b32 cp_equal(CodePoint a, CodePoint b) {
 
 Cell cell(CodePoint cp, Effect e) { return (Cell) { .cp = cp, .effect = e }; }
 Cell cell_lead(CodePoint cp, Effect e) { return (Cell) { .cp = cp, .flags = CELL_WIDE_LEAD, .effect = e }; }
-Cell cell_cont() { return (Cell) { .flags = CELL_CONTINUATION }; }
+Cell cell_cont(Effect e) { return (Cell) { .flags = CELL_CONTINUATION, .effect = e }; }
 Cell cell_empty() { return (Cell) { .cp = cp_from_byte(' ') }; }
 b32 cell_equal(Cell a, Cell b) { return memcmp(&a, &b, sizeof a) == 0; }
 
@@ -1214,7 +1214,7 @@ void put_cp_(i32 x, i32 y, CodePoint cp, Effect e) {
         fix_wide_char(x + 1, y);
 
         cells[x + y * w] = cell_lead(cp, e);
-        cells[(x + 1) + y * w] = cell_cont();
+        cells[(x + 1) + y * w] = cell_cont(e);
         return;
     }
 
@@ -1222,7 +1222,6 @@ void put_cp_(i32 x, i32 y, CodePoint cp, Effect e) {
     assert(false && "a codepoint with invalid width");
 }
 
-//TODO: maybe change put_cp to use this?
 void put_effect(i32 x, i32 y, Effect e) {
     Clip parent = clip_peek();
 
@@ -1231,7 +1230,14 @@ void put_effect(i32 x, i32 y, Effect e) {
 
     u32 w = Terminal.width;
     Cell *cells = Terminal.backbuffer.items;
-    cells[x + y * w].effect = e;
+    Cell cur = cells[x + y * w];
+    cur.effect = e;
+
+    if (cur.flags & CELL_WIDE_LEAD) {
+        put_effect(x + 1, y, e);
+    } else if (cur.flags & CELL_CONTINUATION) {
+        put_effect(x - 1, y, e);
+    }
 }
 
 void fix_wide_char(i32 x, i32 y) {
