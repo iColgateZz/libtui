@@ -292,7 +292,7 @@ struct Widget {
     Position offset;
     Size size;
     Widget *parent;
-    const WidgetVTable *vtable;
+    WidgetVTable *vtable;
     u8 metadata;
 };
 
@@ -572,7 +572,7 @@ void button_event(Widget *w);
 void button_draw(Widget *w);
 Button *button_new(s8 label);
 
-static const WidgetVTable button_methods = {
+static WidgetVTable button_methods = {
     .layout = button_layout,
     .hit_test = default_hit_test,
     .event = button_event,
@@ -588,7 +588,7 @@ void div_update(Widget *w);
 void div_draw(Widget *w);
 Div *div_new();
 
-static const WidgetVTable div_methods = {
+static WidgetVTable div_methods = {
     .layout = container_layout,
     .hit_test = div_hit_test,
     .event = div_event,
@@ -606,7 +606,7 @@ void text_input_event(Widget *w);
 void text_input_draw(Widget *w);
 TextInput *text_input_new();
 
-static const WidgetVTable text_input_methods = {
+static WidgetVTable text_input_methods = {
     .layout = text_input_layout,
     .hit_test = default_hit_test,
     .event = text_input_event,
