@@ -1234,12 +1234,12 @@ void put_effect(i32 x, i32 y, Effect e) {
 
     u32 w = Terminal.width;
     Cell *cells = Terminal.backbuffer.items;
-    Cell cur = cells[x + y * w];
-    cur.effect = e;
-
-    if (cur.flags & CELL_WIDE_LEAD) {
+    Cell *cur = &cells[x + y * w];
+    
+    cur->effect = e;
+    if (cur->flags & CELL_WIDE_LEAD) {
         put_effect(x + 1, y, e);
-    } else if (cur.flags & CELL_CONTINUATION) {
+    } else if (cur->flags & CELL_CONTINUATION) {
         put_effect(x - 1, y, e);
     }
 }

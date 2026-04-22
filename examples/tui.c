@@ -15,8 +15,8 @@ i32 main(i32 argc, byte *argv[]) {
     ui_init();
 
     // e1();
-    // e2();
-    e3();
+    e2();
+    // e3();
 
     while (!is_codepoint(cp("q"))) {
         begin_frame();
@@ -69,7 +69,7 @@ void e2() {
         // margin(3),
         border_bg(127, 10, 15),
         // border_bold(true),
-        // bg(127, 10, 15),
+        bg(127, 10, 15),
     );
 
     Div *content = div_new();
