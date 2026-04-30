@@ -190,8 +190,9 @@ Stream arena_stream_start(Arena *arena, usize size);
 
 void debug(i32 x, i32 y, byte *fmt, ...);
 
-#define MAX(a, b)     ((a) > (b) ? (a) : (b))
-#define MIN(a, b)     ((a) < (b) ? (a) : (b))
+#define MAX(a, b)           ((a) > (b) ? (a) : (b))
+#define MIN(a, b)           ((a) < (b) ? (a) : (b))
+#define CLAMP(v, min, max)  MIN(max, MAX(v, min))
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
 
 // TUI
@@ -271,9 +272,26 @@ struct BorderStyle {
 
 void default_border(i32 w, i32 h, BorderStyle *self);
 
-//TODO: use less memory
+typedef enum {
+    SIZE_FIT,
+    SIZE_FILL,
+    SIZE_FIXED,
+} SizeMode;
+
 typedef struct {
-    i32 w, h; // minimal size
+    SizeMode mode;
+    i32 value;
+    i32 min;
+    i32 max;
+} AxisSize;
+
+typedef struct {
+    AxisSize x;
+    AxisSize y;
+} WidgetSizing;
+
+typedef struct {
+    WidgetSizing sizing;
     Effect effect;
     Align align_self;
     u8 padding, margin;
@@ -290,7 +308,6 @@ typedef struct {
     void (*draw)(Widget *self);
 } WidgetVTable;
 
-//TODO: now it makes sense to add a constructor for widget
 struct Widget {
     WidgetStyle style;
     Position offset;
@@ -298,6 +315,16 @@ struct Widget {
     Widget *parent;
     WidgetVTable *vtable;
 };
+
+// Default values for widget that ensure correct behaviour
+Widget widget_default(WidgetVTable *vtable) {
+    return (Widget) {
+        .vtable = vtable,
+        .style.border.draw = default_border,
+        .style.sizing.x.max = INT32_MAX,
+        .style.sizing.y.max = INT32_MAX,
+    };
+}
 
 // Children widgets meausure their sizes
 // Parents set children's relative coordinates
@@ -368,6 +395,15 @@ typedef enum {
     // widget style
     STYLE_WIDTH,
     STYLE_HEIGHT,
+    STYLE_MIN_WIDTH,
+    STYLE_MIN_HEIGHT,
+    STYLE_MAX_WIDTH,
+    STYLE_MAX_HEIGHT,
+    STYLE_FILL_X,
+    STYLE_FILL_Y,
+    STYLE_FIT_X,
+    STYLE_FIT_Y,
+
     STYLE_PADDING,
     STYLE_MARGIN,
     STYLE_ALIGN_SELF,
@@ -406,6 +442,17 @@ typedef struct {
 
 #define width(v)            ((StyleArg){ .prop = STYLE_WIDTH,          .i = (v) })
 #define height(v)           ((StyleArg){ .prop = STYLE_HEIGHT,         .i = (v) })
+
+#define min_width(v)        ((StyleArg){ .prop = STYLE_MIN_WIDTH,  .i = (v) })
+#define min_height(v)       ((StyleArg){ .prop = STYLE_MIN_HEIGHT, .i = (v) })
+#define max_width(v)        ((StyleArg){ .prop = STYLE_MAX_WIDTH,  .i = (v) })
+#define max_height(v)       ((StyleArg){ .prop = STYLE_MAX_HEIGHT, .i = (v) })
+
+#define fill_x()            ((StyleArg){ .prop = STYLE_FILL_X })
+#define fill_y()            ((StyleArg){ .prop = STYLE_FILL_Y })
+#define fit_x()             ((StyleArg){ .prop = STYLE_FIT_X })
+#define fit_y()             ((StyleArg){ .prop = STYLE_FIT_Y })
+
 #define padding(v)          ((StyleArg){ .prop = STYLE_PADDING,        .u = (v) })
 #define margin(v)           ((StyleArg){ .prop = STYLE_MARGIN,         .u = (v) })
 #define align_self(v)       ((StyleArg){ .prop = STYLE_ALIGN_SELF,     .align = (v) })
@@ -1568,8 +1615,8 @@ void ui_run() {
         .max_w = get_terminal_width(),
     };
 
-    UI.root->widget.style.w = get_terminal_width();
-    UI.root->widget.style.h = get_terminal_height();
+    UI.root->widget.style.sizing.x.min = get_terminal_width();
+    UI.root->widget.style.sizing.y.min = get_terminal_height();
 
     widget_layout(&UI.root->widget, c);
     Widget *hit = widget_hit_test(&UI.root->widget);
@@ -1730,9 +1777,18 @@ void style_apply(Widget *w, StyleArg *args, usize count) {
     for (usize i = 0; i < count; i++) {
         StyleArg arg = args[i];
         switch (arg.prop) {
-            // WidgetStyle properties
-            case STYLE_WIDTH: ws->w = arg.i; break;
-            case STYLE_HEIGHT: ws->h = arg.i; break;
+            case STYLE_WIDTH: ws->sizing.x.mode = SIZE_FIXED; ws->sizing.x.value = arg.i; break;
+            case STYLE_HEIGHT: ws->sizing.y.mode = SIZE_FIXED; ws->sizing.y.value = arg.i; break;
+            case STYLE_MIN_WIDTH: ws->sizing.x.min = arg.i; break;
+            case STYLE_MIN_HEIGHT: ws->sizing.y.min = arg.i; break;
+            case STYLE_MAX_WIDTH: ws->sizing.x.max = arg.i; break;
+            case STYLE_MAX_HEIGHT: ws->sizing.y.max = arg.i; break;
+
+            case STYLE_FILL_X: ws->sizing.x.mode = SIZE_FILL; break;
+            case STYLE_FILL_Y: ws->sizing.y.mode = SIZE_FILL; break;
+            case STYLE_FIT_X: ws->sizing.x.mode = SIZE_FIT; break;
+            case STYLE_FIT_Y: ws->sizing.y.mode = SIZE_FIT; break;
+
             case STYLE_PADDING: ws->padding = arg.u; break;
             case STYLE_MARGIN: ws->margin = arg.u; break;
             case STYLE_ALIGN_SELF: ws->align_self = arg.align; break;
@@ -1838,22 +1894,80 @@ void div_style_apply(Div *div, DivStyleArg *args, usize count) {
     }
 }
 
-i32 apply_min_wh_constraint(i32 a, i32 b) {
-    if (a == 0) return b;
-    return MIN(a, b);
+i32 resolve_axis_size(AxisSize s, i32 fit_size, i32 available) {
+    i32 result;
+
+    switch (s.mode) {
+        case SIZE_FIT: result = fit_size; break;
+        case SIZE_FILL: result = available; break;
+        case SIZE_FIXED: result = s.value; break;
+        default: assert(false && "unknown size mode");
+    }
+
+    result = CLAMP(result, s.min, s.max);
+    return CLAMP(result, 0, available);
 }
 
 i32 widget_mbp(Widget *w) { return w->style.margin + w->style.border.width + w->style.padding; }
 i32 widget_total_width(Widget *w) { return w->size.w + 2 * widget_mbp(w); }
 i32 widget_total_height(Widget *w) { return w->size.h + 2 * widget_mbp(w); }
 
+i32 div_gap_size(Div *d) {
+    if (d->children.count == 0) return 0;
+    return (i32)(d->children.count - 1) * d->style.spacing;
+}
+
+b32 widget_fill_x(Widget *w) {
+    return w->style.sizing.x.mode == SIZE_FILL;
+}
+
+b32 widget_fill_y(Widget *w) {
+    return w->style.sizing.y.mode == SIZE_FILL;
+}
+
+void distribute_space_evenly(List(WidgetPtr) children, b32 horizontal, i32 available) {
+    if (available <= 0) return;
+
+    usize fill_count = 0;
+    for (usize i = 0; i < children.count; i++) {
+        Widget *w = children.items[i];
+        if (horizontal ? widget_fill_x(w) : widget_fill_y(w)) {
+            fill_count++;
+        }
+    }
+
+    if (fill_count == 0) return;
+
+    i32 each = available / (i32)fill_count;
+    i32 rem = available % (i32)fill_count;
+
+    for (usize i = 0; i < children.count; i++) {
+        Widget *w = children.items[i];
+        if (!(horizontal ? widget_fill_x(w) : widget_fill_y(w))) continue;
+
+        i32 extra = each;
+        if (rem > 0) {
+            extra++;
+            rem--;
+        }
+
+        if (horizontal) {
+            w->size.w += extra;
+            w->size.w = CLAMP(w->size.w, w->style.sizing.x.min, w->style.sizing.x.max);
+        } else {
+            w->size.h += extra;
+            w->size.h = CLAMP(w->size.h, w->style.sizing.y.min, w->style.sizing.y.max);
+        }
+    }
+}
+
 void div_layout(Widget *w, LayoutConstraint c) {
     Div *container = container_of(w, Div, widget);
     i32 mbp = widget_mbp(w);
 
     LayoutConstraint constraint = {
-        .max_w = apply_min_wh_constraint(w->style.w, c.max_w - mbp * 2),
-        .max_h = apply_min_wh_constraint(w->style.h, c.max_h - mbp * 2),
+        .max_w = MAX(0, c.max_w - mbp * 2),
+        .max_h = MAX(0, c.max_h - mbp * 2),
     };
 
     for (usize i = 0; i < container->children.count; i++)
@@ -1867,81 +1981,122 @@ void div_layout(Widget *w, LayoutConstraint c) {
 }
 
 void div_layout_column(Widget *w, LayoutConstraint constraint) {
-    Div *container = container_of(w, Div, widget);
+    Div *div = container_of(w, Div, widget);
 
-    i32 primary_axis = 0;
-    i32 secondary_axis_max = 0;
-    for (usize i = 0; i < container->children.count; i++) {
-        Widget *child = container->children.items[i];
+    i32 primary = div_gap_size(div);
+    i32 cross = 0;
 
-        primary_axis += widget_total_height(child);
-        secondary_axis_max = MAX(secondary_axis_max, widget_total_width(child));
+    for (usize i = 0; i < div->children.count; i++) {
+        Widget *child = div->children.items[i];
+        primary += widget_total_height(child);
+        cross = MAX(cross, widget_total_width(child));
+    }
 
-        if (i < container->children.count - 1) {
-            primary_axis += container->style.spacing;
+    i32 fit_w = cross;
+    i32 fit_h = primary;
+
+    w->size.w = resolve_axis_size(w->style.sizing.x, fit_w, constraint.max_w);
+
+    if (/*div->style.overflow == OVERFLOW_VISIBLE_Y &&*/ w->style.sizing.y.mode == SIZE_FIT) {
+        w->size.h = resolve_axis_size(w->style.sizing.y, fit_h, fit_h);
+    } else {
+        w->size.h = resolve_axis_size(w->style.sizing.y, fit_h, constraint.max_h);
+    }
+
+    // Cross-axis fill: column children with fill_x take full content width.
+    for (usize i = 0; i < div->children.count; i++) {
+        Widget *child = div->children.items[i];
+        if (widget_fill_x(child)) {
+            widget_layout(child, (LayoutConstraint) {
+                .max_w = w->size.w,
+                .max_h = constraint.max_h,
+            });
         }
     }
 
-    i32 content_w = MAX(secondary_axis_max, w->style.w);
-    i32 content_h = MAX(primary_axis, w->style.h);
+    // Recompute primary after possible text wrapping / fill_x relayout.
+    primary = div_gap_size(div);
+    for (usize i = 0; i < div->children.count; i++) {
+        primary += widget_total_height(div->children.items[i]);
+    }
 
-    // Store how much space is needed for content
-    w->size.w = MIN(content_w, constraint.max_w);
-    if (container->style.overflow == OVERFLOW_VISIBLE_Y) w->size.h = content_h;
-    else w->size.h = MIN(content_h, constraint.max_h);
+    i32 remaining_y = w->size.h - primary;
+    distribute_space_evenly(div->children, false, remaining_y);
 
-    i32 extra = w->size.h - primary_axis;
-    i32 start = aligned_primary_pos(extra, container->style.align_children);
+    // Re-layout fill_y children with their assigned height.
+    // for (usize i = 0; i < div->children.count; i++) {
+    //     Widget *child = div->children.items[i];
 
-    container->scroll.content_size = primary_axis;
-    container->scroll.content_start = start;
-    container->scroll.viewport_size = w->size.h;
+    //     if (widget_fill_y(child)) {
+    //         LayoutConstraint child_c = {
+    //             .max_w = w->size.w,
+    //             .max_h = MAX(0, child->size.h),
+    //         };
 
-    for (usize i = 0; i < container->children.count; i++) {
-        Widget *child = container->children.items[i];
-        Align align = child->style.align_self;
+    //         widget_layout(child, child_c);
+    //         child->size.h = MAX(child->size.h, child_c.max_h);
+    //     }
+    // }
 
-        child->offset.x = aligned_secondary_pos(w->size.w, widget_total_width(child), align);
+    primary = div_gap_size(div);
+    for (usize i = 0; i < div->children.count; i++) {
+        primary += widget_total_height(div->children.items[i]);
+    }
+
+    i32 extra = w->size.h - primary;
+    i32 start = aligned_primary_pos(extra, div->style.align_children);
+
+    div->scroll.content_size = primary;
+    div->scroll.content_start = start;
+    div->scroll.viewport_size = w->size.h;
+
+    for (usize i = 0; i < div->children.count; i++) {
+        Widget *child = div->children.items[i];
+        child->offset.x = aligned_secondary_pos(
+            w->size.w,
+            widget_total_width(child),
+            child->style.align_self
+        );
         child->offset.y = start;
 
-        start += widget_total_height(child) + container->style.spacing;
+        start += widget_total_height(child) + div->style.spacing;
     }
 }
 
 void div_layout_row(Widget *w, LayoutConstraint constraint) {
-    Div *container = container_of(w, Div, widget);
+    // Div *container = container_of(w, Div, widget);
 
-    i32 primary_axis = 0;
-    i32 secondary_axis_max = 0;
-    for (usize i = 0; i < container->children.count; i++) {
-        Widget *child = container->children.items[i];
+    // i32 primary_axis = 0;
+    // i32 secondary_axis_max = 0;
+    // for (usize i = 0; i < container->children.count; i++) {
+    //     Widget *child = container->children.items[i];
 
-        primary_axis += widget_total_width(child);
-        secondary_axis_max = MAX(secondary_axis_max, widget_total_height(child));
+    //     primary_axis += widget_total_width(child);
+    //     secondary_axis_max = MAX(secondary_axis_max, widget_total_height(child));
 
-        if (i < container->children.count - 1) {
-            primary_axis += container->style.spacing;
-        }
-    }
+    //     if (i < container->children.count - 1) {
+    //         primary_axis += container->style.spacing;
+    //     }
+    // }
 
-    i32 content_w = MAX(primary_axis, w->style.w);
-    i32 content_h = MAX(secondary_axis_max, w->style.h);
+    // i32 content_w = MAX(primary_axis, w->style.w);
+    // i32 content_h = MAX(secondary_axis_max, w->style.h);
 
-    w->size.w = MIN(content_w, constraint.max_w);
-    w->size.h = MIN(content_h, constraint.max_h);
+    // w->size.w = MIN(content_w, constraint.max_w);
+    // w->size.h = MIN(content_h, constraint.max_h);
 
-    i32 extra = w->size.w - primary_axis;
-    i32 start = aligned_primary_pos(extra, container->style.align_children);
+    // i32 extra = w->size.w - primary_axis;
+    // i32 start = aligned_primary_pos(extra, container->style.align_children);
 
-    for (usize i = 0; i < container->children.count; i++) {
-        Widget *child = container->children.items[i];
-        Align align = child->style.align_self;
+    // for (usize i = 0; i < container->children.count; i++) {
+    //     Widget *child = container->children.items[i];
+    //     Align align = child->style.align_self;
 
-        child->offset.x = start;
-        child->offset.y = aligned_secondary_pos(w->size.h, widget_total_height(child), align);
+    //     child->offset.x = start;
+    //     child->offset.y = aligned_secondary_pos(w->size.h, widget_total_height(child), align);
 
-        start += widget_total_width(child) + container->style.spacing;
-    }
+    //     start += widget_total_width(child) + container->style.spacing;
+    // }
 }
 
 i32 aligned_primary_pos(i32 extra_space, Align align) {
@@ -2020,8 +2175,7 @@ void div_draw(Widget *w) {
 Div *div_new(void) {
     Div *b = arena_push(&UI.allocator, Div);
     assert(b);
-    b->widget.vtable = &div_methods;
-    b->widget.style.border.draw = default_border;
+    b->widget = widget_default(&div_methods);
     return b;
 }
 
@@ -2057,22 +2211,21 @@ Button *button_new(s8 label) {
     assert(b);
 
     b->label = label;
-    b->widget.vtable = &button_methods;
-    b->widget.style.border.draw = default_border;
+    b->widget = widget_default(&button_methods);
 
     return b;
 }
 
 void text_input_layout(Widget *w, LayoutConstraint c) {
-    TextInput *t = container_of(w, TextInput, widget);
+    // TextInput *t = container_of(w, TextInput, widget);
 
-    text_layout(&t->input, (LayoutConstraint) {
-        .max_w = MIN(20, c.max_w),
-        .max_h = c.max_h,
-    });
+    // text_layout(&t->input, (LayoutConstraint) {
+    //     .max_w = MIN(20, c.max_w),
+    //     .max_h = c.max_h,
+    // });
 
-    w->size.w = MAX(t->input.measured.w, t->widget.style.w);
-    w->size.h = t->input.measured.h;
+    // w->size.w = MAX(t->input.measured.w, t->widget.style.w);
+    // w->size.h = t->input.measured.h;
 }
 
 void text_input_event(Widget *w) {
@@ -2104,8 +2257,7 @@ void text_input_draw(Widget *w) {
 
 TextInput *text_input_new() {
     TextInput *t = arena_push(&UI.allocator, TextInput);
-    t->widget.vtable = &text_input_methods;
-    t->widget.style.border.draw = default_border;
+    t->widget = widget_default(&text_input_methods);
     t->input.vtable = &text_methods;
     return t;
 }

@@ -6,6 +6,7 @@
 void e1();
 void e2();
 void e3();
+void e4();
 
 i32 main(i32 argc, byte *argv[]) {
     PSH_REBUILD_UNITY_AUTO(argc, argv);
@@ -15,8 +16,9 @@ i32 main(i32 argc, byte *argv[]) {
     ui_init();
 
     // e1();
-    e2();
+    // e2();
     // e3();
+    e4();
 
     while (!is_codepoint(cp("q"))) {
         begin_frame();
@@ -142,4 +144,53 @@ void e3() {
     div_add(root, &input->widget);
 
     ui_register_root(&root->widget);
+}
+
+void e4() {
+    Div *parent = div_new();
+    style(parent, 
+        // width(100),
+        // border_width(3),
+        // padding(1),
+        // align_self(ALIGN_CENTER),
+        // margin(3),
+        // border_bg(127, 10, 15),
+        // border_bold(true),
+        bg(127, 10, 15),
+        fill_x(),
+        fill_y(),
+    );
+    div_style(parent,
+        overflow(OVERFLOW_CLIP),
+    );
+
+    Div *child1 = div_new();
+    style(child1,
+        // padding(5),
+        // margin(2),
+        // height(10),
+        // width(100),
+        // border_width(1),
+        // align_self(ALIGN_CENTER),
+        bg(133, 132, 131),
+        fill_x(),
+        fill_y(),
+    );
+
+    Div *child2 = div_new();
+    style(child2,
+        // padding(5),
+        // margin(2),
+        // height(10),
+        // width(100),
+        // border_width(1),
+        // align_self(ALIGN_CENTER),
+        bg(133, 132, 255),
+        fill_x(),
+        fill_y(),
+    );
+    
+    div_add(parent, &child1->widget);
+    div_add(parent, &child2->widget);
+    ui_register_root(&parent->widget);
 }
