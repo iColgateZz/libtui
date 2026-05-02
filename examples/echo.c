@@ -1,7 +1,7 @@
 #define PSH_BUILD_IMPL
-#define LIBTUI_IMPL
+#define LIBTUI_RENDERER_IMPL
 #define PSH_NO_ECHO
-    #include "../libtui.h"
+    #include "../libtui/renderer.h"
 
 CodePoint last_cp;
 
@@ -31,11 +31,11 @@ void main_loop() {
         last_cp = get_codepoint();
     }
 
-    // put_codepoint(0, 0, last_cp);
-    // put_codepoint(1, 0, cp("p"));
+    // put_cp(0, 0, last_cp);
+    // put_cp(1, 0, cp("p"));
 
-    put_codepoint(0, 0, cp("😂"));
-    put_codepoint(1, 0, last_cp);
+    put_cp(0, 0, cp("😂"));
+    put_cp(1, 0, last_cp);
 
     Scratch scratch = scratch_get();
 

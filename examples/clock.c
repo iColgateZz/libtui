@@ -1,7 +1,7 @@
 #define PSH_BUILD_IMPL
-#define LIBTUI_IMPL
+#define LIBTUI_RENDERER_IMPL
 #define PSH_NO_ECHO
-    #include "../libtui.h"
+    #include "../libtui/renderer.h"
 
 #include <time.h>
 #define buf_size 16

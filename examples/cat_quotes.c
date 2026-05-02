@@ -1,7 +1,7 @@
 #define PSH_BUILD_IMPL
-#define LIBTUI_IMPL
+#define LIBTUI_RENDERER_IMPL
 #define PSH_NO_ECHO
-    #include "../libtui.h"
+    #include "../libtui/renderer.h"
 
 #define SEC(x)  x * 1000
 #define SEC_PER_QUOTE 10
@@ -91,5 +91,5 @@ void draw() {
         printed_lines++;
     }
 
-    put_codepoint(0, 7, cp_from_byte('0' + result));
+    put_cp(0, 7, cp_from_byte('0' + result));
 }

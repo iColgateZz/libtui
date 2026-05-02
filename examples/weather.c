@@ -1,7 +1,7 @@
 #define PSH_BUILD_IMPL
-#define LIBTUI_IMPL
+#define LIBTUI_RENDERER_IMPL
 #define PSH_NO_ECHO
-    #include "../libtui.h"
+    #include "../libtui/renderer.h"
 
 void main_loop();
 void print_dimensions();
@@ -87,7 +87,7 @@ void print_house() {
 
     usize ground_level = y + 6;
     for (usize i = 0; i < get_terminal_width(); i++) {
-        put_codepoint(i, ground_level, cp("~"));
+        put_cp(i, ground_level, cp("~"));
     }
 
     byte *p = (byte *)house;
@@ -113,5 +113,5 @@ void print_bird() {
         }
     }
 
-    put_codepoint(bird.x, bird.y, cp_from_byte('>'));
+    put_cp(bird.x, bird.y, cp_from_byte('>'));
 }
