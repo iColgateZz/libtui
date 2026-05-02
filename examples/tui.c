@@ -1,7 +1,9 @@
-#define PSH_BUILD_IMPL
 #define LIBTUI_IMPL
-#define PSH_NO_ECHO
     #include "../libtui.h"
+
+#define PSH_NO_ECHO
+#define PSH_CORE_IMPL
+    #include "../libtui/psh_core/psh_core.h"
 
 void e1();
 void e2();
@@ -9,7 +11,7 @@ void e3();
 void e4();
 
 i32 main(i32 argc, byte *argv[]) {
-    PSH_REBUILD_UNITY_AUTO(argc, argv);
+    REBUILD_UNITY_AUTO(argc, argv);
 
     init_terminal();
     set_max_timeout_ms(10);

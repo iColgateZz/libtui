@@ -1,6 +1,6 @@
 #ifndef LIBTUI_INCLUDE
 #define PSH_CORE_NO_PREFIX
-#include "libtui/psh_build/psh_build.h"
+#include "libtui/psh_core/psh_core.h"
 
 // public
 

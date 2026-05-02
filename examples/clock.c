@@ -1,7 +1,9 @@
-#define PSH_BUILD_IMPL
 #define LIBTUI_RENDERER_IMPL
-#define PSH_NO_ECHO
     #include "../libtui/renderer.h"
+
+#define PSH_NO_ECHO
+#define PSH_CORE_IMPL
+    #include "../libtui/psh_core/psh_core.h"
 
 #include <time.h>
 #define buf_size 16
@@ -10,7 +12,7 @@ void main_loop();
 u32 clock_str(byte buffer[buf_size]);
 
 i32 main(i32 argc, byte *argv[]) {
-    PSH_REBUILD_UNITY_AUTO(argc, argv);
+    REBUILD_UNITY_AUTO(argc, argv);
 
     init_terminal();
     set_max_timeout_ms(10);

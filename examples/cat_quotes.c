@@ -1,7 +1,9 @@
-#define PSH_BUILD_IMPL
 #define LIBTUI_RENDERER_IMPL
-#define PSH_NO_ECHO
     #include "../libtui/renderer.h"
+
+#define PSH_NO_ECHO
+#define PSH_CORE_IMPL
+    #include "../libtui/psh_core/psh_core.h"
 
 #define SEC(x)  x * 1000
 #define SEC_PER_QUOTE 10
@@ -19,7 +21,7 @@ void reset_reader();
 void draw();
 
 i32 main(i32 argc, byte *argv[]) {
-    PSH_REBUILD_UNITY_AUTO(argc, argv);
+    REBUILD_UNITY_AUTO(argc, argv);
 
     init_terminal();
     set_max_timeout_ms(10);
