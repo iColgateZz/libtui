@@ -1,3 +1,3 @@
-[submodule "libtui/psh_build"]
-	path = libtui/psh_build
-	url = https://github.com/iColgateZz/psh_build.git
+[submodule "libtui/psh_core"]
+	path = libtui/psh_core
+	url = https://github.com/iColgateZz/psh_core.git
