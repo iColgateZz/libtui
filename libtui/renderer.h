@@ -2,7 +2,7 @@
 #define LIBTUI_RENDERER_INCLUDE
 
 #define PSH_CORE_NO_PREFIX
-#include "psh_build/psh_build.h"
+#include "psh_core/psh_core.h"
 
 //TODO: make more memory efficient by encoding
 //      raw_len and d_width in 1 byte
