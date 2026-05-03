@@ -804,6 +804,7 @@ void put_effect(i32 x, i32 y, Effect e) {
     Cell *cur = &cells[x + y * w];
     
     cur->effect = e;
+    //TODO: this causes infinite recursion
     if (cur->flags & CELL_WIDE_LEAD) {
         put_effect(x + 1, y, e);
     } else if (cur->flags & CELL_CONTINUATION) {
