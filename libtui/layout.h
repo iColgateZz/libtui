@@ -4,6 +4,8 @@
 #define PSH_CORE_NO_PREFIX
 #include "psh_core/psh_core.h"
 
+#include "style.h"
+
 typedef struct LayoutNode LayoutNode;
 list_def(LayoutNode);
 
@@ -12,31 +14,52 @@ typedef enum {
     LAYOUT_NODE_TEXT,
 } LayoutNodeType;
 
+typedef struct {
+    Sizing size;
+    Color color;
+} LayoutNodeStyle;
+
 struct LayoutNode {
     LayoutNodeType type;
+
     LayoutNode *parent;
     List(LayoutNode) children;
-    // style properties
+
+    LayoutNodeStyle style;
+
+    i32 x, y; // resolved coords
+    i32 w, h; // resolved w, h
+
+    void *userdata;
 };
 
 typedef enum {
     LAYOUT_CMD_RECT,
-    LAYOUT_CMD_TEXT,
-    LAYOUT_CMD_CLIP,
-    LAYOUT_CMD_BORDER, // pass concrete codepoints to draw
+    // LAYOUT_CMD_TEXT,
+    LAYOUT_CMD_CLIP_START,
+    LAYOUT_CMD_CLIP_END,
+    // LAYOUT_CMD_BORDER, // pass concrete codepoints to draw
 } LayoutCommandType;
 
 typedef struct {
     LayoutCommandType type;
     union {
-        // structs for commands
+        struct {
+            i32 x, y, w, h;
+            Color color;
+        } rect;
     };
 } LayoutCommand;
 
-//TODO: add some api that either returns a list of cmds or lets user iterate over them
+b32 layout_cmd_next(LayoutCommand *out);
 
 #endif
 
 #ifdef LIBTUI_LAYOUT_IMPL
+
+static struct {
+    LayoutNode *root;
+    Arena tmp;
+} Layout = {0};
 
 #endif
