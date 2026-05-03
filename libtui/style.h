@@ -22,8 +22,8 @@ typedef struct {
 } AxisSize;
 
 typedef struct {
-    AxisSize x;
-    AxisSize y;
+    AxisSize w;
+    AxisSize h;
 } Sizing;
 
 typedef struct {
