@@ -1,5 +1,5 @@
 #define LIBTUI_IMPL
-    #include "../libtui.h"
+    #include "libtui_old.h"
 
 #define PSH_NO_ECHO
 #define PSH_CORE_IMPL
