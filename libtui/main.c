@@ -34,9 +34,9 @@ i32 main(i32 argc, byte *argv[]) {
                     case LAYOUT_CMD_CLIP_END: clip_pop(); break;
                     case LAYOUT_CMD_RECT: {
                         fill_box(
-                            (Rectangle) {cmd.rect.x, cmd.rect.y, cmd.rect.w, cmd.rect.h},
+                            *(Rectangle *)&cmd.rect,
                             (Effect) {
-                                .bg = (RGB) {cmd.rect.color.r, cmd.rect.color.g, cmd.rect.color.b},
+                                .bg = *(RGB *)&cmd.rect.color,
                                 .flags = EFFECT_BG,
                             }
                         );
