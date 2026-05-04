@@ -313,6 +313,8 @@ void init_terminal() {
     //TODO: maybe add something to deal with the cursor on the user side
     //      so that the user can manipulate the cursor position maybe
     //TODO: handle pasting into the terminal?
+    //TODO: test propagating unhandled events to the terminal emulator.
+    //      maybe it will handle them?
 
     write_str("\33[?2004l");                 // disable bracketed paste mode
     write_str("\33[?1049h");                 // use alternate buffer
