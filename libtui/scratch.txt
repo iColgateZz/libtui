@@ -1,0 +1,28 @@
+main() {
+    // Retained mode frontend
+    Div *root = div_new(
+        .style = {...},
+        .children = {
+            label_new(
+                .text = "Enter your name:",
+            ),
+            text_input_new(
+                .style = {...},
+            ),
+            button_new(
+                .text = "Submit",
+                .on_click = submit_handler,
+            )
+        },
+    );
+
+    // Immediate mode 
+    main_loop {
+        Node *layout_root = convert_to_layout_node(root);
+        layout(layout_root);
+
+        for command in layout_commands {
+            adapter handles commands...
+        }
+    }
+}
