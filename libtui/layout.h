@@ -30,7 +30,7 @@ struct LayoutNode {
     i32 x, y; // resolved coords
     i32 w, h; // resolved w, h
 
-    void *userdata;
+    // void *userdata;
 };
 
 typedef enum {
@@ -114,5 +114,16 @@ b32 layout_cmd_next(LayoutCommand *out) {
     *out = Layout.cmds.items[Layout.cmd_idx++];
     return true;
 }
+
+// void layout(LayoutNode *root) {
+//     layout_intrinsic_width(root);
+//     // other nodes in the pipeline go here..
+// }
+
+// void layout_intrinsic_width(LayoutNode *node) {
+//     for (usize i = 0; i < node->children.count; ++i) {
+//         layout_intrinsic_width(&node->children.items[i]);
+//     }
+// }
 
 #endif
