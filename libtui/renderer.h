@@ -112,6 +112,7 @@ b32 point_in_rect(i32 x, i32 y, Rectangle r);
 Rectangle rect_intersect(Rectangle a, Rectangle b);
 Rectangle rect_union(Rectangle a, Rectangle b);
 
+//TODO: just typedef rectangle as clip
 typedef struct {
     Rectangle rect;
 } Clip;
