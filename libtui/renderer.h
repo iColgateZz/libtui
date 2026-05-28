@@ -9,6 +9,8 @@
 
 #define ctrl(x) cp_from_byte((x) & 0x1F)
 
+//TODO: rename file to terminal.h and add term_ prefix to functions
+
 typedef struct {
     u8 r, g, b;
 } RGB;
