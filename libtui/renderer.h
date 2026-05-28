@@ -175,11 +175,6 @@ Stream arena_stream_start(Arena *arena, usize size);
 
 void debug(i32 x, i32 y, byte *fmt, ...);
 
-#define MAX(a, b)           ((a) > (b) ? (a) : (b))
-#define MIN(a, b)           ((a) < (b) ? (a) : (b))
-#define CLAMP(v, min, max)  MIN(max, MAX(v, min))
-#define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
-
 #endif //LIBTUI_RENDERER_INCLUDE
 
 #ifdef LIBTUI_RENDERER_IMPL
