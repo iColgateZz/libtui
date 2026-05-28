@@ -4,11 +4,47 @@
 #define PSH_CORE_NO_PREFIX
 #include "psh_core/psh_core.h"
 
-#include "style.h"
 #include "unicode.h"
 
 typedef struct LayoutNode LayoutNode;
 list_def(LayoutNode);
+
+typedef enum {
+    SIZE_FIT,
+    SIZE_FILL,
+    SIZE_FIXED,
+} SizeMode;
+
+typedef struct {
+    SizeMode mode;
+    union {
+        struct {
+            i32 value;
+        } fixed;
+        struct {
+            i32 min;
+            i32 max;
+        } fit;
+        struct {
+            i32 min;
+            i32 max;
+        } fill;
+    };
+} Size;
+
+typedef struct {
+    Size w;
+    Size h;
+} Sizing;
+
+typedef struct {
+    u8 r, g, b;
+} Color;
+
+typedef enum {
+    DIR_ROW,
+    DIR_COL,
+} Direction;
 
 typedef enum {
     LAYOUT_NODE_CONTAINER,
@@ -18,6 +54,11 @@ typedef enum {
 typedef struct {
     Sizing size;
     Color color;
+    u8 padding;
+    u8 spacing;
+    // u8 margin;
+    // BorderStyle border;
+    Direction direction;
 } LayoutNodeStyle;
 
 typedef struct {
@@ -82,38 +123,6 @@ static struct {
     usize cmd_idx;
 } Layout = {0};
 
-// it is meant to run the whole pipeline
-// currently, the impl is just for testing
-// void layout_nodes(LayoutNode* root) {
-//     root->w = root->style.size.w.value;
-//     root->h = root->style.size.h.value;
-
-//     list_append(
-//         &Layout.cmds, 
-//         ((LayoutCommand) {
-//             .type = LAYOUT_CMD_CLIP_START,
-//             .clip = {.x = root->x, .y = root->y, .w = root->w, .h = root->h}, 
-//         })
-//     );
-
-//     list_append(
-//         &Layout.cmds, 
-//         ((LayoutCommand) {
-//             .type = LAYOUT_CMD_RECT,
-//             .rect = {.x = root->x, .y = root->y, .w = root->w, .h = root->h, .color = root->style.color}
-//         })
-//     );
-
-//     for (usize i = 0; i < root->children.count; ++i) {
-//         layout_nodes(&root->children.items[i]);
-//     }
-
-//     list_append(
-//         &Layout.cmds, 
-//         (LayoutCommand) {.type = LAYOUT_CMD_CLIP_END}
-//     );
-// }
-
 b32 layout_cmd_next(LayoutCommand *out) {
     if (Layout.cmd_idx >= Layout.cmds.count) {
         Layout.cmd_idx = 0;
@@ -133,14 +142,51 @@ void layout(LayoutNode *root) {
 }
 
 void layout_intrinsic_width(LayoutNode *node) {
-    if (node->type == LAYOUT_NODE_TEXT) {
+    if (node->type == LAYOUT_NODE_TEXT)
+    {
+        i32 text_width = 0;
+        List(CodePoint) text = node->text.text;
 
-    } else {
-        for (usize i = 0; i < node->container.children.count; ++i) {
-            layout_intrinsic_width(&node->container.children.items[i]);
+        for (usize i = 0; i < text.count; ++i)
+            text_width += text.items[i].display_width;
+
+        node->w = text_width;
+    }
+    else if (node->type == LAYOUT_NODE_CONTAINER)
+    {
+        List(LayoutNode) children = node->container.children;
+        for (usize i = 0; i < children.count; ++i)
+            layout_intrinsic_width(&children.items[i]);
+
+        LayoutNodeStyle style = node->container.style;
+        Size wsize = style.size.w;
+        if (wsize.mode == SIZE_FIXED) {
+            //TODO: account for border
+            node->w = wsize.fixed.value + 2 * style.padding;
         }
+        else if (wsize.mode == SIZE_FIT || wsize.mode == SIZE_FILL) 
+        {
+            if (style.direction == DIR_ROW)
+            {
+                i32 children_width = 0;
+                for (usize i = 0; i < children.count; ++i)
+                    children_width += children.items[i].w;
 
+                node->w = children_width + 2 * style.padding + 
+                          MAX(children.count - 1, 0) * style.spacing;
+            }
+            else if (style.direction == DIR_COL)
+            {
+                i32 max_child_w = 0;
+                for (usize i = 0; i < children.count; ++i)
+                    max_child_w = MAX(children.items[i].w, max_child_w);
+                
+                node->w = max_child_w + 2 * style.padding;
+            }
 
+            if (wsize.fit.min < wsize.fit.max)
+                node->w = CLAMP(node->w, wsize.fit.min, wsize.fit.max);
+        }
     }
 }
 
