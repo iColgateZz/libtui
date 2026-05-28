@@ -5,12 +5,13 @@
 #include "psh_core/psh_core.h"
 
 #include "style.h"
+#include "unicode.h"
 
 typedef struct LayoutNode LayoutNode;
 list_def(LayoutNode);
 
 typedef enum {
-    LAYOUT_NODE_RECT,
+    LAYOUT_NODE_CONTAINER,
     LAYOUT_NODE_TEXT,
 } LayoutNodeType;
 
@@ -19,18 +20,27 @@ typedef struct {
     Color color;
 } LayoutNodeStyle;
 
+typedef struct {
+
+} TextStyle;
+
 struct LayoutNode {
-    LayoutNodeType type;
-
     LayoutNode *parent;
-    List(LayoutNode) children;
-
-    LayoutNodeStyle style;
-
+    LayoutNodeType type;
     i32 x, y; // resolved coords
     i32 w, h; // resolved w, h
 
-    // void *userdata;
+    union {
+        struct {
+            List(LayoutNode) children;
+            LayoutNodeStyle style;
+            // void *userdata;
+        } container;
+        struct {
+            List(CodePoint) text;
+            TextStyle style;
+        } text;
+    };
 };
 
 typedef enum {
@@ -55,7 +65,7 @@ typedef struct {
 } LayoutCommand;
 
 b32 layout_cmd_next(LayoutCommand *out);
-void layout_nodes(LayoutNode *root);
+void layout(LayoutNode *root);
 // hit testing, event handling, and state updates
 // happen after layout phase
 
@@ -74,35 +84,35 @@ static struct {
 
 // it is meant to run the whole pipeline
 // currently, the impl is just for testing
-void layout_nodes(LayoutNode* root) {
-    root->w = root->style.size.w.value;
-    root->h = root->style.size.h.value;
+// void layout_nodes(LayoutNode* root) {
+//     root->w = root->style.size.w.value;
+//     root->h = root->style.size.h.value;
 
-    list_append(
-        &Layout.cmds, 
-        ((LayoutCommand) {
-            .type = LAYOUT_CMD_CLIP_START,
-            .clip = {.x = root->x, .y = root->y, .w = root->w, .h = root->h}, 
-        })
-    );
+//     list_append(
+//         &Layout.cmds, 
+//         ((LayoutCommand) {
+//             .type = LAYOUT_CMD_CLIP_START,
+//             .clip = {.x = root->x, .y = root->y, .w = root->w, .h = root->h}, 
+//         })
+//     );
 
-    list_append(
-        &Layout.cmds, 
-        ((LayoutCommand) {
-            .type = LAYOUT_CMD_RECT,
-            .rect = {.x = root->x, .y = root->y, .w = root->w, .h = root->h, .color = root->style.color}
-        })
-    );
+//     list_append(
+//         &Layout.cmds, 
+//         ((LayoutCommand) {
+//             .type = LAYOUT_CMD_RECT,
+//             .rect = {.x = root->x, .y = root->y, .w = root->w, .h = root->h, .color = root->style.color}
+//         })
+//     );
 
-    for (usize i = 0; i < root->children.count; ++i) {
-        layout_nodes(&root->children.items[i]);
-    }
+//     for (usize i = 0; i < root->children.count; ++i) {
+//         layout_nodes(&root->children.items[i]);
+//     }
 
-    list_append(
-        &Layout.cmds, 
-        (LayoutCommand) {.type = LAYOUT_CMD_CLIP_END}
-    );
-}
+//     list_append(
+//         &Layout.cmds, 
+//         (LayoutCommand) {.type = LAYOUT_CMD_CLIP_END}
+//     );
+// }
 
 b32 layout_cmd_next(LayoutCommand *out) {
     if (Layout.cmd_idx >= Layout.cmds.count) {
@@ -115,15 +125,23 @@ b32 layout_cmd_next(LayoutCommand *out) {
     return true;
 }
 
-// void layout(LayoutNode *root) {
-//     layout_intrinsic_width(root);
-//     // other nodes in the pipeline go here..
-// }
+void layout_intrinsic_width(LayoutNode *node);
 
-// void layout_intrinsic_width(LayoutNode *node) {
-//     for (usize i = 0; i < node->children.count; ++i) {
-//         layout_intrinsic_width(&node->children.items[i]);
-//     }
-// }
+void layout(LayoutNode *root) {
+    layout_intrinsic_width(root);
+    // other nodes in the pipeline go here..
+}
+
+void layout_intrinsic_width(LayoutNode *node) {
+    if (node->type == LAYOUT_NODE_TEXT) {
+
+    } else {
+        for (usize i = 0; i < node->container.children.count; ++i) {
+            layout_intrinsic_width(&node->container.children.items[i]);
+        }
+
+
+    }
+}
 
 #endif

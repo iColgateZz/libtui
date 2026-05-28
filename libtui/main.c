@@ -16,16 +16,16 @@ i32 main(i32 argc, byte *argv[]) {
     set_max_timeout_ms(100);
 
     LayoutNode root = {
-        .type = LAYOUT_NODE_RECT,
-        .style.size.w.value = 5,
-        .style.size.h.value = 5,
-        .style.color = (Color) {127, 9, 254},
+        .type = LAYOUT_NODE_CONTAINER,
+        .container.style.size.w.value = 5,
+        .container.style.size.h.value = 5,
+        .container.style.color = (Color) {127, 9, 254},
     };
 
     while (!is_codepoint(cp("q"))) {
         begin_frame();
         {
-            layout_nodes(&root);
+            layout(&root);
 
             LayoutCommand cmd;
             while (layout_cmd_next(&cmd)) {
