@@ -107,6 +107,8 @@ typedef struct {
 
 b32 layout_cmd_next(LayoutCommand *out);
 void layout(LayoutNode *root);
+void layout_set_screen_w(u32 w);
+void layout_set_screen_h(u32 h);
 // hit testing, event handling, and state updates
 // happen after layout phase
 
@@ -121,7 +123,11 @@ static struct {
     Arena tmp;
     List(LayoutCommand) cmds;
     usize cmd_idx;
+    i32 screen_w, screen_h;
 } Layout = {0};
+
+void layout_set_screen_w(u32 w) { Layout.screen_w = w; }
+void layout_set_screen_h(u32 h) { Layout.screen_h = h; }
 
 b32 layout_cmd_next(LayoutCommand *out) {
     if (Layout.cmd_idx >= Layout.cmds.count) {
@@ -135,9 +141,22 @@ b32 layout_cmd_next(LayoutCommand *out) {
 }
 
 void layout_intrinsic_width(LayoutNode *node);
+void layout_fill_width(LayoutNode *node);
+void layout_intrinsic_height(LayoutNode *node);
+void layout_fill_height(LayoutNode *node);
+void layout_positions(LayoutNode *node);
+void layout_commands(LayoutNode *node);
 
 void layout(LayoutNode *root) {
     layout_intrinsic_width(root);
+    layout_fill_width(root);
+
+    layout_intrinsic_height(root);
+    layout_fill_height(root);
+
+    layout_positions(root);
+
+    layout_commands(root);
     // other nodes in the pipeline go here..
 }
 
@@ -162,7 +181,8 @@ void layout_intrinsic_width(LayoutNode *node) {
         Size wsize = style.size.w;
         if (wsize.mode == SIZE_FIXED) {
             //TODO: account for border
-            node->w = wsize.fixed.value + 2 * style.padding;
+            //      do I add padding here?
+            node->w = wsize.fixed.value;
         }
         else if (wsize.mode == SIZE_FIT || wsize.mode == SIZE_FILL) 
         {
@@ -187,6 +207,131 @@ void layout_intrinsic_width(LayoutNode *node) {
             if (wsize.fit.min < wsize.fit.max)
                 node->w = CLAMP(node->w, wsize.fit.min, wsize.fit.max);
         }
+    }
+}
+
+void layout_fill_width(LayoutNode *node) {}
+
+void layout_intrinsic_height(LayoutNode *node) {
+    if (node->type == LAYOUT_NODE_TEXT)
+    {
+
+    }
+    else if (node->type == LAYOUT_NODE_CONTAINER)
+    {
+        List(LayoutNode) children = node->container.children;
+        for (usize i = 0; i < children.count; ++i)
+            layout_intrinsic_height(&children.items[i]);
+
+        LayoutNodeStyle style = node->container.style;
+        Size hsize = style.size.h;
+        if (hsize.mode == SIZE_FIXED) {
+            //TODO: account for border
+            //      do I add padding here?
+            node->h = hsize.fixed.value;
+        }
+        else if (hsize.mode == SIZE_FIT || hsize.mode == SIZE_FILL) 
+        {
+            if (style.direction == DIR_ROW)
+            {
+                i32 max_child_h = 0;
+                for (usize i = 0; i < children.count; ++i)
+                    max_child_h = MAX(children.items[i].h, max_child_h);
+                
+                node->h = max_child_h + 2 * style.padding;
+            }
+            else if (style.direction == DIR_COL)
+            {
+                i32 children_height = 0;
+                for (usize i = 0; i < children.count; ++i)
+                    children_height += children.items[i].h;
+
+                node->h = children_height + 2 * style.padding + 
+                          MAX(children.count - 1, 0) * style.spacing;
+            }
+
+            if (hsize.fit.min < hsize.fit.max)
+                node->h = CLAMP(node->h, hsize.fit.min, hsize.fit.max);
+        }
+    }
+}
+
+void layout_fill_height(LayoutNode *node) {}
+
+void layout_positions(LayoutNode *node) {
+    if (node->type == LAYOUT_NODE_TEXT)
+    {
+
+    }
+    else if (node->type == LAYOUT_NODE_CONTAINER)
+    {
+        if (node->parent == NULL)
+            node->x = node->y = 0;
+
+        LayoutNodeStyle style = node->container.style;
+        i32 pos_x = node->x + style.padding;
+        i32 pos_y = node->y + style.padding;
+
+        //TODO: alignment across axis goes here
+        List(LayoutNode) children = node->container.children;
+        if (style.direction == DIR_ROW)
+        {
+            for (usize i = 0; i < children.count; ++i) {
+                LayoutNode *child = &children.items[i];
+                child->x = pos_x;
+                child->y = pos_y;
+
+                pos_x += child->w + style.spacing;
+            }
+        }
+        else if (style.direction == DIR_COL)
+        {
+            for (usize i = 0; i < children.count; ++i) {
+                LayoutNode *child = &children.items[i];
+                child->x = pos_x;
+                child->y = pos_y;
+
+                pos_y += child->h + style.spacing;
+            }
+        }
+
+        for (usize i = 0; i < children.count; ++i)
+            layout_positions(&children.items[i]);
+    }
+}
+
+void layout_commands(LayoutNode *node) {
+    if (node->type == LAYOUT_NODE_TEXT) {
+
+    }
+    else if (node->type == LAYOUT_NODE_CONTAINER)
+    {
+        List(LayoutNode) children = node->container.children;
+        LayoutNodeStyle style = node->container.style;
+
+        list_append(
+            &Layout.cmds, 
+            ((LayoutCommand) {
+                .type = LAYOUT_CMD_CLIP_START,
+                .clip = {.x = node->x, .y = node->y, .w = node->w, .h = node->h}, 
+            })
+        );
+
+        list_append(
+            &Layout.cmds, 
+            ((LayoutCommand) {
+                .type = LAYOUT_CMD_RECT,
+                .rect = {.x = node->x, .y = node->y, .w = node->w, .h = node->h, .color = style.color}
+            })
+        );
+
+        for (usize i = 0; i < children.count; ++i)
+            layout_commands(&children.items[i]);
+
+        list_append(
+            &Layout.cmds, 
+            (LayoutCommand) {.type = LAYOUT_CMD_CLIP_END}
+        );
     }
 }
 
