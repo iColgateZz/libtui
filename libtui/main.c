@@ -15,43 +15,43 @@ i32 main(i32 argc, byte *argv[]) {
     init_terminal();
     set_max_timeout_ms(100);
 
+    //TODO: Retained frontend widgets should have stable IDs
+    //      that can be used by the layout nodes for state referencing?
+
     LayoutNode root = {
         .type = LAYOUT_NODE_CONTAINER,
-        // .container.style.size.w.mode = SIZE_FIXED,
-        // .container.style.size.w.fixed.value = 5,
-        // .container.style.size.h.mode = SIZE_FIXED,
-        // .container.style.size.h.fixed.value = 5,
-        ._LAYOUT_NODE_CONTAINER.style.color = (Color) {127, 9, 254},
+        ._LAYOUT_NODE_CONTAINER.style.color = {127, 9, 254},
+        .parent = -1,
     };
+    LayoutNodeID rootID = layout_node_push(root);
 
     LayoutNode c1 = {
         .type = LAYOUT_NODE_CONTAINER,
-        ._LAYOUT_NODE_CONTAINER.style.size.w.mode = SIZE_FIXED,
-        ._LAYOUT_NODE_CONTAINER.style.size.w.fixed.value = 5,
-        ._LAYOUT_NODE_CONTAINER.style.size.h.mode = SIZE_FIXED,
-        ._LAYOUT_NODE_CONTAINER.style.size.h.fixed.value = 5,
-        ._LAYOUT_NODE_CONTAINER.style.color = (Color) {10, 9, 254},
-        .parent = &root,
+        ._LAYOUT_NODE_CONTAINER.style.size.w = FIXED(5),
+        ._LAYOUT_NODE_CONTAINER.style.size.h = FIXED(5),
+        ._LAYOUT_NODE_CONTAINER.style.color = {10, 9, 254},
+        .parent = rootID,
     };
+    LayoutNodeID c1ID = layout_node_push(c1);
 
     LayoutNode c2 = {
         .type = LAYOUT_NODE_CONTAINER,
-        ._LAYOUT_NODE_CONTAINER.style.size.w.mode = SIZE_FIXED,
-        ._LAYOUT_NODE_CONTAINER.style.size.w.fixed.value = 20,
-        ._LAYOUT_NODE_CONTAINER.style.size.h.mode = SIZE_FIXED,
-        ._LAYOUT_NODE_CONTAINER.style.size.h.fixed.value = 3,
-        ._LAYOUT_NODE_CONTAINER.style.color = (Color) {10, 9, 8},
-        .parent = &root,
+        ._LAYOUT_NODE_CONTAINER.style.size.w = FIXED(20),
+        ._LAYOUT_NODE_CONTAINER.style.size.h = FIXED(3),
+        ._LAYOUT_NODE_CONTAINER.style.color = {10, 9, 8},
+        .parent = rootID,
     };
+    LayoutNodeID c2ID = layout_node_push(c2);
 
-    list_append(&root._LAYOUT_NODE_CONTAINER.children, c1);
-    list_append(&root._LAYOUT_NODE_CONTAINER.children, c2);
+    LayoutNode *rootp = layout_node_get(rootID);
+    list_append(&rootp->_LAYOUT_NODE_CONTAINER.children, c1ID);
+    list_append(&rootp->_LAYOUT_NODE_CONTAINER.children, c2ID);
 
     while (!is_codepoint(cp("q"))) {
         begin_frame();
         {
-            layout(&root);
-            
+            layout(rootID);
+
             LayoutCommand cmd;
             while (layout_cmd_next(&cmd)) {
                 match(cmd) {
