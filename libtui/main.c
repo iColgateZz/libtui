@@ -24,28 +24,27 @@ i32 main(i32 argc, byte *argv[]) {
         .parent = -1,
     };
     LayoutNodeID rootID = layout_node_push(root);
-
-    LayoutNode c1 = {
-        .type = LAYOUT_NODE_CONTAINER,
-        ._LAYOUT_NODE_CONTAINER.style.size.w = FIXED(5),
-        ._LAYOUT_NODE_CONTAINER.style.size.h = FIXED(5),
-        ._LAYOUT_NODE_CONTAINER.style.color = {10, 9, 254},
-        .parent = rootID,
-    };
-    LayoutNodeID c1ID = layout_node_push(c1);
-
-    LayoutNode c2 = {
-        .type = LAYOUT_NODE_CONTAINER,
-        ._LAYOUT_NODE_CONTAINER.style.size.w = FIXED(20),
-        ._LAYOUT_NODE_CONTAINER.style.size.h = FIXED(3),
-        ._LAYOUT_NODE_CONTAINER.style.color = {10, 9, 8},
-        .parent = rootID,
-    };
-    LayoutNodeID c2ID = layout_node_push(c2);
-
     LayoutNode *rootp = layout_node_get(rootID);
-    list_append(&rootp->_LAYOUT_NODE_CONTAINER.children, c1ID);
-    list_append(&rootp->_LAYOUT_NODE_CONTAINER.children, c2ID);
+
+    {
+        LayoutNode c1 = {
+            .type = LAYOUT_NODE_CONTAINER,
+            ._LAYOUT_NODE_CONTAINER.style.size = {.w = FIXED(5), .h = FIXED(5)},
+            ._LAYOUT_NODE_CONTAINER.style.color = {10, 9, 254},
+            .parent = rootID,
+        };
+        LayoutNodeID c1ID = layout_node_push(c1);
+        list_append(&rootp->_LAYOUT_NODE_CONTAINER.children, c1ID);
+    
+        LayoutNode c2 = {
+            .type = LAYOUT_NODE_CONTAINER,
+            ._LAYOUT_NODE_CONTAINER.style.size = {.w = FIXED(20), .h = FIXED(3)},
+            ._LAYOUT_NODE_CONTAINER.style.color = {10, 9, 8},
+            .parent = rootID,
+        };
+        LayoutNodeID c2ID = layout_node_push(c2);
+        list_append(&rootp->_LAYOUT_NODE_CONTAINER.children, c2ID);
+    }
 
     while (!is_codepoint(cp("q"))) {
         begin_frame();
@@ -62,10 +61,10 @@ i32 main(i32 argc, byte *argv[]) {
                                 .bg = *(RGB *)&rect.color,
                                 .flags = EFFECT_BG,
                             }
-                        );
+                        ); break;
                     }
-                    case(LAYOUT_CMD_CLIP_START, clip) clip_push_rect(*(Rectangle *)&clip);
-                    case(LAYOUT_CMD_CLIP_END) clip_pop();
+                    case(LAYOUT_CMD_CLIP_START, clip) clip_push_rect(*(Rectangle *)&clip); break;
+                    case(LAYOUT_CMD_CLIP_END) clip_pop(); break;
                     otherwise assert(false && "unknown cmd type");
                 }
             }
