@@ -46,11 +46,6 @@ typedef enum {
     DIR_COL,
 } Direction;
 
-typedef enum {
-    LAYOUT_NODE_CONTAINER,
-    LAYOUT_NODE_TEXT,
-} LayoutNodeType;
-
 typedef struct {
     Sizing size;
     Color color;
@@ -65,22 +60,27 @@ typedef struct {
 
 } TextStyle;
 
+typedef enum {
+    LAYOUT_NODE_CONTAINER,
+    LAYOUT_NODE_TEXT,
+} LayoutNodeType;
+
 struct LayoutNode {
     LayoutNode *parent;
-    LayoutNodeType type;
     i32 x, y; // resolved coords
     i32 w, h; // resolved w, h
-
+    
+    LayoutNodeType type;
     union {
         struct {
             List(LayoutNode) children;
             LayoutNodeStyle style;
             // void *userdata;
-        } container;
+        } _LAYOUT_NODE_CONTAINER;
         struct {
             List(CodePoint) text;
             TextStyle style;
-        } text;
+        } _LAYOUT_NODE_TEXT;
     };
 };
 
@@ -98,10 +98,10 @@ typedef struct {
         struct {
             i32 x, y, w, h;
             Color color;
-        } rect;
+        } _LAYOUT_CMD_RECT;
         struct {
             i32 x, y, w, h;
-        } clip;
+        } _LAYOUT_CMD_CLIP_START;
     };
 } LayoutCommand;
 
@@ -111,6 +111,21 @@ void layout_set_screen_w(u32 w);
 void layout_set_screen_h(u32 h);
 // hit testing, event handling, and state updates
 // happen after layout phase
+
+//TODO: move to psh_core
+#define typeof __typeof__
+#define match(tu) for (typeof(tu) _tu = tu, *p = &_tu; p; p = NULL) switch ((tu).type)
+// may be fixed with __VA_OPT(__VA_ARGS__,) in C23 or
+// https://medium.com/@pauljlucas/using-advanced-c-preprocessor-macros-for-a-pre-c23-c-20-va-opt-substitute-bccefde27817
+#define case(...)   xcase(__VA_ARGS__, _case2, _case1)(__VA_ARGS__)
+#define xcase(a, b, c, ...) c
+#define _case2(tag, varname) break; case (tag): \
+        for (typeof(_tu._##tag) varname = _tu._##tag, *_once = &varname; _once; _once = NULL)
+#define _case1(tag) break; case (tag):
+#define otherwise break; default:
+
+#define tag(T, tag, ...) ((T) {.type = tag, ._##tag = __VA_ARGS__})
+#define tag0(T, tag) ((T) {.type = tag})
 
 #endif
 
@@ -164,7 +179,7 @@ void layout_intrinsic_width(LayoutNode *node) {
     if (node->type == LAYOUT_NODE_TEXT)
     {
         i32 text_width = 0;
-        List(CodePoint) text = node->text.text;
+        List(CodePoint) text = node->_LAYOUT_NODE_TEXT.text;
 
         for (usize i = 0; i < text.count; ++i)
             text_width += text.items[i].display_width;
@@ -173,11 +188,11 @@ void layout_intrinsic_width(LayoutNode *node) {
     }
     else if (node->type == LAYOUT_NODE_CONTAINER)
     {
-        List(LayoutNode) children = node->container.children;
+        List(LayoutNode) children = node->_LAYOUT_NODE_CONTAINER.children;
         for (usize i = 0; i < children.count; ++i)
             layout_intrinsic_width(&children.items[i]);
 
-        LayoutNodeStyle style = node->container.style;
+        LayoutNodeStyle style = node->_LAYOUT_NODE_CONTAINER.style;
         Size wsize = style.size.w;
         if (wsize.mode == SIZE_FIXED) {
             //TODO: account for border
@@ -210,7 +225,7 @@ void layout_intrinsic_width(LayoutNode *node) {
     }
 }
 
-void layout_fill_width(LayoutNode *node) {}
+void layout_fill_width(LayoutNode *node) { UNUSED(node); }
 
 void layout_intrinsic_height(LayoutNode *node) {
     if (node->type == LAYOUT_NODE_TEXT)
@@ -219,11 +234,11 @@ void layout_intrinsic_height(LayoutNode *node) {
     }
     else if (node->type == LAYOUT_NODE_CONTAINER)
     {
-        List(LayoutNode) children = node->container.children;
+        List(LayoutNode) children = node->_LAYOUT_NODE_CONTAINER.children;
         for (usize i = 0; i < children.count; ++i)
             layout_intrinsic_height(&children.items[i]);
 
-        LayoutNodeStyle style = node->container.style;
+        LayoutNodeStyle style = node->_LAYOUT_NODE_CONTAINER.style;
         Size hsize = style.size.h;
         if (hsize.mode == SIZE_FIXED) {
             //TODO: account for border
@@ -256,7 +271,7 @@ void layout_intrinsic_height(LayoutNode *node) {
     }
 }
 
-void layout_fill_height(LayoutNode *node) {}
+void layout_fill_height(LayoutNode *node) { UNUSED(node); }
 
 void layout_positions(LayoutNode *node) {
     if (node->type == LAYOUT_NODE_TEXT)
@@ -268,12 +283,12 @@ void layout_positions(LayoutNode *node) {
         if (node->parent == NULL)
             node->x = node->y = 0;
 
-        LayoutNodeStyle style = node->container.style;
+        LayoutNodeStyle style = node->_LAYOUT_NODE_CONTAINER.style;
         i32 pos_x = node->x + style.padding;
         i32 pos_y = node->y + style.padding;
 
         //TODO: alignment across axis goes here
-        List(LayoutNode) children = node->container.children;
+        List(LayoutNode) children = node->_LAYOUT_NODE_CONTAINER.children;
         if (style.direction == DIR_ROW)
         {
             for (usize i = 0; i < children.count; ++i) {
@@ -301,37 +316,27 @@ void layout_positions(LayoutNode *node) {
 }
 
 void layout_commands(LayoutNode *node) {
-    if (node->type == LAYOUT_NODE_TEXT) {
+    match(*node) {
+        case(LAYOUT_NODE_TEXT, text) {}
+        case(LAYOUT_NODE_CONTAINER, container) {
+            List(LayoutNode) children = container.children;
+            LayoutNodeStyle style = container.style;
 
-    }
-    else if (node->type == LAYOUT_NODE_CONTAINER)
-    {
-        List(LayoutNode) children = node->container.children;
-        LayoutNodeStyle style = node->container.style;
+            list_append(&Layout.cmds, 
+                tag(LayoutCommand, LAYOUT_CMD_CLIP_START, {
+                    .x = node->x, .y = node->y, .w = node->w, .h = node->h
+            }));
 
-        list_append(
-            &Layout.cmds, 
-            ((LayoutCommand) {
-                .type = LAYOUT_CMD_CLIP_START,
-                .clip = {.x = node->x, .y = node->y, .w = node->w, .h = node->h}, 
-            })
-        );
+            list_append(&Layout.cmds,
+                tag(LayoutCommand, LAYOUT_CMD_RECT, {
+                    .x = node->x, .y = node->y, .w = node->w, .h = node->h, .color = style.color
+            }));
 
-        list_append(
-            &Layout.cmds, 
-            ((LayoutCommand) {
-                .type = LAYOUT_CMD_RECT,
-                .rect = {.x = node->x, .y = node->y, .w = node->w, .h = node->h, .color = style.color}
-            })
-        );
+            for (usize i = 0; i < children.count; ++i)
+                layout_commands(&children.items[i]);
 
-        for (usize i = 0; i < children.count; ++i)
-            layout_commands(&children.items[i]);
-
-        list_append(
-            &Layout.cmds, 
-            (LayoutCommand) {.type = LAYOUT_CMD_CLIP_END}
-        );
+            list_append(&Layout.cmds, tag0(LayoutCommand, LAYOUT_CMD_CLIP_END));
+        }
     }
 }
 

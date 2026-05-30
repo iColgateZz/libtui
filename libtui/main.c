@@ -21,31 +21,31 @@ i32 main(i32 argc, byte *argv[]) {
         // .container.style.size.w.fixed.value = 5,
         // .container.style.size.h.mode = SIZE_FIXED,
         // .container.style.size.h.fixed.value = 5,
-        .container.style.color = (Color) {127, 9, 254},
+        ._LAYOUT_NODE_CONTAINER.style.color = (Color) {127, 9, 254},
     };
 
     LayoutNode c1 = {
         .type = LAYOUT_NODE_CONTAINER,
-        .container.style.size.w.mode = SIZE_FIXED,
-        .container.style.size.w.fixed.value = 5,
-        .container.style.size.h.mode = SIZE_FIXED,
-        .container.style.size.h.fixed.value = 5,
-        .container.style.color = (Color) {10, 9, 254},
+        ._LAYOUT_NODE_CONTAINER.style.size.w.mode = SIZE_FIXED,
+        ._LAYOUT_NODE_CONTAINER.style.size.w.fixed.value = 5,
+        ._LAYOUT_NODE_CONTAINER.style.size.h.mode = SIZE_FIXED,
+        ._LAYOUT_NODE_CONTAINER.style.size.h.fixed.value = 5,
+        ._LAYOUT_NODE_CONTAINER.style.color = (Color) {10, 9, 254},
         .parent = &root,
     };
 
     LayoutNode c2 = {
         .type = LAYOUT_NODE_CONTAINER,
-        .container.style.size.w.mode = SIZE_FIXED,
-        .container.style.size.w.fixed.value = 20,
-        .container.style.size.h.mode = SIZE_FIXED,
-        .container.style.size.h.fixed.value = 3,
-        .container.style.color = (Color) {10, 9, 8},
+        ._LAYOUT_NODE_CONTAINER.style.size.w.mode = SIZE_FIXED,
+        ._LAYOUT_NODE_CONTAINER.style.size.w.fixed.value = 20,
+        ._LAYOUT_NODE_CONTAINER.style.size.h.mode = SIZE_FIXED,
+        ._LAYOUT_NODE_CONTAINER.style.size.h.fixed.value = 3,
+        ._LAYOUT_NODE_CONTAINER.style.color = (Color) {10, 9, 8},
         .parent = &root,
     };
 
-    list_append(&root.container.children, c1);
-    list_append(&root.container.children, c2);
+    list_append(&root._LAYOUT_NODE_CONTAINER.children, c1);
+    list_append(&root._LAYOUT_NODE_CONTAINER.children, c2);
 
     while (!is_codepoint(cp("q"))) {
         begin_frame();
@@ -54,19 +54,19 @@ i32 main(i32 argc, byte *argv[]) {
             
             LayoutCommand cmd;
             while (layout_cmd_next(&cmd)) {
-                switch (cmd.type) {
-                    case LAYOUT_CMD_CLIP_START: clip_push_rect(*(Rectangle *)&cmd.clip); break;
-                    case LAYOUT_CMD_CLIP_END: clip_pop(); break;
-                    case LAYOUT_CMD_RECT: {
+                match(cmd) {
+                    case(LAYOUT_CMD_RECT, rect) {
                         fill_box(
-                            *(Rectangle *)&cmd.rect,
+                            *(Rectangle *)&rect,
                             (Effect) {
-                                .bg = *(RGB *)&cmd.rect.color,
+                                .bg = *(RGB *)&rect.color,
                                 .flags = EFFECT_BG,
                             }
                         );
-                    } break;
-                    default: assert(false && "unknown cmd type");
+                    }
+                    case(LAYOUT_CMD_CLIP_START, clip) clip_push_rect(*(Rectangle *)&clip);
+                    case(LAYOUT_CMD_CLIP_END) clip_pop();
+                    otherwise assert(false && "unknown cmd type");
                 }
             }
         }
