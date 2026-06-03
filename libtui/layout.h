@@ -203,6 +203,16 @@ void layout(LayoutNodeID id) {
     // other nodes in the pipeline go here..
 }
 
+//TODO: Continue with tagged union, just make separate functions for each type:
+//      _container_intrinsic_width, _container_fill_width etc.
+//      This is essentially the same as having different object types implement
+//      one interface. 
+
+//TODO: Use arena for all nodes, not a dynamic array, so that there are no 
+//      reallocations. If all children are in contiguous memory, parent can
+//      hold a slice into the arena. Ensure that children go one after another.
+//      Use the same approach Clay uses with Open/Close tree traversal.
+
 void layout_intrinsic_width(LayoutNodeID id) {
     LayoutNode *node = layout_node_get(id);
     match(*node) {
