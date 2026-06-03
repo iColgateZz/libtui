@@ -61,6 +61,14 @@ typedef struct {
 } Direction;
 
 typedef struct {
+    enum {
+        ALIGN_START,
+        ALIGN_CENTER,
+        ALIGN_END,
+    } type;
+} Alignment;
+
+typedef struct {
     Sizing size;
     Color color;
     u8 padding;
@@ -68,6 +76,8 @@ typedef struct {
     // u8 margin;
     // BorderStyle border;
     Direction direction;
+    Alignment align_children;
+    Alignment align_self;
 } LayoutNodeStyle;
 
 typedef struct {
@@ -177,6 +187,8 @@ void layout_intrinsic_height(LayoutNodeID id);
 void layout_fill_height(LayoutNodeID id);
 void layout_positions(LayoutNodeID id);
 void layout_commands(LayoutNodeID id);
+
+i32 align_cross(Alignment align, i32 parent_size, i32 parent_padding, i32 child_size);
 
 void layout(LayoutNodeID id) {
     layout_intrinsic_width(id);
@@ -328,14 +340,18 @@ void layout_positions(LayoutNodeID id) {
             i32 pos_x = node->x + style.padding;
             i32 pos_y = node->y + style.padding;
 
-            //TODO: alignment across axis goes here
             List(LayoutNodeID) children = container.children;
             match(style.direction) {
                 case(DIR_ROW) {
                     for (usize i = 0; i < children.count; ++i) {
                         LayoutNode *child = layout_node_get(children.items[i]);
                         child->x = pos_x;
-                        child->y = pos_y;
+                        match(*child) {
+                            case(LAYOUT_NODE_TEXT) assert(false && "currently not supported");
+                            case(LAYOUT_NODE_CONTAINER, child_container) {
+                                child->y = align_cross(child_container.style.align_self, node->h, style.padding, child->h);
+                            }
+                        }
 
                         pos_x += child->w + style.spacing;
                     }
@@ -344,7 +360,12 @@ void layout_positions(LayoutNodeID id) {
                 case(DIR_COL) {
                     for (usize i = 0; i < children.count; ++i) {
                         LayoutNode *child = layout_node_get(children.items[i]);
-                        child->x = pos_x;
+                        match(*child) {
+                            case(LAYOUT_NODE_TEXT) assert(false && "currently not supported");
+                            case(LAYOUT_NODE_CONTAINER, child_container) {
+                                child->x = align_cross(child_container.style.align_self, node->w, style.padding, child->w);
+                            }
+                        }
                         child->y = pos_y;
 
                         pos_y += child->h + style.spacing;
@@ -357,6 +378,17 @@ void layout_positions(LayoutNodeID id) {
                 layout_positions(children.items[i]);
         }
     }
+}
+
+i32 align_cross(Alignment align, i32 parent_size, i32 parent_padding, i32 child_size) {
+    i32 parent_inner = parent_size - 2 * parent_padding;
+    match (align) {
+        case(ALIGN_START)   return parent_padding;
+        case(ALIGN_CENTER)  return parent_padding + (parent_inner - child_size) / 2;
+        case(ALIGN_END)     return parent_padding + parent_inner - child_size;
+    }
+
+    UNREACHABLE("It must always match against alignment");
 }
 
 void layout_commands(LayoutNodeID id) {

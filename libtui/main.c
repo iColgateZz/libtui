@@ -21,6 +21,7 @@ i32 main(i32 argc, byte *argv[]) {
     LayoutNode root = {
         .type = LAYOUT_NODE_CONTAINER,
         ._LAYOUT_NODE_CONTAINER.style.color = {127, 9, 254},
+        ._LAYOUT_NODE_CONTAINER.style.direction = {DIR_COL},
         .parent = -1,
     };
     LayoutNodeID rootID = layout_node_push(root);
@@ -31,6 +32,7 @@ i32 main(i32 argc, byte *argv[]) {
             .type = LAYOUT_NODE_CONTAINER,
             ._LAYOUT_NODE_CONTAINER.style.size = {.w = FIXED(5), .h = FIXED(5)},
             ._LAYOUT_NODE_CONTAINER.style.color = {10, 9, 254},
+            ._LAYOUT_NODE_CONTAINER.style.align_self = {ALIGN_END},
             .parent = rootID,
         };
         LayoutNodeID c1ID = layout_node_push(c1);
@@ -40,6 +42,7 @@ i32 main(i32 argc, byte *argv[]) {
             .type = LAYOUT_NODE_CONTAINER,
             ._LAYOUT_NODE_CONTAINER.style.size = {.w = FIXED(20), .h = FIXED(3)},
             ._LAYOUT_NODE_CONTAINER.style.color = {10, 9, 8},
+            ._LAYOUT_NODE_CONTAINER.style.align_self = {ALIGN_CENTER},
             .parent = rootID,
         };
         LayoutNodeID c2ID = layout_node_push(c2);
