@@ -19,14 +19,14 @@
 #define tag(T, tag, ...) ((T) {.type = tag, ._##tag = __VA_ARGS__})
 #define tag0(T, tag) ((T) {.type = tag})
 
-typedef enum {
-    SIZE_FIT,
-    SIZE_FILL,
-    SIZE_FIXED,
-} SizeMode;
+#define packed_enum enum __attribute__((__packed__))
 
 typedef struct {
-    SizeMode type;
+    packed_enum {
+        SIZE_FIT,
+        SIZE_FILL,
+        SIZE_FIXED,
+    } type;
     union {
         struct {
             i32 value;
@@ -54,14 +54,14 @@ typedef struct {
 } Color;
 
 typedef struct {
-    enum {
+    packed_enum {
         DIR_ROW,
         DIR_COL,
     } type;
 } Direction;
 
 typedef struct {
-    enum {
+    packed_enum {
         ALIGN_START,
         ALIGN_CENTER,
         ALIGN_END,
@@ -87,17 +87,15 @@ typedef struct {
 typedef i32 LayoutNodeID;
 list_def(LayoutNodeID);
 
-typedef enum {
-    LAYOUT_NODE_CONTAINER,
-    LAYOUT_NODE_TEXT,
-} LayoutNodeType;
-
 typedef struct {
     LayoutNodeID parent;
     i32 x, y; // resolved coords
     i32 w, h; // resolved w, h
     
-    LayoutNodeType type;
+    packed_enum {
+        LAYOUT_NODE_CONTAINER,
+        LAYOUT_NODE_TEXT,
+    } type;
     union {
         struct {
             List(LayoutNodeID) children;
@@ -113,16 +111,14 @@ typedef struct {
 
 list_def(LayoutNode);
 
-typedef enum {
-    LAYOUT_CMD_RECT,
-    // LAYOUT_CMD_TEXT,
-    LAYOUT_CMD_CLIP_START,
-    LAYOUT_CMD_CLIP_END,
-    // LAYOUT_CMD_BORDER, // pass concrete codepoints to draw
-} LayoutCommandType;
-
 typedef struct {
-    LayoutCommandType type;
+    packed_enum {
+        LAYOUT_CMD_RECT,
+        // LAYOUT_CMD_TEXT,
+        LAYOUT_CMD_CLIP_START,
+        LAYOUT_CMD_CLIP_END,
+        // LAYOUT_CMD_BORDER, // pass concrete codepoints to draw
+    } type;
     union {
         struct {
             i32 x, y, w, h;
