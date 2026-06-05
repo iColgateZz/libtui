@@ -15,6 +15,7 @@
 #define _case2(tag, varname) case (tag): ;typeof(_tu._##tag) varname = _tu._##tag;
 #define _case1(tag) case (tag): ;
 #define otherwise default:
+#define unwrap_into(tu, tag, varname) typeof((tu)._##tag) varname = (tu)._##tag;
 
 #define tag(T, tag, ...) ((T) {.type = tag, ._##tag = __VA_ARGS__})
 #define tag0(T, tag) ((T) {.type = tag})
@@ -177,213 +178,200 @@ b32 layout_cmd_next(LayoutCommand *out) {
     return true;
 }
 
-void layout_intrinsic_width(LayoutNodeID id);
-void layout_fill_width(LayoutNodeID id);
-void layout_intrinsic_height(LayoutNodeID id);
-void layout_fill_height(LayoutNodeID id);
-void layout_positions(LayoutNodeID id);
-void layout_commands(LayoutNodeID id);
+#define xmacro(namespace)               \
+        X(namespace, intrinsic_width)   \
+        X(namespace, fill_width)        \
+        X(namespace, intrinsic_height)  \
+        X(namespace, fill_height)       \
+        X(namespace, positions)         \
+        X(namespace, commands)
 
-i32 align_cross(Alignment align, i32 parent_size, i32 parent_padding, i32 child_size);
+#define X(ns, fn)   void ns##_##fn(LayoutNodeID id);
+xmacro(layout)
+#undef X
 
 void layout(LayoutNodeID id) {
-    layout_intrinsic_width(id);
-    layout_fill_width(id);
-
-    layout_intrinsic_height(id);
-    layout_fill_height(id);
-
-    layout_positions(id);
-
-    layout_commands(id);
-    // other nodes in the pipeline go here..
+    #define X(ns, fn)   ns##_##fn(id);
+    xmacro(layout)
+    #undef X
 }
-
-//TODO: Continue with tagged union, just make separate functions for each type:
-//      _container_intrinsic_width, _container_fill_width etc.
-//      This is essentially the same as having different object types implement
-//      one interface. 
 
 //TODO: Use arena for all nodes, not a dynamic array, so that there are no 
 //      reallocations. If all children are in contiguous memory, parent can
 //      hold a slice into the arena. Ensure that children go one after another.
 //      Use the same approach Clay uses with Open/Close tree traversal.
 
-void layout_intrinsic_width(LayoutNodeID id) {
-    LayoutNode *node = layout_node_get(id);
-    match(*node) {
-        case(LAYOUT_NODE_TEXT, text_container)
-            i32 text_width = 0;
+#define X(ns, fn)   void ns##_##fn(LayoutNode *node);
+xmacro(container)
+xmacro(text)
+#undef X
 
-            List(CodePoint) text = text_container.text;
-            for (usize i = 0; i < text.count; ++i)
-                text_width += text.items[i].display_width;
-
-            node->w = text_width;
-            break;
-
-        case(LAYOUT_NODE_CONTAINER, container) {
-            List(LayoutNodeID) children = container.children;
-            for (usize i = 0; i < children.count; ++i)
-                layout_intrinsic_width(children.items[i]);
-
-            LayoutNodeStyle style = container.style;
-            Size wsize = style.size.w;
-
-            match(wsize) {
-                case(SIZE_FIXED, fixed)
-                    //TODO: account for border
-                    //      do I add padding here?
-                    node->w = fixed.value;
-                    break;
-
-                case(SIZE_FILL)
-                case(SIZE_FIT, fit) {
-                    match(style.direction) {
-                        case(DIR_ROW) {
-                            i32 children_width = 0;
-                            for (usize i = 0; i < children.count; ++i) {
-                                LayoutNode *child = layout_node_get(children.items[i]);
-                                children_width += child->w;
-                            }
-                            node->w = children_width + 2 * style.padding + 
-                                    MAX(children.count - 1, 0) * style.spacing;
-                            break;
-                        }
-
-                        case(DIR_COL) {
-                            i32 max_child_w = 0;
-                            for (usize i = 0; i < children.count; ++i) {
-                                LayoutNode *child = layout_node_get(children.items[i]);
-                                max_child_w = MAX(child->w, max_child_w);
-                            }
-
-                            node->w = max_child_w + 2 * style.padding;
-                            break;
-                        }
-                    }
-
-                    if (fit.min < fit.max) 
-                        node->w = CLAMP(node->w, fit.min, fit.max);
-                }
-            }
-        }
-    }
+#define X(ns, fn)                               \
+void ns##_##fn(LayoutNodeID id) {               \
+    LayoutNode *node = layout_node_get(id);     \
+    match(*node) {                              \
+        case(LAYOUT_NODE_TEXT)                  \
+            text_##fn(node);                    \
+            break;                              \
+                                                \
+        case(LAYOUT_NODE_CONTAINER)             \
+            container_##fn(node);               \
+            break;                              \
+                                                \
+        otherwise UNREACHABLE("Unknown type");  \
+    }                                           \
 }
+xmacro(layout)
+#undef X
 
-void layout_fill_width(LayoutNodeID id) { UNUSED(id); }
+void container_intrinsic_width(LayoutNode *node) {
+    unwrap_into(*node, LAYOUT_NODE_CONTAINER, container);
 
-void layout_intrinsic_height(LayoutNodeID id) {
-    LayoutNode *node = layout_node_get(id);
-    match(*node) {
-        case(LAYOUT_NODE_TEXT, text) {
-            UNUSED(text);
+    List(LayoutNodeID) children = container.children;
+    for (usize i = 0; i < children.count; ++i)
+        layout_intrinsic_width(children.items[i]);
+
+    LayoutNodeStyle style = container.style;
+    Size wsize = style.size.w;
+    match(wsize) {
+        case(SIZE_FIXED, fixed)
+            //TODO: account for border
+            //      do I add padding here?
+            node->w = fixed.value;
             break;
-        }
 
-        case(LAYOUT_NODE_CONTAINER, container) {
-            List(LayoutNodeID) children = container.children;
-            for (usize i = 0; i < children.count; ++i)
-                layout_intrinsic_height(children.items[i]);
-
-            LayoutNodeStyle style = container.style;
-            Size hsize = style.size.h;
-            match(hsize) {
-                case(SIZE_FIXED)
-                    //TODO: account for border
-                    //      do I add padding here?
-                    node->h = hsize._SIZE_FIXED.value;
-                    break;
-
-                case(SIZE_FILL)
-                case(SIZE_FIT, fit) {
-                    match(style.direction) {
-                        case(DIR_ROW) {
-                            i32 max_child_h = 0;
-                            for (usize i = 0; i < children.count; ++i) {
-                                LayoutNode *child = layout_node_get(children.items[i]);
-                                max_child_h = MAX(child->h, max_child_h);
-                            }
-                            
-                            node->h = max_child_h + 2 * style.padding;
-                            break;
-                        }
-                        case(DIR_COL) {
-                            i32 children_height = 0;
-                            for (usize i = 0; i < children.count; ++i) {
-                                LayoutNode *child = layout_node_get(children.items[i]);
-                                children_height += child->h;
-                            }
-
-                            node->h = children_height + 2 * style.padding + 
-                                    MAX(children.count - 1, 0) * style.spacing;
-                        }
-                    }
-
-                    if (fit.min < fit.max)
-                        node->h = CLAMP(node->h, fit.min, fit.max);
-                }
-            }
-        }
-    }
-}
-
-void layout_fill_height(LayoutNodeID id) { UNUSED(id); }
-
-void layout_positions(LayoutNodeID id) {
-    LayoutNode *node = layout_node_get(id);
-    match(*node) {
-        case(LAYOUT_NODE_TEXT, text) {
-            UNUSED(text);
-            break;
-        }
-
-        case(LAYOUT_NODE_CONTAINER, container) {
-            if (node->parent < 0)
-                node->x = node->y = 0;
-
-            LayoutNodeStyle style = container.style;
-            i32 pos_x = node->x + style.padding;
-            i32 pos_y = node->y + style.padding;
-
-            List(LayoutNodeID) children = container.children;
+        case(SIZE_FILL)
+        case(SIZE_FIT, fit) {
             match(style.direction) {
                 case(DIR_ROW) {
+                    i32 children_width = 0;
                     for (usize i = 0; i < children.count; ++i) {
                         LayoutNode *child = layout_node_get(children.items[i]);
-                        child->x = pos_x;
-                        match(*child) {
-                            case(LAYOUT_NODE_TEXT) assert(false && "currently not supported");
-                            case(LAYOUT_NODE_CONTAINER, child_container) {
-                                child->y = align_cross(child_container.style.align_self, node->h, style.padding, child->h);
-                            }
-                        }
-
-                        pos_x += child->w + style.spacing;
+                        children_width += child->w;
                     }
+                    node->w = children_width + 2 * style.padding + 
+                            MAX(children.count - 1, 0) * style.spacing;
+                    break;
+                }
+
+                case(DIR_COL) {
+                    i32 max_child_w = 0;
+                    for (usize i = 0; i < children.count; ++i) {
+                        LayoutNode *child = layout_node_get(children.items[i]);
+                        max_child_w = MAX(child->w, max_child_w);
+                    }
+                    node->w = max_child_w + 2 * style.padding;
+                    break;
+                }
+            }
+
+            if (fit.min < fit.max) 
+                node->w = CLAMP(node->w, fit.min, fit.max);
+        }
+    }
+}
+
+void container_fill_width(LayoutNode *node) { UNUSED(node); }
+
+void container_intrinsic_height(LayoutNode *node) {
+    unwrap_into(*node, LAYOUT_NODE_CONTAINER, container);
+
+    List(LayoutNodeID) children = container.children;
+    for (usize i = 0; i < children.count; ++i)
+        layout_intrinsic_height(children.items[i]);
+
+    LayoutNodeStyle style = container.style;
+    Size hsize = style.size.h;
+    match(hsize) {
+        case(SIZE_FIXED)
+            //TODO: account for border
+            //      do I add padding here?
+            node->h = hsize._SIZE_FIXED.value;
+            break;
+
+        case(SIZE_FILL)
+        case(SIZE_FIT, fit) {
+            match(style.direction) {
+                case(DIR_ROW) {
+                    i32 max_child_h = 0;
+                    for (usize i = 0; i < children.count; ++i) {
+                        LayoutNode *child = layout_node_get(children.items[i]);
+                        max_child_h = MAX(child->h, max_child_h);
+                    }
+                    
+                    node->h = max_child_h + 2 * style.padding;
                     break;
                 }
                 case(DIR_COL) {
+                    i32 children_height = 0;
                     for (usize i = 0; i < children.count; ++i) {
                         LayoutNode *child = layout_node_get(children.items[i]);
-                        match(*child) {
-                            case(LAYOUT_NODE_TEXT) assert(false && "currently not supported");
-                            case(LAYOUT_NODE_CONTAINER, child_container) {
-                                child->x = align_cross(child_container.style.align_self, node->w, style.padding, child->w);
-                            }
-                        }
-                        child->y = pos_y;
-
-                        pos_y += child->h + style.spacing;
+                        children_height += child->h;
                     }
-                    break;
+                    node->h = children_height + 2 * style.padding + 
+                            MAX(children.count - 1, 0) * style.spacing;
                 }
             }
 
-            for (usize i = 0; i < children.count; ++i)
-                layout_positions(children.items[i]);
+            if (fit.min < fit.max)
+                node->h = CLAMP(node->h, fit.min, fit.max);
         }
     }
+}
+
+void container_fill_height(LayoutNode *node) { UNUSED(node); }
+
+i32 align_cross(Alignment align, i32 parent_size, i32 parent_padding, i32 child_size);
+
+void container_positions(LayoutNode *node) {
+    if (node->parent < 0)
+        node->x = node->y = 0;
+
+    unwrap_into(*node, LAYOUT_NODE_CONTAINER, container);
+
+    LayoutNodeStyle style = container.style;
+    i32 pos_x = node->x + style.padding;
+    i32 pos_y = node->y + style.padding;
+    List(LayoutNodeID) children = container.children;
+
+    match(style.direction) {
+        case(DIR_ROW) {
+            for (usize i = 0; i < children.count; ++i) {
+                LayoutNode *child = layout_node_get(children.items[i]);
+                child->x = pos_x;
+
+                match(*child) {
+                    case(LAYOUT_NODE_TEXT) assert(false && "currently not supported");
+                    case(LAYOUT_NODE_CONTAINER, child_container) {
+                        child->y = align_cross(child_container.style.align_self, node->h, style.padding, child->h);
+                    }
+                }
+
+                pos_x += child->w + style.spacing;
+            }
+            break;
+        }
+
+        case(DIR_COL) {
+            for (usize i = 0; i < children.count; ++i) {
+                LayoutNode *child = layout_node_get(children.items[i]);
+                child->y = pos_y;
+
+                match(*child) {
+                    case(LAYOUT_NODE_TEXT) assert(false && "currently not supported");
+                    case(LAYOUT_NODE_CONTAINER, child_container) {
+                        child->x = align_cross(child_container.style.align_self, node->w, style.padding, child->w);
+                    }
+                }
+
+                pos_y += child->h + style.spacing;
+            }
+            break;
+        }
+    }
+
+    for (usize i = 0; i < children.count; ++i)
+        layout_positions(children.items[i]);
 }
 
 i32 align_cross(Alignment align, i32 parent_size, i32 parent_padding, i32 child_size) {
@@ -397,31 +385,40 @@ i32 align_cross(Alignment align, i32 parent_size, i32 parent_padding, i32 child_
     UNREACHABLE("It must always match against alignment");
 }
 
-void layout_commands(LayoutNodeID id) {
-    LayoutNode *node = layout_node_get(id);
-    match(*node) {
-        case(LAYOUT_NODE_TEXT, text) UNUSED(text); break;
+void container_commands(LayoutNode *node) {
+    unwrap_into(*node, LAYOUT_NODE_CONTAINER, container);
 
-        case(LAYOUT_NODE_CONTAINER, container) {
-            list_append(&Layout.cmds, 
-                tag(LayoutCommand, LAYOUT_CMD_CLIP_START, {
-                    .x = node->x, .y = node->y, .w = node->w, .h = node->h
-            }));
+    list_append(&Layout.cmds, 
+        tag(LayoutCommand, LAYOUT_CMD_CLIP_START, {
+            .x = node->x, .y = node->y, .w = node->w, .h = node->h
+    }));
 
-            list_append(&Layout.cmds,
-                tag(LayoutCommand, LAYOUT_CMD_RECT, {
-                    .x = node->x, .y = node->y, .w = node->w, .h = node->h,
-                    .color = container.style.color
-            }));
+    list_append(&Layout.cmds,
+        tag(LayoutCommand, LAYOUT_CMD_RECT, {
+            .x = node->x, .y = node->y, .w = node->w, .h = node->h,
+            .color = container.style.color
+    }));
 
-            List(LayoutNodeID) children = container.children;
-            for (usize i = 0; i < children.count; ++i)
-                layout_commands(children.items[i]);
+    List(LayoutNodeID) children = container.children;
+    for (usize i = 0; i < children.count; ++i)
+        layout_commands(children.items[i]);
 
-            list_append(&Layout.cmds, tag0(LayoutCommand, LAYOUT_CMD_CLIP_END));
-            break;
-        }
-    }
+    list_append(&Layout.cmds, tag0(LayoutCommand, LAYOUT_CMD_CLIP_END));
 }
+
+// void text_intrinsic_width(LayoutNode *node) {
+//     unwrap_into(*node, LAYOUT_NODE_TEXT, text_container);
+//     i32 text_width = 0;
+
+//     List(CodePoint) text = text_container.text;
+//     for (usize i = 0; i < text.count; ++i)
+//         text_width += text.items[i].display_width;
+
+//     node->w = text_width;
+// }
+
+#define X(ns, fn)   void ns##_##fn(LayoutNode *node) { UNUSED(node); }
+xmacro(text)
+#undef X
 
 #endif
