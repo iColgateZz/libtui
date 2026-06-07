@@ -15,47 +15,32 @@ i32 main(i32 argc, byte *argv[]) {
     init_terminal();
     set_max_timeout_ms(100);
 
-    //TODO: Retained frontend widgets should have stable IDs
-    //      that can be used by the layout nodes for state referencing?
-
-    LayoutNode root = {
-        .type = LAYOUT_NODE_CONTAINER,
-        ._LAYOUT_NODE_CONTAINER.style.color = {127, 9, 254},
-        ._LAYOUT_NODE_CONTAINER.style.direction = {DIR_COL},
-        .parent = -1,
-    };
-    LayoutNodeID rootID = layout_node_push(root);
-    LayoutNode *rootp = layout_node_get(rootID);
-
-    {
-        LayoutNode c1 = {
-            .type = LAYOUT_NODE_CONTAINER,
-            ._LAYOUT_NODE_CONTAINER.style.size = {.w = FIXED(5), .h = FIXED(5)},
-            ._LAYOUT_NODE_CONTAINER.style.color = {10, 9, 254},
-            ._LAYOUT_NODE_CONTAINER.style.align_self = {ALIGN_END},
-            .parent = rootID,
-        };
-        LayoutNodeID c1ID = layout_node_push(c1);
-        list_append(&rootp->_LAYOUT_NODE_CONTAINER.children, c1ID);
-    
-        LayoutNode c2 = {
-            .type = LAYOUT_NODE_CONTAINER,
-            ._LAYOUT_NODE_CONTAINER.style.size = {.w = FIXED(20), .h = FIXED(3)},
-            ._LAYOUT_NODE_CONTAINER.style.color = {10, 9, 8},
-            ._LAYOUT_NODE_CONTAINER.style.align_self = {ALIGN_CENTER},
-            .parent = rootID,
-        };
-        LayoutNodeID c2ID = layout_node_push(c2);
-        list_append(&rootp->_LAYOUT_NODE_CONTAINER.children, c2ID);
-    }
-
     while (!is_codepoint(cp("q"))) {
         begin_frame();
         {
-            layout(rootID);
+            layout_begin(get_terminal_width(), get_terminal_height());
 
-            LayoutCommand cmd;
-            while (layout_cmd_next(&cmd)) {
+            Container(.style = {
+                .color = {127, 9, 254},
+                .direction = {DIR_ROW}
+            }) {
+                Container(.style = {
+                    .size = {.w = FIXED(5), .h = FIXED(5)},
+                    .color = {10, 9, 254},
+                    .align_self = {ALIGN_END},
+                });
+
+                Container(.style = {
+                    .size = {.w = FIXED(20), .h = FIXED(3)},
+                    .color = {10, 9, 8},
+                    .align_self = {ALIGN_CENTER},
+                });
+            }
+
+            List(LayoutCommand) cmds = layout_end();
+
+            for (usize i = 0; i < cmds.count; ++i) {
+                LayoutCommand cmd = cmds.items[i];
                 match(cmd) {
                     case(LAYOUT_CMD_RECT, rect) {
                         fill_box(
