@@ -16,6 +16,7 @@
 #define _case1(tag) case (tag): ;
 #define otherwise default:
 #define unwrap_into(tu, tag, varname) typeof((tu)._##tag) varname = (tu)._##tag;
+#define matches(tu, tag) (tu).type == tag
 
 #define tag(T, tag, ...) ((T) {.type = tag, ._##tag = __VA_ARGS__})
 #define tag0(T, tag) ((T) {.type = tag})
@@ -108,12 +109,14 @@ typedef struct {
         //TODO: for custom nodes there may be 2 variants:
         //      one that has a vtable with all pipeline methods,
         //      one that only has a custom draw method that emits renderer commands.
+
+        // Maybe instead of adding a new type just emit a custom command that gives
+        // user enough context so that they can adapt it for the renderer?
         LAYOUT_NODE_CONTAINER,
         LAYOUT_NODE_TEXT,
     } type;
     union {
         struct {
-            // List(LayoutNodeID) children;
             ContainerConfig config;
         } _LAYOUT_NODE_CONTAINER;
         struct {
@@ -282,6 +285,7 @@ void ns##_##fn(LayoutNodeID id) {               \
 xmacro(layout)
 #undef X
 
+//TODO: calculate minimal w/h for nodes during intrinsic steps so shrinking does not break children.
 //TODO: deduplicate width, height, position logic.
 void container_intrinsic_width(LayoutNode *node) {
     unwrap_into(*node, LAYOUT_NODE_CONTAINER, container);
@@ -334,7 +338,39 @@ void container_intrinsic_width(LayoutNode *node) {
     }
 }
 
-void container_fill_width(LayoutNode *node) { UNUSED(node); }
+void container_fill_width(LayoutNode *node) {
+    unwrap_into(*node, LAYOUT_NODE_CONTAINER, container);
+
+    LayoutNodeStyle style = container.config.style;
+    ChildIdxSlice children = node->children;
+    match(style.direction) {
+        case(DIR_ROW) {
+            i32 children_width = 0;
+            i32 growable_count = 0;
+            for (usize i = 0; i < children.count; ++i) {
+                LayoutNodeID child_id = Layout.children_persistent.items[children.offset + i];
+                LayoutNode *child = layout_node_get(child_id);
+                children_width += child->w;
+
+                if (matches(*child, LAYOUT_NODE_CONTAINER)) {
+                    unwrap_into(*child, LAYOUT_NODE_CONTAINER, child_container);
+                    Size wsize = child_container.config.style.size.w;
+                    if (matches(wsize, SIZE_FIT) || matches(wsize, SIZE_FILL)) growable_count++;
+                } else if (matches(*child, LAYOUT_NODE_TEXT)) {
+                    growable_count++;
+                }
+            }
+            
+            i32 remaining_width = node->w - children_width - 2 * style.padding
+                                  - MAX(children.count - 1, 0) * style.spacing;
+
+        }
+
+        case(DIR_COL) {
+
+        }
+    }
+}
 
 void container_intrinsic_height(LayoutNode *node) {
     unwrap_into(*node, LAYOUT_NODE_CONTAINER, container);
