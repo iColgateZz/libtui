@@ -165,7 +165,7 @@ static u8 _latch = 0;
 
 #ifdef LIBTUI_LAYOUT_IMPL
 
-void layout(LayoutNodeID id);
+void layout(LayoutNode *node);
 
 static struct {
     List(LayoutNode) nodes;
@@ -218,7 +218,8 @@ List(LayoutCommand) layout_end() {
 
     // layout all elements
     #define ROOT_ID    0
-    layout(ROOT_ID);
+    LayoutNode *root = node_by_id(ROOT_ID);
+    layout(root);
 
     // emit commands for renderer
     return Layout.cmds;
@@ -261,12 +262,12 @@ void layout_close() {
         X(namespace, positions)         \
         X(namespace, commands)
 
-#define X(ns, fn)   void ns##_##fn(LayoutNodeID id);
+#define X(ns, fn)   void ns##_##fn(LayoutNode *node);
 xmacro(layout)
 #undef X
 
-void layout(LayoutNodeID id) {
-    #define X(ns, fn)   ns##_##fn(id);
+void layout(LayoutNode *node) {
+    #define X(ns, fn)   ns##_##fn(node);
     xmacro(layout)
     #undef X
 }
@@ -277,8 +278,7 @@ xmacro(text)
 #undef X
 
 #define X(ns, fn)                               \
-void ns##_##fn(LayoutNodeID id) {               \
-    LayoutNode *node = node_by_id(id);     \
+void ns##_##fn(LayoutNode *node) {              \
     match(*node) {                              \
         case(LAYOUT_NODE_TEXT)                  \
             text_##fn(node);                    \
@@ -301,8 +301,8 @@ void container_intrinsic_width(LayoutNode *node) {
 
     ChildIdxSlice children = node->children;
     for (usize i = 0; i < children.count; ++i) {
-        LayoutNodeID child_id = id_by_index(children.offset + i);
-        layout_intrinsic_width(child_id);
+        LayoutNode *child = node_by_index(children.offset + i);
+        layout_intrinsic_width(child);
     }
 
     LayoutNodeStyle style = container.config.style;
@@ -398,8 +398,8 @@ void container_intrinsic_height(LayoutNode *node) {
 
     ChildIdxSlice children = node->children;
     for (usize i = 0; i < children.count; ++i) {
-        LayoutNodeID child_id = id_by_index(children.offset + i);
-        layout_intrinsic_height(child_id);
+        LayoutNode *child = node_by_index(children.offset + i);
+        layout_intrinsic_height(child);
     }
 
     LayoutNodeStyle style = container.config.style;
@@ -493,8 +493,8 @@ void container_positions(LayoutNode *node) {
     }
 
     for (usize i = 0; i < children.count; ++i) {
-        LayoutNodeID child_id = id_by_index(children.offset + i);
-        layout_positions(child_id);
+        LayoutNode *child = node_by_index(children.offset + i);
+        layout_positions(child);
     }
 }
 
@@ -525,8 +525,8 @@ void container_commands(LayoutNode *node) {
 
     ChildIdxSlice children = node->children;
     for (usize i = 0; i < children.count; ++i) {
-        LayoutNodeID child_id = id_by_index(children.offset + i);
-        layout_commands(child_id);
+        LayoutNode *child = node_by_index(children.offset + i);
+        layout_commands(child);
     }
 
     list_append(&Layout.cmds, tag0(LayoutCommand, LAYOUT_CMD_CLIP_END));
