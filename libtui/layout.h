@@ -175,18 +175,21 @@ static struct {
     List(LayoutCommand) cmds;
 } Layout = {0};
 
-LayoutNode *layout_node_by_id(LayoutNodeID id) {
+LayoutNode *node_by_id(LayoutNodeID id) {
     assert(0 <= id && (u32)id < Layout.nodes.count);
     return &Layout.nodes.items[id];
 }
 
-LayoutNode *layout_node_by_index(i32 index) {
+LayoutNodeID id_by_index(i32 index) {
     assert(0 <= index && (u32)index < Layout.children_persistent.count);
-    LayoutNodeID id = Layout.children_persistent.items[index];
-    return layout_node_by_id(id);
+    return Layout.children_persistent.items[index];
 }
 
-LayoutNodeID layout_node_push(LayoutNode node) {
+LayoutNode *node_by_index(i32 index) {
+    return node_by_id(id_by_index(index));
+}
+
+LayoutNodeID node_push(LayoutNode node) {
     LayoutNodeID id = Layout.nodes.count;
     list_append(&Layout.nodes, node);
     return id;
@@ -223,13 +226,13 @@ List(LayoutCommand) layout_end() {
 
 void layout_open(ContainerConfig conf) {
     LayoutNode node = tag(LayoutNode, LAYOUT_NODE_CONTAINER, {.config = conf});
-    LayoutNodeID id = layout_node_push(node);
+    LayoutNodeID id = node_push(node);
     list_append(&Layout.open_stack, id);
 }
 
 void layout_close() {
     LayoutNodeID closed_id = list_pop(&Layout.open_stack);
-    LayoutNode *closed = layout_node_by_id(closed_id);
+    LayoutNode *closed = node_by_id(closed_id);
     closed->children.offset = Layout.children_persistent.count;
     // Take last IDs from the temp child stack
     // and attach them to contiguous child list
@@ -238,14 +241,14 @@ void layout_close() {
         LayoutNodeID child_id = Layout.children_temp.items[i];
         list_append(&Layout.children_persistent, child_id);
         // Attach parent to child
-        LayoutNode *child = layout_node_by_id(child_id);
+        LayoutNode *child = node_by_id(child_id);
         child->parent = closed_id;
     }
 
     list_append(&Layout.children_temp, closed_id);
     if (closed_id > ROOT_ID) {
         LayoutNodeID parent_id = list_last(&Layout.open_stack);
-        LayoutNode *parent = layout_node_by_id(parent_id);
+        LayoutNode *parent = node_by_id(parent_id);
         parent->children.count++;
     }
 }
@@ -275,7 +278,7 @@ xmacro(text)
 
 #define X(ns, fn)                               \
 void ns##_##fn(LayoutNodeID id) {               \
-    LayoutNode *node = layout_node_by_id(id);     \
+    LayoutNode *node = node_by_id(id);     \
     match(*node) {                              \
         case(LAYOUT_NODE_TEXT)                  \
             text_##fn(node);                    \
@@ -298,7 +301,7 @@ void container_intrinsic_width(LayoutNode *node) {
 
     ChildIdxSlice children = node->children;
     for (usize i = 0; i < children.count; ++i) {
-        LayoutNodeID child_id = Layout.children_persistent.items[children.offset + i];
+        LayoutNodeID child_id = id_by_index(children.offset + i);
         layout_intrinsic_width(child_id);
     }
 
@@ -317,7 +320,7 @@ void container_intrinsic_width(LayoutNode *node) {
                 case(DIR_ROW) {
                     i32 children_width = 0;
                     for (usize i = 0; i < children.count; ++i) {
-                        LayoutNode *child = layout_node_by_index(children.offset + i);
+                        LayoutNode *child = node_by_index(children.offset + i);
                         children_width += child->w;
                     }
                     node->w = children_width + 2 * style.padding + 
@@ -328,7 +331,7 @@ void container_intrinsic_width(LayoutNode *node) {
                 case(DIR_COL) {
                     i32 max_child_w = 0;
                     for (usize i = 0; i < children.count; ++i) {
-                        LayoutNode *child = layout_node_by_index(children.offset + i);
+                        LayoutNode *child = node_by_index(children.offset + i);
                         max_child_w = MAX(child->w, max_child_w);
                     }
                     node->w = max_child_w + 2 * style.padding;
@@ -351,7 +354,7 @@ void container_fill_width(LayoutNode *node) {
         case(DIR_ROW) {
             i32 children_width = 0;
             for (usize i = 0; i < children.count; ++i) {
-                LayoutNode *child = layout_node_by_index(children.offset + i);
+                LayoutNode *child = node_by_index(children.offset + i);
                 children_width += child->w;
             }
 
@@ -371,7 +374,7 @@ void container_fill_width(LayoutNode *node) {
         case(DIR_COL) {
             i32 content_width = node->w - 2 * style.padding;
             for (usize i = 0; i < children.count; ++i) {
-                LayoutNode *child = layout_node_by_index(children.offset + i);
+                LayoutNode *child = node_by_index(children.offset + i);
                 
                 match(*child) {
                     case(LAYOUT_NODE_TEXT) {
@@ -395,7 +398,7 @@ void container_intrinsic_height(LayoutNode *node) {
 
     ChildIdxSlice children = node->children;
     for (usize i = 0; i < children.count; ++i) {
-        LayoutNodeID child_id = Layout.children_persistent.items[children.offset + i];
+        LayoutNodeID child_id = id_by_index(children.offset + i);
         layout_intrinsic_height(child_id);
     }
 
@@ -414,7 +417,7 @@ void container_intrinsic_height(LayoutNode *node) {
                 case(DIR_ROW) {
                     i32 max_child_h = 0;
                     for (usize i = 0; i < children.count; ++i) {
-                        LayoutNode *child = layout_node_by_index(children.offset + i);
+                        LayoutNode *child = node_by_index(children.offset + i);
                         max_child_h = MAX(child->h, max_child_h);
                     }
                     
@@ -424,7 +427,7 @@ void container_intrinsic_height(LayoutNode *node) {
                 case(DIR_COL) {
                     i32 children_height = 0;
                     for (usize i = 0; i < children.count; ++i) {
-                        LayoutNode *child = layout_node_by_index(children.offset + i);
+                        LayoutNode *child = node_by_index(children.offset + i);
                         children_height += child->h;
                     }
                     node->h = children_height + 2 * style.padding + 
@@ -456,7 +459,7 @@ void container_positions(LayoutNode *node) {
     match(style.direction) {
         case(DIR_ROW) {
             for (usize i = 0; i < children.count; ++i) {
-                LayoutNode *child = layout_node_by_index(children.offset + i);
+                LayoutNode *child = node_by_index(children.offset + i);
                 child->x = pos_x;
 
                 match(*child) {
@@ -473,7 +476,7 @@ void container_positions(LayoutNode *node) {
 
         case(DIR_COL) {
             for (usize i = 0; i < children.count; ++i) {
-                LayoutNode *child = layout_node_by_index(children.offset + i);
+                LayoutNode *child = node_by_index(children.offset + i);
                 child->y = pos_y;
 
                 match(*child) {
@@ -490,7 +493,7 @@ void container_positions(LayoutNode *node) {
     }
 
     for (usize i = 0; i < children.count; ++i) {
-        LayoutNodeID child_id = Layout.children_persistent.items[children.offset + i];
+        LayoutNodeID child_id = id_by_index(children.offset + i);
         layout_positions(child_id);
     }
 }
@@ -522,7 +525,7 @@ void container_commands(LayoutNode *node) {
 
     ChildIdxSlice children = node->children;
     for (usize i = 0; i < children.count; ++i) {
-        LayoutNodeID child_id = Layout.children_persistent.items[children.offset + i];
+        LayoutNodeID child_id = id_by_index(children.offset + i);
         layout_commands(child_id);
     }
 
