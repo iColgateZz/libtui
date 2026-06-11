@@ -96,7 +96,7 @@ list_def(LayoutNodeID);
 
 typedef struct {
     i32 offset;
-    u32 count;
+    i32 count;
 } ChildIdxSlice;
 
 typedef struct {
@@ -173,6 +173,7 @@ static struct {
     List(LayoutNodeID) children_temp;
     List(LayoutNodeID) children_persistent;
     List(LayoutCommand) cmds;
+    Arena tmp;
 } Layout = {0};
 
 LayoutNode *node_by_id(LayoutNodeID id) {
@@ -238,7 +239,7 @@ void layout_close() {
     // Take last IDs from the temp child stack
     // and attach them to contiguous child list
     Layout.children_temp.count -= closed->children.count;
-    for (usize i = Layout.children_temp.count; i < closed->children.count; ++i) {
+    for (isize i = Layout.children_temp.count; i < closed->children.count; ++i) {
         LayoutNodeID child_id = Layout.children_temp.items[i];
         list_append(&Layout.children_persistent, child_id);
         // Attach parent to child
@@ -300,7 +301,7 @@ void container_intrinsic_width(LayoutNode *node) {
     unwrap_into(*node, LAYOUT_NODE_CONTAINER, container);
 
     ChildIdxSlice children = node->children;
-    for (usize i = 0; i < children.count; ++i) {
+    for (isize i = 0; i < children.count; ++i) {
         LayoutNode *child = node_by_index(children.offset + i);
         layout_intrinsic_width(child);
     }
@@ -319,7 +320,7 @@ void container_intrinsic_width(LayoutNode *node) {
             match(style.direction) {
                 case(DIR_ROW) {
                     i32 children_width = 0;
-                    for (usize i = 0; i < children.count; ++i) {
+                    for (isize i = 0; i < children.count; ++i) {
                         LayoutNode *child = node_by_index(children.offset + i);
                         children_width += child->w;
                     }
@@ -330,7 +331,7 @@ void container_intrinsic_width(LayoutNode *node) {
 
                 case(DIR_COL) {
                     i32 max_child_w = 0;
-                    for (usize i = 0; i < children.count; ++i) {
+                    for (isize i = 0; i < children.count; ++i) {
                         LayoutNode *child = node_by_index(children.offset + i);
                         max_child_w = MAX(child->w, max_child_w);
                     }
@@ -353,7 +354,7 @@ void container_fill_width(LayoutNode *node) {
     match(style.direction) {
         case(DIR_ROW) {
             i32 children_width = 0;
-            for (usize i = 0; i < children.count; ++i) {
+            for (isize i = 0; i < children.count; ++i) {
                 LayoutNode *child = node_by_index(children.offset + i);
                 children_width += child->w;
             }
@@ -373,7 +374,7 @@ void container_fill_width(LayoutNode *node) {
 
         case(DIR_COL) {
             i32 content_width = node->w - 2 * style.padding;
-            for (usize i = 0; i < children.count; ++i) {
+            for (isize i = 0; i < children.count; ++i) {
                 LayoutNode *child = node_by_index(children.offset + i);
                 
                 match(*child) {
@@ -397,7 +398,7 @@ void container_intrinsic_height(LayoutNode *node) {
     unwrap_into(*node, LAYOUT_NODE_CONTAINER, container);
 
     ChildIdxSlice children = node->children;
-    for (usize i = 0; i < children.count; ++i) {
+    for (isize i = 0; i < children.count; ++i) {
         LayoutNode *child = node_by_index(children.offset + i);
         layout_intrinsic_height(child);
     }
@@ -416,7 +417,7 @@ void container_intrinsic_height(LayoutNode *node) {
             match(style.direction) {
                 case(DIR_ROW) {
                     i32 max_child_h = 0;
-                    for (usize i = 0; i < children.count; ++i) {
+                    for (isize i = 0; i < children.count; ++i) {
                         LayoutNode *child = node_by_index(children.offset + i);
                         max_child_h = MAX(child->h, max_child_h);
                     }
@@ -426,7 +427,7 @@ void container_intrinsic_height(LayoutNode *node) {
                 }
                 case(DIR_COL) {
                     i32 children_height = 0;
-                    for (usize i = 0; i < children.count; ++i) {
+                    for (isize i = 0; i < children.count; ++i) {
                         LayoutNode *child = node_by_index(children.offset + i);
                         children_height += child->h;
                     }
@@ -458,7 +459,7 @@ void container_positions(LayoutNode *node) {
 
     match(style.direction) {
         case(DIR_ROW) {
-            for (usize i = 0; i < children.count; ++i) {
+            for (isize i = 0; i < children.count; ++i) {
                 LayoutNode *child = node_by_index(children.offset + i);
                 child->x = pos_x;
 
@@ -475,7 +476,7 @@ void container_positions(LayoutNode *node) {
         }
 
         case(DIR_COL) {
-            for (usize i = 0; i < children.count; ++i) {
+            for (isize i = 0; i < children.count; ++i) {
                 LayoutNode *child = node_by_index(children.offset + i);
                 child->y = pos_y;
 
@@ -492,7 +493,7 @@ void container_positions(LayoutNode *node) {
         }
     }
 
-    for (usize i = 0; i < children.count; ++i) {
+    for (isize i = 0; i < children.count; ++i) {
         LayoutNode *child = node_by_index(children.offset + i);
         layout_positions(child);
     }
@@ -524,7 +525,7 @@ void container_commands(LayoutNode *node) {
     }));
 
     ChildIdxSlice children = node->children;
-    for (usize i = 0; i < children.count; ++i) {
+    for (isize i = 0; i < children.count; ++i) {
         LayoutNode *child = node_by_index(children.offset + i);
         layout_commands(child);
     }
@@ -537,7 +538,7 @@ void container_commands(LayoutNode *node) {
 //     i32 text_width = 0;
 
 //     List(CodePoint) text = text_container.text;
-//     for (usize i = 0; i < text.count; ++i)
+//     for (isize i = 0; i < text.count; ++i)
 //         text_width += text.items[i].display_width;
 
 //     node->w = text_width;
