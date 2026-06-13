@@ -18,21 +18,24 @@ i32 main(i32 argc, byte *argv[]) {
     while (!is_codepoint(cp("q"))) {
         begin_frame();
         {
-            layout_begin(get_terminal_width(), get_terminal_height());
+            u32 w = get_terminal_width();
+            u32 h = get_terminal_height();
+            layout_begin(w, h);
 
             Container(.style = {
                 .color = {127, 9, 254},
-                .direction = {DIR_ROW}
+                .direction = {DIR_ROW},
+                .size = {.w = FIXED(w), .h = FIXED(h)},
             }) {
                 Container(.style = {
-                    .size = {.w = FIXED(5), .h = FIXED(5)},
+                    .size = {.w = FILL(0, INT32_MAX), .h = FIXED(5)},
                     .color = {10, 9, 254},
-                    .align_self = {ALIGN_END},
+                    .align_self = {ALIGN_CENTER},
                 });
 
                 Container(.style = {
-                    .size = {.w = FIXED(20), .h = FIXED(3)},
-                    .color = {10, 9, 8},
+                    .size = {.w = FILL(0, INT32_MAX), .h = FIXED(10)},
+                    .color = {10, 250, 8},
                     .align_self = {ALIGN_CENTER},
                 });
             }

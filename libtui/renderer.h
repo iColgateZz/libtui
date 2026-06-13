@@ -771,7 +771,7 @@ byte *vfmt(byte *p, byte *end, byte *f, va_list args) {
         f++;
         switch (*f++) {
             case 'd': {
-                i64 v = va_arg(args, i64);
+                i32 v = va_arg(args, i32);
 
                 if (v < 0) {
                     if (p < end) *p = '-';

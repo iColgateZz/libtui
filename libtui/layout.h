@@ -5,6 +5,9 @@
 #include "psh_core/psh_core.h"
 #include "unicode.h"
 
+// For debug purposes only
+#include "renderer.h"
+
 //TODO: move to psh_core
 #define typeof __typeof__
 #define match(tu) for (typeof(tu) _tu = tu, *p = &_tu; p; p = NULL) switch ((tu).type)
@@ -44,7 +47,9 @@ typedef struct {
     };
 } Size;
 
-#define FIXED(value) tag(Size, SIZE_FIXED, {value})
+#define FIXED(value)    tag(Size, SIZE_FIXED, {value})
+#define FIT(min, max)   tag(Size, SIZE_FIT, {min, max})
+#define FILL(min, max)  tag(Size, SIZE_FILL, {min, max})
 
 typedef struct {
     Size w;
@@ -92,7 +97,6 @@ typedef struct {
 } TextStyle;
 
 typedef i32 LayoutNodeID;
-list_def(LayoutNodeID);
 
 typedef struct {
     i32 offset;
@@ -126,8 +130,6 @@ typedef struct {
     };
 } LayoutNode;
 
-list_def(LayoutNode);
-
 typedef struct {
     packed_enum {
         LAYOUT_CMD_RECT,
@@ -147,6 +149,16 @@ typedef struct {
     };
 } LayoutCommand;
 
+void debug_cmd(i32 x, i32 y, LayoutCommand cmd) {
+    match(cmd) {
+        case(LAYOUT_CMD_RECT, rect) {
+            debug(x, y, "Rect {x: %d, y: %d, w: %d, h: %d, color: {...}}", rect.x, rect.y, rect.w, rect.h);
+            break;
+        }
+        otherwise return;
+    }
+}
+
 list_def(LayoutCommand);
 
 void layout_begin(i32 w, i32 h);
@@ -158,14 +170,23 @@ void layout_close();
 
 static u8 _latch = 0;
 
-#define Container(...)  \
-    for (_latch = (layout_open((ContainerConfig) {__VA_ARGS__}), 0); _latch < 1; _latch = 1, layout_close())
+#define Container(...)                                  \
+    for (_latch = (layout_open((ContainerConfig) {      \
+        .style.size.w = FIT(0, INT32_MAX),              \
+        .style.size.h = FIT(0, INT32_MAX),              \
+        __VA_ARGS__                                     \
+    }), 0); _latch < 1; _latch = 1, layout_close())
 
 #endif
 
 #ifdef LIBTUI_LAYOUT_IMPL
 
 void layout(LayoutNode *node);
+
+list_def(LayoutNode);
+list_def(LayoutNodeID);
+typedef LayoutNode* LayoutNodePtr;
+list_def(LayoutNodePtr);
 
 static struct {
     List(LayoutNode) nodes;
@@ -346,6 +367,9 @@ void container_intrinsic_width(LayoutNode *node) {
     }
 }
 
+b32 is_fill_w(LayoutNode *node);
+void distribute_space(Arena *arena, i32 space, List(LayoutNodePtr) nodes);
+
 void container_fill_width(LayoutNode *node) {
     unwrap_into(*node, LAYOUT_NODE_CONTAINER, container);
 
@@ -362,14 +386,26 @@ void container_fill_width(LayoutNode *node) {
             i32 remaining_width = node->w - children_width - 2 * style.padding
                                   - MAX(children.count - 1, 0) * style.spacing;
 
-            while (remaining_width > 0) {
-                i32 smallest;
-                i32 next_smallest;
-                i32 smallest_count = 0;
-                
+            i32 fill_count = 0;
+            for (isize i = 0; i < children.count; ++i)
+                fill_count += is_fill_w(node_by_index(children.offset + i));
 
+            if (fill_count == 0) break;
+
+            Scratch scratch = scratch_begin(&Layout.tmp);
+            List(LayoutNodePtr) fill_list = {
+                .items = arena_push(scratch.arena, LayoutNode *, fill_count),
+                .capacity = fill_count,
+            };
+
+            for (isize i = 0; i < children.count; ++i) {
+                LayoutNode *child = node_by_index(children.offset + i);
+                if (is_fill_w(child)) list_append(&fill_list, child);
             }
 
+            distribute_space(scratch.arena, remaining_width, fill_list);
+            scratch_end(scratch);
+            break;
         }
 
         case(DIR_COL) {
@@ -390,8 +426,111 @@ void container_fill_width(LayoutNode *node) {
                     }
                 }
             }
+            break;
         }
     }
+
+    for (isize i = 0; i < children.count; ++i) {
+        layout_fill_width(node_by_index(children.offset + i));
+    }
+}
+
+b32 is_fill_w(LayoutNode *node) {
+    match(*node) {
+        case(LAYOUT_NODE_TEXT) return true;
+        case(LAYOUT_NODE_CONTAINER, container) return matches(container.config.style.size.w, SIZE_FILL);
+        otherwise UNREACHABLE("There is no other type!");
+    }
+    return false;
+}
+
+i32 max_w(LayoutNode *node) {
+    match(*node) {
+        case(LAYOUT_NODE_TEXT) return INT32_MAX;
+        case(LAYOUT_NODE_CONTAINER, container) {
+            Size wsize = container.config.style.size.w;
+            unwrap_into(wsize, SIZE_FILL, fill);
+            return fill.max;
+        }
+        otherwise UNREACHABLE("There is no other type!");
+    }
+    return false;
+}
+
+// function assumes there is at least one node
+void distribute_space(Arena *arena, i32 space, List(LayoutNodePtr) nodes) {
+    while (space > 0) {
+        Scratch scratch = scratch_begin(arena);
+        List(LayoutNodePtr) grow_nodes = {
+            .items = arena_push(scratch.arena, LayoutNode *, nodes.count),
+            .capacity = nodes.capacity,
+        };
+
+        i32 smallest = nodes.items[0]->w;
+        i32 next_smallest = nodes.items[0]->w;
+        i32 smallest_count = 0;
+
+        for (isize i = 0; i < nodes.count; ++i) {
+            LayoutNode *current = nodes.items[i];
+            if (max_w(current) - current->w == 0) continue;
+
+            list_append(&grow_nodes, current);
+            if (current->w < smallest) {
+                smallest_count = 1;
+                next_smallest = smallest;
+                smallest = current->w;
+            } else if (current->w == smallest) {
+                smallest_count++;
+            } else if (current->w < next_smallest) {
+                next_smallest = current->w;
+            }
+        }
+
+        if (grow_nodes.count == 0) {
+            // no candidates for space distribution
+            scratch_end(scratch);
+            break;
+        }
+
+        i32 target = next_smallest;
+        for (isize i = 0; i < grow_nodes.count; ++i) {
+            LayoutNode *current = grow_nodes.items[i];
+            if (current->w == smallest)
+                target = MIN(target, max_w(current));
+        }
+
+        i32 needed = (target - smallest) * smallest_count;
+        if (needed <= space && target != smallest) {
+            for (isize i = 0; i < grow_nodes.count; ++i) {
+                LayoutNode *current = grow_nodes.items[i];
+                if (current->w != smallest) continue;
+
+                current->w = target;
+
+            }
+            space -= needed;
+        } else {
+            i32 each = space / smallest_count;
+            i32 extra = space % smallest_count;
+            
+            for (isize i = 0; i < grow_nodes.count; ++i) {
+                LayoutNode *current = grow_nodes.items[i];
+                if (current->w != smallest) continue;
+
+                current->w += each;
+                if (extra > 0) {
+                    current->w++;
+                    extra--;
+                }
+            }
+
+            space = 0;
+        }
+
+        scratch_end(scratch);
+    }
+
+    // space < 0
 }
 
 void container_intrinsic_height(LayoutNode *node) {
