@@ -101,13 +101,13 @@ typedef i32 LayoutNodeID;
 typedef struct {
     i32 offset;
     i32 count;
-} ChildIdxSlice;
+} ChildrenIndexSlice;
 
 typedef struct {
     LayoutNodeID parent;
     i32 x, y; // resolved coords
     i32 w, h; // resolved w, h
-    ChildIdxSlice children;
+    ChildrenIndexSlice children;
     
     packed_enum {
         //TODO: for custom nodes there may be 2 variants:
@@ -323,7 +323,7 @@ xmacro(layout)
 void container_intrinsic_width(LayoutNode *node) {
     unwrap_into(*node, LAYOUT_NODE_CONTAINER, container);
 
-    ChildIdxSlice children = node->children;
+    ChildrenIndexSlice children = node->children;
     for (isize i = 0; i < children.count; ++i) {
         LayoutNode *child = node_by_index(children.offset + i);
         layout_intrinsic_width(child);
@@ -334,8 +334,7 @@ void container_intrinsic_width(LayoutNode *node) {
     match(wsize) {
         case(SIZE_FIXED, fixed)
             //TODO: account for border
-            //      do I add padding here?
-            node->w = fixed.value;
+            node->w = fixed.value + 2 * style.padding;
             break;
 
         case(SIZE_FILL)
@@ -363,8 +362,7 @@ void container_intrinsic_width(LayoutNode *node) {
                 }
             }
 
-            if (fit.min < fit.max) 
-                node->w = CLAMP(node->w, fit.min, fit.max);
+            node->w = CLAMP(node->w, fit.min, fit.max);
         }
     }
 }
@@ -376,7 +374,7 @@ void container_fill_width(LayoutNode *node) {
     unwrap_into(*node, LAYOUT_NODE_CONTAINER, container);
 
     LayoutNodeStyle style = container.config.style;
-    ChildIdxSlice children = node->children;
+    ChildrenIndexSlice children = node->children;
     match(style.direction) {
         case(DIR_ROW) {
             i32 children_width = 0;
@@ -414,20 +412,22 @@ void container_fill_width(LayoutNode *node) {
             i32 content_width = node->w - 2 * style.padding;
             for (isize i = 0; i < children.count; ++i) {
                 LayoutNode *child = node_by_index(children.offset + i);
-                
                 match(*child) {
                     case(LAYOUT_NODE_TEXT) {
                         child->w = content_width;
                         break;
                     }
-                    //TODO: clamp to min/max constraints
                     case(LAYOUT_NODE_CONTAINER, child_container) {
                         Size wsize = child_container.config.style.size.w;
-                        if (matches(wsize, SIZE_FILL))
-                            child->w = content_width;
+                        if (matches(wsize, SIZE_FILL)) {
+                            unwrap_into(wsize, SIZE_FILL, fill);
+                            child->w = CLAMP(content_width, fill.min, fill.max);
+                        }
+                        break;
                     }
                 }
             }
+
             break;
         }
     }
@@ -451,6 +451,7 @@ i32 max_w(LayoutNode *node) {
         case(LAYOUT_NODE_TEXT) return INT32_MAX;
         case(LAYOUT_NODE_CONTAINER, container) {
             Size wsize = container.config.style.size.w;
+            assert(matches(wsize, SIZE_FILL) && "function is only for fill size");
             unwrap_into(wsize, SIZE_FILL, fill);
             return fill.max;
         }
@@ -518,7 +519,7 @@ void distribute_space(i32 space, List(LayoutNodePtr) nodes) {
 void container_intrinsic_height(LayoutNode *node) {
     unwrap_into(*node, LAYOUT_NODE_CONTAINER, container);
 
-    ChildIdxSlice children = node->children;
+    ChildrenIndexSlice children = node->children;
     for (isize i = 0; i < children.count; ++i) {
         LayoutNode *child = node_by_index(children.offset + i);
         layout_intrinsic_height(child);
@@ -527,10 +528,9 @@ void container_intrinsic_height(LayoutNode *node) {
     LayoutNodeStyle style = container.config.style;
     Size hsize = style.size.h;
     match(hsize) {
-        case(SIZE_FIXED)
+        case(SIZE_FIXED, fixed)
             //TODO: account for border
-            //      do I add padding here?
-            node->h = hsize._SIZE_FIXED.value;
+            node->h = fixed.value + 2 * style.padding;
             break;
 
         case(SIZE_FILL)
@@ -554,11 +554,11 @@ void container_intrinsic_height(LayoutNode *node) {
                     }
                     node->h = children_height + 2 * style.padding + 
                             MAX(children.count - 1, 0) * style.spacing;
+                    break;
                 }
             }
 
-            if (fit.min < fit.max)
-                node->h = CLAMP(node->h, fit.min, fit.max);
+            node->h = CLAMP(node->h, fit.min, fit.max);
         }
     }
 }
@@ -573,7 +573,7 @@ void container_positions(LayoutNode *node) {
     LayoutNodeStyle style = container.config.style;
     i32 pos_x = node->x + style.padding;
     i32 pos_y = node->y + style.padding;
-    ChildIdxSlice children = node->children;
+    ChildrenIndexSlice children = node->children;
 
     match(style.direction) {
         case(DIR_ROW) {
@@ -652,7 +652,7 @@ void container_commands(LayoutNode *node) {
             .color = container.config.style.color
     }));
 
-    ChildIdxSlice children = node->children;
+    ChildrenIndexSlice children = node->children;
     for (isize i = 0; i < children.count; ++i) {
         LayoutNode *child = node_by_index(children.offset + i);
         layout_commands(child);

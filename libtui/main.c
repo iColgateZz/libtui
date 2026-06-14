@@ -29,7 +29,7 @@ i32 main(i32 argc, byte *argv[]) {
             }) {
                 Container(.style = {
                     .size = {.w = FILL(0, 10), .h = FIXED(5)},
-                    .color = {10, 9, 254},
+                    .color = {10, 100, 254},
                     .align_self = {ALIGN_CENTER},
                 });
 
@@ -46,7 +46,7 @@ i32 main(i32 argc, byte *argv[]) {
 
                 Container(.style = {
                     .size = {.w = FILL(0, 10), .h = FIXED(5)},
-                    .color = {10, 9, 254},
+                    .color = {10, 100, 254},
                     .align_self = {ALIGN_CENTER},
                 });
             }
