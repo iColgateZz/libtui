@@ -368,7 +368,7 @@ void container_intrinsic_width(LayoutNode *node) {
 }
 
 b32 is_fill_w(LayoutNode *node);
-void distribute_space(Arena *arena, i32 space, List(LayoutNodePtr) nodes);
+void distribute_space(i32 space, List(LayoutNodePtr) nodes);
 
 void container_fill_width(LayoutNode *node) {
     unwrap_into(*node, LAYOUT_NODE_CONTAINER, container);
@@ -403,7 +403,7 @@ void container_fill_width(LayoutNode *node) {
                 if (is_fill_w(child)) list_append(&fill_list, child);
             }
 
-            distribute_space(scratch.arena, remaining_width, fill_list);
+            distribute_space(remaining_width, fill_list);
             scratch_end(scratch);
             break;
         }
@@ -457,24 +457,17 @@ i32 max_w(LayoutNode *node) {
     return false;
 }
 
-// function assumes there is at least one node
-void distribute_space(Arena *arena, i32 space, List(LayoutNodePtr) nodes) {
+void distribute_space(i32 space, List(LayoutNodePtr) nodes) {
     while (space > 0) {
-        Scratch scratch = scratch_begin(arena);
-        List(LayoutNodePtr) grow_nodes = {
-            .items = arena_push(scratch.arena, LayoutNode *, nodes.count),
-            .capacity = nodes.capacity,
-        };
-
-        i32 smallest = nodes.items[0]->w;
-        i32 next_smallest = nodes.items[0]->w;
+        i32 smallest = INT32_MAX;
+        i32 next_smallest = INT32_MAX;
         i32 smallest_count = 0;
 
         for (isize i = 0; i < nodes.count; ++i) {
             LayoutNode *current = nodes.items[i];
-            if (max_w(current) - current->w == 0) continue;
+            // filter out nodes that cannot grow anymore
+            if (current->w >= max_w(current)) continue;
 
-            list_append(&grow_nodes, current);
             if (current->w < smallest) {
                 smallest_count = 1;
                 next_smallest = smallest;
@@ -486,48 +479,35 @@ void distribute_space(Arena *arena, i32 space, List(LayoutNodePtr) nodes) {
             }
         }
 
-        if (grow_nodes.count == 0) {
-            // no candidates for space distribution
-            scratch_end(scratch);
-            break;
+        // no candidates for space distribution
+        if (smallest_count == 0) break;
+
+        i32 target_growth = next_smallest - smallest;
+        for (isize i = 0; i < nodes.count; ++i) {
+            LayoutNode *current = nodes.items[i];
+            if (current->w != smallest || current->w >= max_w(current)) continue;
+            target_growth = MIN(target_growth, max_w(current) - current->w);
         }
 
-        i32 target = next_smallest;
-        for (isize i = 0; i < grow_nodes.count; ++i) {
-            LayoutNode *current = grow_nodes.items[i];
-            if (current->w == smallest)
-                target = MIN(target, max_w(current));
+        // all fill nodes have same w -> next_smallest - smallest = 0 ->
+        // target_growth = 0. node growth may be unconstrained, so set it to 1.
+        // leads to more while loop iterations, but it should be fine.
+        if (target_growth == 0) target_growth = 1;
+
+        i32 space_for_distribution = MIN(space, target_growth * smallest_count);
+        i32 each = space_for_distribution / smallest_count;
+        i32 extra = space_for_distribution % smallest_count;
+
+        for (isize i = 0; i < nodes.count; ++i) {
+            LayoutNode *current = nodes.items[i];
+            if (current->w != smallest || current->w >= max_w(current)) continue;
+
+            i32 add = each + (extra > 0);
+            extra -= extra > 0;
+
+            current->w += add;
+            space -= add;
         }
-
-        i32 needed = (target - smallest) * smallest_count;
-        if (needed <= space && target != smallest) {
-            for (isize i = 0; i < grow_nodes.count; ++i) {
-                LayoutNode *current = grow_nodes.items[i];
-                if (current->w != smallest) continue;
-
-                current->w = target;
-
-            }
-            space -= needed;
-        } else {
-            i32 each = space / smallest_count;
-            i32 extra = space % smallest_count;
-            
-            for (isize i = 0; i < grow_nodes.count; ++i) {
-                LayoutNode *current = grow_nodes.items[i];
-                if (current->w != smallest) continue;
-
-                current->w += each;
-                if (extra > 0) {
-                    current->w++;
-                    extra--;
-                }
-            }
-
-            space = 0;
-        }
-
-        scratch_end(scratch);
     }
 
     // space < 0

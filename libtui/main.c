@@ -28,7 +28,7 @@ i32 main(i32 argc, byte *argv[]) {
                 .size = {.w = FIXED(w), .h = FIXED(h)},
             }) {
                 Container(.style = {
-                    .size = {.w = FILL(0, INT32_MAX), .h = FIXED(5)},
+                    .size = {.w = FILL(0, 10), .h = FIXED(5)},
                     .color = {10, 9, 254},
                     .align_self = {ALIGN_CENTER},
                 });
@@ -38,12 +38,19 @@ i32 main(i32 argc, byte *argv[]) {
                     .color = {10, 250, 8},
                     .align_self = {ALIGN_CENTER},
                 });
+
+                Container(.style = {
+                    .size = {.w = FILL(0, 10), .h = FIXED(5)},
+                    .color = {10, 9, 254},
+                    .align_self = {ALIGN_CENTER},
+                });
             }
 
             List(LayoutCommand) cmds = layout_end();
 
             for (usize i = 0; i < cmds.count; ++i) {
                 LayoutCommand cmd = cmds.items[i];
+                // debug_cmd(0, i, cmd);
                 match(cmd) {
                     case(LAYOUT_CMD_RECT, rect) {
                         fill_box(
