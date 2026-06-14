@@ -256,11 +256,13 @@ void layout_open(ContainerConfig conf) {
 void layout_close() {
     LayoutNodeID closed_id = list_pop(&Layout.open_stack);
     LayoutNode *closed = node_by_id(closed_id);
+    isize start = Layout.children_temp.count - closed->children.count;
+    isize end = Layout.children_temp.count;
     closed->children.offset = Layout.children_persistent.count;
     // Take last IDs from the temp child stack
     // and attach them to contiguous child list
-    Layout.children_temp.count -= closed->children.count;
-    for (isize i = Layout.children_temp.count; i < closed->children.count; ++i) {
+    Layout.children_temp.count = start;
+    for (isize i = start; i < end; ++i) {
         LayoutNodeID child_id = Layout.children_temp.items[i];
         list_append(&Layout.children_persistent, child_id);
         // Attach parent to child
@@ -566,9 +568,6 @@ void container_fill_height(LayoutNode *node) { UNUSED(node); }
 i32 align_cross(Alignment align, i32 parent_size, i32 parent_padding, i32 child_size);
 
 void container_positions(LayoutNode *node) {
-    if (node->parent < 0)
-        node->x = node->y = 0;
-
     unwrap_into(*node, LAYOUT_NODE_CONTAINER, container);
 
     LayoutNodeStyle style = container.config.style;
@@ -585,7 +584,12 @@ void container_positions(LayoutNode *node) {
                 match(*child) {
                     case(LAYOUT_NODE_TEXT) assert(false && "currently not supported");
                     case(LAYOUT_NODE_CONTAINER, child_container) {
-                        child->y = align_cross(child_container.config.style.align_self, node->h, style.padding, child->h);
+                        child->y = node->y + align_cross(
+                            child_container.config.style.align_self,
+                            node->h,
+                            style.padding,
+                            child->h
+                        );
                     }
                 }
 
@@ -602,7 +606,12 @@ void container_positions(LayoutNode *node) {
                 match(*child) {
                     case(LAYOUT_NODE_TEXT) assert(false && "currently not supported");
                     case(LAYOUT_NODE_CONTAINER, child_container) {
-                        child->x = align_cross(child_container.config.style.align_self, node->w, style.padding, child->w);
+                        child->x = node->x + align_cross(
+                            child_container.config.style.align_self,
+                            node->w,
+                            style.padding,
+                            child->w
+                        );
                     }
                 }
 

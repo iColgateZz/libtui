@@ -37,7 +37,12 @@ i32 main(i32 argc, byte *argv[]) {
                     .size = {.w = FILL(0, INT32_MAX), .h = FIXED(10)},
                     .color = {10, 250, 8},
                     .align_self = {ALIGN_CENTER},
-                });
+                }) {
+                    Container(.style = {
+                        .size = {.w = FILL(0, INT32_MAX), .h = FIXED(5)},
+                        .color = {10, 9, 254},
+                    });
+                }
 
                 Container(.style = {
                     .size = {.w = FILL(0, 10), .h = FIXED(5)},
