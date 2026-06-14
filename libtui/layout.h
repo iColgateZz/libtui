@@ -107,6 +107,7 @@ typedef struct {
     LayoutNodeID parent;
     i32 x, y; // resolved coords
     i32 w, h; // resolved w, h
+    i32 min_w, min_h;
     ChildrenIndexSlice children;
     
     packed_enum {
@@ -288,6 +289,8 @@ void layout_close() {
 
 #define X(ns, fn)   void ns##_##fn(LayoutNode *node);
 xmacro(layout)
+xmacro(container)
+xmacro(text)
 #undef X
 
 void layout(LayoutNode *node) {
@@ -295,11 +298,6 @@ void layout(LayoutNode *node) {
     xmacro(layout)
     #undef X
 }
-
-#define X(ns, fn)   void ns##_##fn(LayoutNode *node);
-xmacro(container)
-xmacro(text)
-#undef X
 
 #define X(ns, fn)                               \
 void ns##_##fn(LayoutNode *node) {              \
@@ -318,7 +316,6 @@ void ns##_##fn(LayoutNode *node) {              \
 xmacro(layout)
 #undef X
 
-//TODO: calculate minimal w/h for nodes during intrinsic steps so shrinking does not break children.
 //TODO: deduplicate width, height, position logic.
 void container_intrinsic_width(LayoutNode *node) {
     unwrap_into(*node, LAYOUT_NODE_CONTAINER, container);
@@ -334,37 +331,65 @@ void container_intrinsic_width(LayoutNode *node) {
     match(wsize) {
         case(SIZE_FIXED, fixed)
             //TODO: account for border
-            node->w = fixed.value + 2 * style.padding;
+            node->w = node->min_w = fixed.value + 2 * style.padding;
             break;
 
         case(SIZE_FILL)
         case(SIZE_FIT, fit) {
             match(style.direction) {
                 case(DIR_ROW) {
-                    i32 children_width = 0;
+                    node->w = node->min_w = 2 * style.padding + MAX(children.count - 1, 0) * style.spacing;
                     for (isize i = 0; i < children.count; ++i) {
                         LayoutNode *child = node_by_index(children.offset + i);
-                        children_width += child->w;
+                        node->w += child->w;
+                        node->min_w += child->min_w;
                     }
-                    node->w = children_width + 2 * style.padding + 
-                            MAX(children.count - 1, 0) * style.spacing;
                     break;
                 }
 
                 case(DIR_COL) {
                     i32 max_child_w = 0;
+                    i32 min_max_child_w = 0;
                     for (isize i = 0; i < children.count; ++i) {
                         LayoutNode *child = node_by_index(children.offset + i);
                         max_child_w = MAX(child->w, max_child_w);
+                        min_max_child_w = MAX(child->min_w, min_max_child_w);
                     }
                     node->w = max_child_w + 2 * style.padding;
+                    node->min_w = min_max_child_w + 2 * style.padding;
                     break;
                 }
             }
 
             node->w = CLAMP(node->w, fit.min, fit.max);
+            node->min_w = CLAMP(node->min_w, fit.min, fit.max);
         }
     }
+}
+
+void text_intrinsic_width(LayoutNode *node) {
+    unwrap_into(*node, LAYOUT_NODE_TEXT, text_container);
+    i32 text_width = 0;
+    i32 min_word_width = INT32_MAX;
+    i32 current_word_width = 0;
+
+    List(CodePoint) text = text_container.text;
+    for (isize i = 0; i < text.count; ++i) {
+        CodePoint cp = text.items[i];
+        text_width += cp.display_width;
+        current_word_width += cp.display_width;
+
+        if (cp_equal(cp, cp_from_byte(' '))) {
+            // multiple spaces in a row
+            if (current_word_width == 0) continue;
+
+            min_word_width = MIN(min_word_width, current_word_width);
+            current_word_width = 0;
+        }
+    }
+
+    node->w = text_width;
+    node->min_w = MIN(min_word_width, current_word_width);
 }
 
 b32 is_fill_w(LayoutNode *node);
@@ -414,14 +439,14 @@ void container_fill_width(LayoutNode *node) {
                 LayoutNode *child = node_by_index(children.offset + i);
                 match(*child) {
                     case(LAYOUT_NODE_TEXT) {
-                        child->w = content_width;
+                        child->w = MAX(content_width, child->min_w);
                         break;
                     }
                     case(LAYOUT_NODE_CONTAINER, child_container) {
                         Size wsize = child_container.config.style.size.w;
                         if (matches(wsize, SIZE_FILL)) {
                             unwrap_into(wsize, SIZE_FILL, fill);
-                            child->w = CLAMP(content_width, fill.min, fill.max);
+                            child->w = CLAMP(content_width, MAX(fill.min, node->min_w), fill.max);
                         }
                         break;
                     }
@@ -516,6 +541,8 @@ void distribute_space(i32 space, List(LayoutNodePtr) nodes) {
     // space < 0
 }
 
+void text_fill_width(LayoutNode *node) { UNUSED(node); }
+
 void container_intrinsic_height(LayoutNode *node) {
     unwrap_into(*node, LAYOUT_NODE_CONTAINER, container);
 
@@ -563,7 +590,10 @@ void container_intrinsic_height(LayoutNode *node) {
     }
 }
 
+void text_intrinsic_height(LayoutNode *node) { UNUSED(node); }
+
 void container_fill_height(LayoutNode *node) { UNUSED(node); }
+void text_fill_height(LayoutNode *node) { UNUSED(node); }
 
 i32 align_cross(Alignment align, i32 parent_size, i32 parent_padding, i32 child_size);
 
@@ -627,6 +657,8 @@ void container_positions(LayoutNode *node) {
     }
 }
 
+void text_positions(LayoutNode *node) { UNUSED(node); }
+
 i32 align_cross(Alignment align, i32 parent_size, i32 parent_padding, i32 child_size) {
     i32 parent_inner = parent_size - 2 * parent_padding;
     match (align) {
@@ -661,19 +693,6 @@ void container_commands(LayoutNode *node) {
     list_append(&Layout.cmds, tag0(LayoutCommand, LAYOUT_CMD_CLIP_END));
 }
 
-// void text_intrinsic_width(LayoutNode *node) {
-//     unwrap_into(*node, LAYOUT_NODE_TEXT, text_container);
-//     i32 text_width = 0;
-
-//     List(CodePoint) text = text_container.text;
-//     for (isize i = 0; i < text.count; ++i)
-//         text_width += text.items[i].display_width;
-
-//     node->w = text_width;
-// }
-
-#define X(ns, fn)   void ns##_##fn(LayoutNode *node) { UNUSED(node); }
-xmacro(text)
-#undef X
+void text_commands(LayoutNode *node) { UNUSED(node); }
 
 #endif
