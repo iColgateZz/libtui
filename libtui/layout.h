@@ -45,15 +45,15 @@ typedef struct {
             i32 max;
         } _SIZE_FILL;
     };
-} Size;
+} SizeStyle;
 
-#define FIXED(value)    tag(Size, SIZE_FIXED, {value})
-#define FIT(min, max)   tag(Size, SIZE_FIT, {min, max})
-#define FILL(min, max)  tag(Size, SIZE_FILL, {min, max})
+#define FIXED(value)    tag(SizeStyle, SIZE_FIXED, {value})
+#define FIT(min, max)   tag(SizeStyle, SIZE_FIT, {min, max})
+#define FILL(min, max)  tag(SizeStyle, SIZE_FILL, {min, max})
 
 typedef struct {
-    Size w;
-    Size h;
+    SizeStyle w;
+    SizeStyle h;
 } Sizing;
 
 typedef struct {
@@ -314,7 +314,7 @@ void layout_close() {
         X(namespace, positions)         \
         X(namespace, commands)
 
-#define X(ns, fn)   void ns##_##fn(LayoutNode *node);
+#define X(ns, fn)   static inline void ns##_##fn(LayoutNode *node);
 xmacro(layout)
 xmacro(container)
 xmacro(text)
@@ -327,7 +327,7 @@ void layout(LayoutNode *node) {
 }
 
 #define X(ns, fn)                               \
-void ns##_##fn(LayoutNode *node) {              \
+static inline void ns##_##fn(LayoutNode *node) {       \
     match(*node) {                              \
         case(LAYOUT_NODE_TEXT)                  \
             text_##fn(node);                    \
@@ -343,55 +343,80 @@ void ns##_##fn(LayoutNode *node) {              \
 xmacro(layout)
 #undef X
 
-//TODO: deduplicate width, height, position logic.
-void container_intrinsic_width(LayoutNode *node) {
+typedef enum {
+    DIM_X,
+    DIM_Y,
+} Dimension;
+
+typedef struct {
+    i32 min;
+    i32 max;
+} SizeRange;
+
+static inline Dimension dim_other(Dimension dim);
+static inline Dimension direction_main_dim(Direction direction);
+static inline i32 *pos(LayoutNode *node, Dimension dim);
+static inline i32 *size(LayoutNode *node, Dimension dim);
+static inline i32 *min_size(LayoutNode *node, Dimension dim);
+static inline SizeStyle size_style(LayoutNodeStyle style, Dimension dim);
+static inline SizeRange size_range(SizeStyle size);
+static inline i32 child_spacing(ChildrenIndices children, i32 spacing);
+static inline b32 is_fill(LayoutNode *node, Dimension dim);
+static inline i32 fill_max(LayoutNode *node, Dimension dim);
+static inline i32 fill_min(LayoutNode *node, Dimension dim);
+static void distribute_space(i32 space, List(LayoutNodePtr) nodes, Dimension dim);
+static inline i32 align_cross(Alignment align, i32 parent_size, i32 parent_padding, i32 childsize);
+static inline i32 align_along(Alignment align, i32 parent_size, i32 parent_padding, i32 children_size);
+static inline Alignment align_self(LayoutNode *node);
+
+static inline void layout_intrinsic_size(LayoutNode *node, Dimension dim) {
+    dim == DIM_X ? layout_intrinsic_width(node) : layout_intrinsic_height(node);
+}
+
+void container_intrinsic_size(LayoutNode *node, Dimension dim) {
     unwrap_into(*node, LAYOUT_NODE_CONTAINER, container);
 
     ChildrenIndices children = node->children;
     for (isize i = 0; i < children.count; ++i) {
-        LayoutNode *child = node_by_index(children.offset + i);
-        layout_intrinsic_width(child);
+        layout_intrinsic_size(node_by_index(children.offset + i), dim);
     }
 
     LayoutNodeStyle style = container.config.style;
-    Size wsize = style.size.w;
-    match(wsize) {
-        case(SIZE_FIXED, fixed)
-            node->w = node->min_w = fixed.value;
-            break;
-
-        case(SIZE_FILL)
-        case(SIZE_FIT, fit) {
-            match(style.direction) {
-                case(DIR_ROW) {
-                    node->w = node->min_w = 2 * style.padding + MAX(children.count - 1, 0) * style.spacing;
-                    for (isize i = 0; i < children.count; ++i) {
-                        LayoutNode *child = node_by_index(children.offset + i);
-                        node->w += child->w;
-                        node->min_w += child->min_w;
-                    }
-                    break;
-                }
-
-                case(DIR_COL) {
-                    i32 max_child_w = 0;
-                    i32 min_max_child_w = 0;
-                    for (isize i = 0; i < children.count; ++i) {
-                        LayoutNode *child = node_by_index(children.offset + i);
-                        max_child_w = MAX(child->w, max_child_w);
-                        min_max_child_w = MAX(child->min_w, min_max_child_w);
-                    }
-                    node->w = max_child_w + 2 * style.padding;
-                    node->min_w = min_max_child_w + 2 * style.padding;
-                    break;
-                }
-            }
-
-            node->w = CLAMP(node->w, fit.min, fit.max);
-            node->min_w = CLAMP(node->min_w, fit.min, fit.max);
-        }
+    SizeStyle sstyle = size_style(style, dim);
+    if (matches(sstyle, SIZE_FIXED)) {
+        unwrap_into(sstyle, SIZE_FIXED, fixed);
+        *size(node, dim) = *min_size(node, dim) = fixed.value;
+        return;
     }
+
+    i32 resolved_size =     0;
+    i32 resolved_min_size = 0;
+
+    if (dim == direction_main_dim(style.direction)) {
+        resolved_size =     2 * style.padding + child_spacing(children, style.spacing);
+        resolved_min_size = 2 * style.padding + child_spacing(children, style.spacing);
+        for (isize i = 0; i < children.count; ++i) {
+            LayoutNode *child = node_by_index(children.offset + i);
+            resolved_size += *size(child, dim);
+            resolved_min_size += *min_size(child, dim);
+        }
+    } else {
+        for (isize i = 0; i < children.count; ++i) {
+            LayoutNode *child = node_by_index(children.offset + i);
+            resolved_size = MAX(resolved_size, *size(child, dim));
+            resolved_min_size = MAX(resolved_min_size, *min_size(child, dim));
+        }
+        resolved_size +=     2 * style.padding;
+        resolved_min_size += 2 * style.padding;
+    }
+
+    SizeRange range = size_range(sstyle);
+    *size(node, dim) = CLAMP(resolved_size, range.min, range.max);
+    *min_size(node, dim) = CLAMP(resolved_min_size, range.min, range.max);
 }
+
+static inline void container_intrinsic_width(LayoutNode *node) { container_intrinsic_size(node, DIM_X); }
+static inline void container_intrinsic_height(LayoutNode *node) { container_intrinsic_size(node, DIM_Y); }
 
 void text_intrinsic_width(LayoutNode *node) {
     unwrap_into(*node, LAYOUT_NODE_TEXT, text_node);
@@ -428,31 +453,33 @@ void text_intrinsic_width(LayoutNode *node) {
     node->min_w = max_word_width;
 }
 
-b32 is_fill_w(LayoutNode *node);
-void distribute_space(i32 space, List(LayoutNodePtr) nodes);
+static inline void text_intrinsic_height(LayoutNode *node) { UNUSED(node); }
 
-void container_fill_width(LayoutNode *node) {
+static inline void layout_fill_size(LayoutNode *node, Dimension dim) {
+    dim == DIM_X ? layout_fill_width(node) : layout_fill_height(node);
+}
+
+void container_fill_size(LayoutNode *node, Dimension dim) {
     unwrap_into(*node, LAYOUT_NODE_CONTAINER, container);
 
     LayoutNodeStyle style = container.config.style;
     ChildrenIndices children = node->children;
-    match(style.direction) {
-        case(DIR_ROW) {
-            i32 children_width = 0;
-            for (isize i = 0; i < children.count; ++i) {
-                LayoutNode *child = node_by_index(children.offset + i);
-                children_width += child->w;
-            }
 
-            i32 remaining_width = node->w - children_width - 2 * style.padding
-                                  - MAX(children.count - 1, 0) * style.spacing;
+    if (dim == direction_main_dim(style.direction)) {
+        i32 children_size = 0;
+        for (isize i = 0; i < children.count; ++i) {
+            children_size += *size(node_by_index(children.offset + i), dim);
+        }
 
-            i32 fill_count = 0;
-            for (isize i = 0; i < children.count; ++i)
-                fill_count += is_fill_w(node_by_index(children.offset + i));
+        i32 remaining_size = *size(node, dim) - children_size - 2 * style.padding
+                             - child_spacing(children, style.spacing);
 
-            if (fill_count == 0) break;
+        i32 fill_count = 0;
+        for (isize i = 0; i < children.count; ++i) {
+            fill_count += is_fill(node_by_index(children.offset + i), dim);
+        }
 
+        if (fill_count > 0) {
             Scratch scratch = scratch_begin(&Layout.tmp);
             List(LayoutNodePtr) fill_list = {
                 .items = arena_push(scratch.arena, LayoutNode *, fill_count),
@@ -461,190 +488,50 @@ void container_fill_width(LayoutNode *node) {
 
             for (isize i = 0; i < children.count; ++i) {
                 LayoutNode *child = node_by_index(children.offset + i);
-                if (is_fill_w(child)) list_append(&fill_list, child);
+                if (is_fill(child, dim)) list_append(&fill_list, child);
             }
 
-            distribute_space(remaining_width, fill_list);
+            distribute_space(remaining_size, fill_list, dim);
             scratch_end(scratch);
-            break;
         }
-
-        case(DIR_COL) {
-            i32 content_width = node->w - 2 * style.padding;
-            for (isize i = 0; i < children.count; ++i) {
-                LayoutNode *child = node_by_index(children.offset + i);
-                match(*child) {
-                    case(LAYOUT_NODE_TEXT) {
-                        child->w = MAX(content_width, child->min_w);
-                        break;
+    } else {
+        i32 content_size = *size(node, dim) - 2 * style.padding;
+        for (isize i = 0; i < children.count; ++i) {
+            LayoutNode *child = node_by_index(children.offset + i);
+            match(*child) {
+                case(LAYOUT_NODE_TEXT) {
+                    if (dim == DIM_X) {
+                        *size(child, dim) = MAX(content_size, *min_size(child, dim));
                     }
-                    case(LAYOUT_NODE_CONTAINER, child_container) {
-                        Size wsize = child_container.config.style.size.w;
-                        if (matches(wsize, SIZE_FILL)) {
-                            unwrap_into(wsize, SIZE_FILL, fill);
-                            child->w = CLAMP(content_width, MAX(fill.min, child->min_w), fill.max);
-                        }
-                        break;
+                    break;
+                }
+                case(LAYOUT_NODE_CONTAINER, container) {
+                    SizeStyle sstyle = size_style(container.config.style, dim);
+                    if (matches(sstyle, SIZE_FILL)) {
+                        SizeRange range = size_range(sstyle);
+                        *size(child, dim) = CLAMP(content_size, MAX(range.min, *min_size(child, dim)), range.max);
                     }
+                    break;
                 }
             }
-
-            break;
         }
     }
 
     for (isize i = 0; i < children.count; ++i) {
-        layout_fill_width(node_by_index(children.offset + i));
+        layout_fill_size(node_by_index(children.offset + i), dim);
     }
 }
 
-b32 is_fill_w(LayoutNode *node) {
-    match(*node) {
-        case(LAYOUT_NODE_TEXT) return true;
-        case(LAYOUT_NODE_CONTAINER, container) return matches(container.config.style.size.w, SIZE_FILL);
-        otherwise UNREACHABLE("There is no other type!");
-    }
-    return false;
-}
+static inline void container_fill_width(LayoutNode *node) { container_fill_size(node, DIM_X); }
+static inline void container_fill_height(LayoutNode *node) { container_fill_size(node, DIM_Y); }
 
-i32 max_w(LayoutNode *node) {
-    match(*node) {
-        case(LAYOUT_NODE_TEXT) return node->w;
-        case(LAYOUT_NODE_CONTAINER, container) {
-            Size wsize = container.config.style.size.w;
-            assert(matches(wsize, SIZE_FILL) && "function is only for fill size");
-            unwrap_into(wsize, SIZE_FILL, fill);
-            return fill.max;
-        }
-        otherwise UNREACHABLE("There is no other type!");
-    }
-    return false;
-}
-
-i32 min_w(LayoutNode *node) {
-    match(*node) {
-        case(LAYOUT_NODE_TEXT) return node->min_w;
-        case(LAYOUT_NODE_CONTAINER, container) {
-            Size wsize = container.config.style.size.w;
-            assert(matches(wsize, SIZE_FILL) && "function is only for fill size");
-            unwrap_into(wsize, SIZE_FILL, fill);
-            return MAX(fill.min, node->min_w);
-        }
-        otherwise UNREACHABLE("There is no other type!");
-    }
-    return false;
-}
-
-void distribute_space(i32 space, List(LayoutNodePtr) nodes) {
-    while (space > 0) {
-        i32 smallest = INT32_MAX;
-        i32 next_smallest = INT32_MAX;
-        i32 smallest_count = 0;
-
-        for (isize i = 0; i < nodes.count; ++i) {
-            LayoutNode *current = nodes.items[i];
-            // filter out nodes that cannot grow anymore
-            if (current->w >= max_w(current)) continue;
-
-            if (current->w < smallest) {
-                smallest_count = 1;
-                next_smallest = smallest;
-                smallest = current->w;
-            } else if (current->w == smallest) {
-                smallest_count++;
-            } else if (current->w < next_smallest) {
-                next_smallest = current->w;
-            }
-        }
-
-        // no candidates for space distribution
-        if (smallest_count == 0) break;
-
-        i32 target_growth = next_smallest - smallest;
-        for (isize i = 0; i < nodes.count; ++i) {
-            LayoutNode *current = nodes.items[i];
-            if (current->w != smallest || current->w >= max_w(current)) continue;
-            target_growth = MIN(target_growth, max_w(current) - current->w);
-        }
-
-        // all fill nodes have same w -> next_smallest - smallest = 0 ->
-        // target_growth = 0. node growth may be unconstrained, so set it to 1.
-        // leads to more while loop iterations, but it should be fine.
-        if (target_growth == 0) target_growth = 1;
-
-        i32 space_for_distribution = MIN(space, target_growth * smallest_count);
-        i32 each = space_for_distribution / smallest_count;
-        i32 extra = space_for_distribution % smallest_count;
-
-        for (isize i = 0; i < nodes.count; ++i) {
-            LayoutNode *current = nodes.items[i];
-            if (current->w != smallest || current->w >= max_w(current)) continue;
-
-            i32 add = each + (extra > 0);
-            extra -= extra > 0;
-
-            current->w += add;
-            space -= add;
-        }
-    }
-
-    while (space < 0) {
-        i32 largest = 0;
-        i32 next_largest = 0;
-        i32 largest_count = 0;
-
-        for (isize i = 0; i < nodes.count; ++i) {
-            LayoutNode *current = nodes.items[i];
-            // filter out nodes that cannot shrink anymore
-            if (current->w <= min_w(current)) continue;
-
-            if (current->w > largest) {
-                largest_count = 1;
-                next_largest = largest;
-                largest = current->w;
-            } else if (current->w == largest) {
-                largest_count++;
-            } else if (current->w > next_largest) {
-                next_largest = current->w;
-            }
-        }
-
-        // no candidates for space distribution
-        if (largest_count == 0) break;
-
-        i32 target_growth = largest- next_largest;
-        for (isize i = 0; i < nodes.count; ++i) {
-            LayoutNode *current = nodes.items[i];
-            if (current->w != largest || current->w <= min_w(current)) continue;
-            target_growth = MIN(target_growth, current->w - min_w(current));
-        }
-
-        if (target_growth == 0) target_growth = 1;
-
-        i32 space_for_distribution = MIN(-space, target_growth * largest_count);
-        i32 each = space_for_distribution / largest_count;
-        i32 extra = space_for_distribution % largest_count;
-
-        for (isize i = 0; i < nodes.count; ++i) {
-            LayoutNode *current = nodes.items[i];
-            if (current->w != largest || current->w <= min_w(current)) continue;
-
-            i32 add = each + (extra > 0);
-            extra -= extra > 0;
-
-            current->w -= add;
-            space += add;
-        }
-    }
-}
-
-void text_fill_width(LayoutNode *node) { UNUSED(node); }
+static inline void text_fill_width(LayoutNode *node) { UNUSED(node); }
+static inline void text_fill_height(LayoutNode *node) { UNUSED(node); }
 
 void container_wrap_text(LayoutNode *node) {
     ChildrenIndices children = node->children;
     for (isize i = 0; i < children.count; ++i) {
-        LayoutNode *child = node_by_index(children.offset + i);
-        layout_wrap_text(child);
+        layout_wrap_text(node_by_index(children.offset + i));
     }
 }
 
@@ -679,222 +566,41 @@ void text_wrap_text(LayoutNode *node) {
     node->h = node->min_h = lines;
 }
 
-void container_intrinsic_height(LayoutNode *node) {
-    unwrap_into(*node, LAYOUT_NODE_CONTAINER, container);
-
-    ChildrenIndices children = node->children;
-    for (isize i = 0; i < children.count; ++i) {
-        LayoutNode *child = node_by_index(children.offset + i);
-        layout_intrinsic_height(child);
-    }
-
-    LayoutNodeStyle style = container.config.style;
-    Size hsize = style.size.h;
-    match(hsize) {
-        case(SIZE_FIXED, fixed)
-            node->h = node->min_h = fixed.value;
-            break;
-
-        case(SIZE_FILL)
-        case(SIZE_FIT, fit) {
-            match(style.direction) {
-                case(DIR_COL) {
-                    node->h = node->min_h = 2 * style.padding + MAX(children.count - 1, 0) * style.spacing;
-                    for (isize i = 0; i < children.count; ++i) {
-                        LayoutNode *child = node_by_index(children.offset + i);
-                        node->h += child->h;
-                        node->min_h += child->min_h;
-                    }
-                    break;
-                }
-                case(DIR_ROW) {
-                    i32 max_child_h = 0;
-                    i32 min_max_child_h = 0;
-                    for (isize i = 0; i < children.count; ++i) {
-                        LayoutNode *child = node_by_index(children.offset + i);
-                        max_child_h = MAX(child->h, max_child_h);
-                        min_max_child_h = MAX(child->min_h, min_max_child_h);
-                    }
-                    
-                    node->h = max_child_h + 2 * style.padding;
-                    node->min_h = min_max_child_h + 2 * style.padding;
-                    break;
-                }
-            }
-
-            node->h = CLAMP(node->h, fit.min, fit.max);
-            node->min_h = CLAMP(node->min_h, fit.min, fit.max);
-        }
-    }
-}
-
-void text_intrinsic_height(LayoutNode *node) { UNUSED(node); }
-
-void distribute_height_space(i32 space, List(LayoutNodePtr) nodes);
-b32 is_fill_h(LayoutNode *node);
-i32 max_h(LayoutNode *node);
-i32 min_h(LayoutNode *node);
-
-void container_fill_height(LayoutNode *node) {
-    unwrap_into(*node, LAYOUT_NODE_CONTAINER, container);
-
-    LayoutNodeStyle style = container.config.style;
-    ChildrenIndices children = node->children;
-    match(style.direction) {
-        case(DIR_COL) {
-            i32 children_height = 0;
-            for (isize i = 0; i < children.count; ++i) {
-                LayoutNode *child = node_by_index(children.offset + i);
-                children_height += child->h;
-            }
-
-            i32 remaining_height = node->h - children_height - 2 * style.padding
-                                   - MAX(children.count - 1, 0) * style.spacing;
-
-            i32 fill_count = 0;
-            for (isize i = 0; i < children.count; ++i)
-                fill_count += is_fill_h(node_by_index(children.offset + i));
-
-            if (fill_count == 0) break;
-
-            Scratch scratch = scratch_begin(&Layout.tmp);
-            List(LayoutNodePtr) fill_list = {
-                .items = arena_push(scratch.arena, LayoutNode *, fill_count),
-                .capacity = fill_count,
-            };
-
-            for (isize i = 0; i < children.count; ++i) {
-                LayoutNode *child = node_by_index(children.offset + i);
-                if (is_fill_h(child)) list_append(&fill_list, child);
-            }
-
-            distribute_height_space(remaining_height, fill_list);
-            scratch_end(scratch);
-            break;
-        }
-
-        case(DIR_ROW) {
-            i32 content_height = node->h - 2 * style.padding;
-            for (isize i = 0; i < children.count; ++i) {
-                LayoutNode *child = node_by_index(children.offset + i);
-                match(*child) {
-                    case(LAYOUT_NODE_TEXT) break;
-                    case(LAYOUT_NODE_CONTAINER, child_container) {
-                        Size hsize = child_container.config.style.size.h;
-                        if (matches(hsize, SIZE_FILL)) {
-                            unwrap_into(hsize, SIZE_FILL, fill);
-                            child->h = CLAMP(content_height, MAX(fill.min, child->min_h), fill.max);
-                        }
-                        break;
-                    }
-                }
-            }
-            break;
-        }
-    }
-
-    for (isize i = 0; i < children.count; ++i) {
-        layout_fill_height(node_by_index(children.offset + i));
-    }
-}
-void text_fill_height(LayoutNode *node) { UNUSED(node); }
-
-i32 align_cross(Alignment align, i32 parent_size, i32 parent_padding, i32 child_size);
-i32 align_along(Alignment align, i32 parent_size, i32 parent_padding, i32 children_size);
-Alignment child_align_self(LayoutNode *node);
-
 void container_positions(LayoutNode *node) {
     unwrap_into(*node, LAYOUT_NODE_CONTAINER, container);
 
     LayoutNodeStyle style = container.config.style;
-    i32 pos_x = node->x + style.padding;
-    i32 pos_y = node->y + style.padding;
     ChildrenIndices children = node->children;
+    Dimension main_dim = direction_main_dim(style.direction);
+    Dimension cross_dim = dim_other(main_dim);
+    i32 children_mainsize = child_spacing(children, style.spacing);
 
-    match(style.direction) {
-        case(DIR_ROW) {
-            i32 children_width = MAX(children.count - 1, 0) * style.spacing;
-            for (isize i = 0; i < children.count; ++i)
-                children_width += node_by_index(children.offset + i)->w;
-
-            pos_x += align_along(style.align_children, node->w, style.padding, children_width);
-            for (isize i = 0; i < children.count; ++i) {
-                LayoutNode *child = node_by_index(children.offset + i);
-                child->x = pos_x;
-                child->y = node->y + align_cross(
-                    child_align_self(child),
-                    node->h,
-                    style.padding,
-                    child->h
-                );
-
-                pos_x += child->w + style.spacing;
-            }
-            break;
-        }
-
-        case(DIR_COL) {
-            i32 children_height = MAX(children.count - 1, 0) * style.spacing;
-            for (isize i = 0; i < children.count; ++i)
-                children_height += node_by_index(children.offset + i)->h;
-
-            pos_y += align_along(style.align_children, node->h, style.padding, children_height);
-            for (isize i = 0; i < children.count; ++i) {
-                LayoutNode *child = node_by_index(children.offset + i);
-                child->y = pos_y;
-                child->x = node->x + align_cross(
-                    child_align_self(child),
-                    node->w,
-                    style.padding,
-                    child->w
-                );
-
-                pos_y += child->h + style.spacing;
-            }
-            break;
-        }
+    for (isize i = 0; i < children.count; ++i) {
+        children_mainsize += *size(node_by_index(children.offset + i), main_dim);
     }
+
+    i32 cursor = *pos(node, main_dim) + style.padding
+                 + align_along(style.align_children, *size(node, main_dim), style.padding, children_mainsize);
 
     for (isize i = 0; i < children.count; ++i) {
         LayoutNode *child = node_by_index(children.offset + i);
-        layout_positions(child);
+        *pos(child, main_dim) = cursor;
+        *pos(child, cross_dim) = *pos(node, cross_dim) + align_cross(
+            align_self(child),
+            *size(node, cross_dim),
+            style.padding,
+            *size(child, cross_dim)
+        );
+
+        cursor += *size(child, main_dim) + style.spacing;
+    }
+
+    for (isize i = 0; i < children.count; ++i) {
+        layout_positions(node_by_index(children.offset + i));
     }
 }
 
-void text_positions(LayoutNode *node) { UNUSED(node); }
-
-Alignment child_align_self(LayoutNode *node) {
-    match(*node) {
-        case(LAYOUT_NODE_CONTAINER, container) return container.config.style.align_self;
-        case(LAYOUT_NODE_TEXT) return (Alignment) {ALIGN_START};
-        otherwise UNREACHABLE("There is no other type!");
-    }
-
-    UNREACHABLE("It must always match against alignment");
-}
-
-i32 align_cross(Alignment align, i32 parent_size, i32 parent_padding, i32 child_size) {
-    i32 parent_inner = parent_size - 2 * parent_padding;
-    match (align) {
-        case(ALIGN_START)   return parent_padding;
-        case(ALIGN_CENTER)  return parent_padding + (parent_inner - child_size) / 2;
-        case(ALIGN_END)     return parent_padding + parent_inner - child_size;
-    }
-
-    UNREACHABLE("It must always match against alignment");
-}
-
-i32 align_along(Alignment align, i32 parent_size, i32 parent_padding, i32 children_size) {
-    i32 parent_inner = parent_size - 2 * parent_padding;
-    i32 remaining = MAX(parent_inner - children_size, 0);
-    match (align) {
-        case(ALIGN_START)   return 0;
-        case(ALIGN_CENTER)  return remaining / 2;
-        case(ALIGN_END)     return remaining;
-    }
-
-    UNREACHABLE("It must always match against alignment");
-}
+static inline void text_positions(LayoutNode *node) { UNUSED(node); }
 
 void container_commands(LayoutNode *node) {
     unwrap_into(*node, LAYOUT_NODE_CONTAINER, container);
@@ -966,44 +672,117 @@ void text_commands(LayoutNode *node) {
     }));
 }
 
-b32 is_fill_h(LayoutNode *node) {
+static inline Alignment align_self(LayoutNode *node) {
     match(*node) {
-        case(LAYOUT_NODE_TEXT) return false;
-        case(LAYOUT_NODE_CONTAINER, container) return matches(container.config.style.size.h, SIZE_FILL);
+        case(LAYOUT_NODE_CONTAINER, container) return container.config.style.align_self;
+        case(LAYOUT_NODE_TEXT) return (Alignment) {ALIGN_START};
+        otherwise UNREACHABLE("There is no other type!");
+    }
+    UNREACHABLE("It must always match against alignment");
+}
+
+static inline 
+i32 align_cross(Alignment align, i32 parent_size, i32 parent_padding, i32 childsize) {
+    i32 parent_inner = parent_size - 2 * parent_padding;
+    match (align) {
+        case(ALIGN_START)   return parent_padding;
+        case(ALIGN_CENTER)  return parent_padding + (parent_inner - childsize) / 2;
+        case(ALIGN_END)     return parent_padding + parent_inner - childsize;
+    }
+
+    UNREACHABLE("It must always match against alignment");
+}
+
+static inline 
+i32 align_along(Alignment align, i32 parent_size, i32 parent_padding, i32 children_size) {
+    i32 parent_inner = parent_size - 2 * parent_padding;
+    i32 remaining = MAX(parent_inner - children_size, 0);
+    match (align) {
+        case(ALIGN_START)   return 0;
+        case(ALIGN_CENTER)  return remaining / 2;
+        case(ALIGN_END)     return remaining;
+    }
+
+    UNREACHABLE("It must always match against alignment");
+}
+
+static inline Dimension dim_other(Dimension dim) {
+    return dim == DIM_X ? DIM_Y : DIM_X;
+}
+
+static inline Dimension direction_main_dim(Direction direction) {
+    switch (direction.type) {
+        case DIR_ROW: return DIM_X;
+        case DIR_COL: return DIM_Y;
+    }
+    UNREACHABLE("Unknown direction");
+}
+
+static inline i32 *pos(LayoutNode *node, Dimension dim) {
+    return dim == DIM_X ? &node->x : &node->y;
+}
+
+static inline i32 *size(LayoutNode *node, Dimension dim) {
+    return dim == DIM_X ? &node->w : &node->h;
+}
+
+static inline i32 *min_size(LayoutNode *node, Dimension dim) {
+    return dim == DIM_X ? &node->min_w : &node->min_h;
+}
+
+static inline SizeStyle size_style(LayoutNodeStyle style, Dimension dim) {
+    return dim == DIM_X ? style.size.w : style.size.h;
+}
+
+static inline SizeRange size_range(SizeStyle size) {
+    switch (size.type) {
+        case SIZE_FIXED: return (SizeRange) {size._SIZE_FIXED.value, size._SIZE_FIXED.value};
+        case SIZE_FIT:   return (SizeRange) {size._SIZE_FIT.min, size._SIZE_FIT.max};
+        case SIZE_FILL:  return (SizeRange) {size._SIZE_FILL.min, size._SIZE_FILL.max};
+    }
+    UNREACHABLE("Unknown size type");
+}
+
+static inline i32 child_spacing(ChildrenIndices children, i32 spacing) {
+    return MAX(children.count - 1, 0) * spacing;
+}
+
+static inline b32 is_fill(LayoutNode *node, Dimension dim) {
+    match(*node) {
+        case(LAYOUT_NODE_TEXT) return dim == DIM_X;
+        case(LAYOUT_NODE_CONTAINER, container) return matches(size_style(container.config.style, dim), SIZE_FILL);
         otherwise UNREACHABLE("There is no other type!");
     }
     return false;
 }
 
-i32 max_h(LayoutNode *node) {
+static inline i32 fill_max(LayoutNode *node, Dimension dim) {
     match(*node) {
-        case(LAYOUT_NODE_TEXT) return node->h;
+        case(LAYOUT_NODE_TEXT) return *size(node, dim);
         case(LAYOUT_NODE_CONTAINER, container) {
-            Size hsize = container.config.style.size.h;
-            assert(matches(hsize, SIZE_FILL) && "function is only for fill size");
-            unwrap_into(hsize, SIZE_FILL, fill);
-            return fill.max;
+            SizeStyle size = size_style(container.config.style, dim);
+            assert(matches(size, SIZE_FILL) && "function is only for fill size");
+            return size_range(size).max;
         }
         otherwise UNREACHABLE("There is no other type!");
     }
     return false;
 }
 
-i32 min_h(LayoutNode *node) {
+static inline i32 fill_min(LayoutNode *node, Dimension dim) {
     match(*node) {
-        case(LAYOUT_NODE_TEXT) return node->min_h;
+        case(LAYOUT_NODE_TEXT) return *min_size(node, dim);
         case(LAYOUT_NODE_CONTAINER, container) {
-            Size hsize = container.config.style.size.h;
-            assert(matches(hsize, SIZE_FILL) && "function is only for fill size");
-            unwrap_into(hsize, SIZE_FILL, fill);
-            return MAX(fill.min, node->min_h);
+            SizeStyle size = size_style(container.config.style, dim);
+            assert(matches(size, SIZE_FILL) && "function is only for fill size");
+            return MAX(size_range(size).min, *min_size(node, dim));
         }
         otherwise UNREACHABLE("There is no other type!");
     }
     return false;
 }
 
-void distribute_height_space(i32 space, List(LayoutNodePtr) nodes) {
+static void distribute_space(i32 space, List(LayoutNodePtr) nodes, Dimension dim) {
     while (space > 0) {
         i32 smallest = INT32_MAX;
         i32 next_smallest = INT32_MAX;
@@ -1011,16 +790,18 @@ void distribute_height_space(i32 space, List(LayoutNodePtr) nodes) {
 
         for (isize i = 0; i < nodes.count; ++i) {
             LayoutNode *current = nodes.items[i];
-            if (current->h >= max_h(current)) continue;
+            i32 current_size = *size(current, dim);
 
-            if (current->h < smallest) {
+            if (current_size >= fill_max(current, dim)) continue;
+
+            if (current_size < smallest) {
                 smallest_count = 1;
                 next_smallest = smallest;
-                smallest = current->h;
-            } else if (current->h == smallest) {
+                smallest = current_size;
+            } else if (current_size == smallest) {
                 smallest_count++;
-            } else if (current->h < next_smallest) {
-                next_smallest = current->h;
+            } else if (current_size < next_smallest) {
+                next_smallest = current_size;
             }
         }
 
@@ -1029,8 +810,9 @@ void distribute_height_space(i32 space, List(LayoutNodePtr) nodes) {
         i32 target_growth = next_smallest - smallest;
         for (isize i = 0; i < nodes.count; ++i) {
             LayoutNode *current = nodes.items[i];
-            if (current->h != smallest || current->h >= max_h(current)) continue;
-            target_growth = MIN(target_growth, max_h(current) - current->h);
+            i32 current_size = *size(current, dim);
+            if (current_size != smallest || current_size >= fill_max(current, dim)) continue;
+            target_growth = MIN(target_growth, fill_max(current, dim) - current_size);
         }
 
         if (target_growth == 0) target_growth = 1;
@@ -1041,12 +823,13 @@ void distribute_height_space(i32 space, List(LayoutNodePtr) nodes) {
 
         for (isize i = 0; i < nodes.count; ++i) {
             LayoutNode *current = nodes.items[i];
-            if (current->h != smallest || current->h >= max_h(current)) continue;
+            i32 *current_size = size(current, dim);
+            if (*current_size != smallest || *current_size >= fill_max(current, dim)) continue;
 
             i32 add = each + (extra > 0);
             extra -= extra > 0;
 
-            current->h += add;
+            *current_size += add;
             space -= add;
         }
     }
@@ -1058,16 +841,18 @@ void distribute_height_space(i32 space, List(LayoutNodePtr) nodes) {
 
         for (isize i = 0; i < nodes.count; ++i) {
             LayoutNode *current = nodes.items[i];
-            if (current->h <= min_h(current)) continue;
+            i32 current_size = *size(current, dim);
 
-            if (current->h > largest) {
+            if (current_size <= fill_min(current, dim)) continue;
+
+            if (current_size > largest) {
                 largest_count = 1;
                 next_largest = largest;
-                largest = current->h;
-            } else if (current->h == largest) {
+                largest = current_size;
+            } else if (current_size == largest) {
                 largest_count++;
-            } else if (current->h > next_largest) {
-                next_largest = current->h;
+            } else if (current_size > next_largest) {
+                next_largest = current_size;
             }
         }
 
@@ -1076,8 +861,9 @@ void distribute_height_space(i32 space, List(LayoutNodePtr) nodes) {
         i32 target_shrink = largest - next_largest;
         for (isize i = 0; i < nodes.count; ++i) {
             LayoutNode *current = nodes.items[i];
-            if (current->h != largest || current->h <= min_h(current)) continue;
-            target_shrink = MIN(target_shrink, current->h - min_h(current));
+            i32 current_size = *size(current, dim);
+            if (current_size != largest || current_size <= fill_min(current, dim)) continue;
+            target_shrink = MIN(target_shrink, current_size - fill_min(current, dim));
         }
 
         if (target_shrink == 0) target_shrink = 1;
@@ -1088,12 +874,13 @@ void distribute_height_space(i32 space, List(LayoutNodePtr) nodes) {
 
         for (isize i = 0; i < nodes.count; ++i) {
             LayoutNode *current = nodes.items[i];
-            if (current->h != largest || current->h <= min_h(current)) continue;
+            i32 *current_size = size(current, dim);
+            if (*current_size != largest || *current_size <= fill_min(current, dim)) continue;
 
             i32 sub = each + (extra > 0);
             extra -= extra > 0;
 
-            current->h -= sub;
+            *current_size -= sub;
             space += sub;
         }
     }
