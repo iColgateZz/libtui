@@ -93,22 +93,29 @@ typedef struct {
 } ContainerConfig;
 
 typedef struct {
-
+    Color color;
 } TextStyle;
+
+typedef struct {
+    //TODO: The data type should be Slice(CodePoint)
+    List(CodePoint) text;
+    TextStyle style;
+} TextConfig;
 
 typedef i32 LayoutNodeID;
 
 typedef struct {
     i32 offset;
     i32 count;
-} ChildrenIndexSlice;
+} ChildrenIndices;
 
 typedef struct {
+    //TODO: using i16 is probably more than enough
     LayoutNodeID parent;
     i32 x, y; // resolved coords
     i32 w, h; // resolved w, h
     i32 min_w, min_h;
-    ChildrenIndexSlice children;
+    ChildrenIndices children;
     
     packed_enum {
         //TODO: for custom nodes there may be 2 variants:
@@ -125,8 +132,7 @@ typedef struct {
             ContainerConfig config;
         } _LAYOUT_NODE_CONTAINER;
         struct {
-            List(CodePoint) text;
-            TextStyle style;
+            TextConfig config;
         } _LAYOUT_NODE_TEXT;
     };
 } LayoutNode;
@@ -134,7 +140,7 @@ typedef struct {
 typedef struct {
     packed_enum {
         LAYOUT_CMD_RECT,
-        // LAYOUT_CMD_TEXT,
+        LAYOUT_CMD_TEXT,
         LAYOUT_CMD_CLIP_START,
         LAYOUT_CMD_CLIP_END,
         // LAYOUT_CMD_BORDER, // pass concrete codepoints to draw
@@ -144,6 +150,11 @@ typedef struct {
             i32 x, y, w, h;
             Color color;
         } _LAYOUT_CMD_RECT;
+        struct {
+            i32 x, y;
+            List(CodePoint) text;
+            TextStyle style;
+        } _LAYOUT_CMD_TEXT;
         struct {
             i32 x, y, w, h;
         } _LAYOUT_CMD_CLIP_START;
@@ -164,19 +175,23 @@ list_def(LayoutCommand);
 
 void layout_begin(i32 w, i32 h);
 List(LayoutCommand) layout_end();
-void layout_open(ContainerConfig conf);
+void layout_open_text(TextConfig conf);
+void layout_open_container(ContainerConfig conf);
 void layout_close();
 // hit testing, event handling, and state updates
 // happen after layout phase
 
 static u8 _latch = 0;
 
-#define Container(...)                                  \
-    for (_latch = (layout_open((ContainerConfig) {      \
-        .style.size.w = FIT(0, INT32_MAX),              \
-        .style.size.h = FIT(0, INT32_MAX),              \
-        __VA_ARGS__                                     \
+#define Container(...)                                              \
+    for (_latch = (layout_open_container((ContainerConfig) {        \
+        .style.size.w = FIT(0, INT32_MAX),                          \
+        .style.size.h = FIT(0, INT32_MAX),                          \
+        __VA_ARGS__                                                 \
     }), 0); _latch < 1; _latch = 1, layout_close())
+
+#define Text(...)                  \
+    for (_latch = (layout_open_text((TextConfig) {__VA_ARGS__}), 0); _latch < 1; _latch = 1, layout_close())
 
 #endif
 
@@ -227,7 +242,7 @@ void layout_begin(i32 w, i32 h) {
     Layout.cmds.count = 0;
 
     // open implicit root element
-    layout_open((ContainerConfig) {
+    layout_open_container((ContainerConfig) {
         .style = {
             .size = {.w = FIXED(w), .h = FIXED(h)},
             .direction = {DIR_COL},
@@ -248,7 +263,13 @@ List(LayoutCommand) layout_end() {
     return Layout.cmds;
 }
 
-void layout_open(ContainerConfig conf) {
+void layout_open_text(TextConfig conf) {
+    LayoutNode node = tag(LayoutNode, LAYOUT_NODE_TEXT, {.config = conf});
+    LayoutNodeID id = node_push(node);
+    list_append(&Layout.open_stack, id);
+}
+
+void layout_open_container(ContainerConfig conf) {
     LayoutNode node = tag(LayoutNode, LAYOUT_NODE_CONTAINER, {.config = conf});
     LayoutNodeID id = node_push(node);
     list_append(&Layout.open_stack, id);
@@ -321,7 +342,7 @@ xmacro(layout)
 void container_intrinsic_width(LayoutNode *node) {
     unwrap_into(*node, LAYOUT_NODE_CONTAINER, container);
 
-    ChildrenIndexSlice children = node->children;
+    ChildrenIndices children = node->children;
     for (isize i = 0; i < children.count; ++i) {
         LayoutNode *child = node_by_index(children.offset + i);
         layout_intrinsic_width(child);
@@ -331,8 +352,7 @@ void container_intrinsic_width(LayoutNode *node) {
     Size wsize = style.size.w;
     match(wsize) {
         case(SIZE_FIXED, fixed)
-            //TODO: account for border
-            node->w = node->min_w = fixed.value + 2 * style.padding;
+            node->w = node->min_w = fixed.value;
             break;
 
         case(SIZE_FILL)
@@ -369,28 +389,38 @@ void container_intrinsic_width(LayoutNode *node) {
 }
 
 void text_intrinsic_width(LayoutNode *node) {
-    unwrap_into(*node, LAYOUT_NODE_TEXT, text_container);
-    i32 text_width = 0;
-    i32 min_word_width = INT32_MAX;
+    unwrap_into(*node, LAYOUT_NODE_TEXT, text_node);
+    i32 line_width = 0;
+    i32 max_line_width = 0;
+    i32 max_word_width = 0;
     i32 current_word_width = 0;
 
-    List(CodePoint) text = text_container.text;
+    List(CodePoint) text = text_node.config.text;
     for (isize i = 0; i < text.count; ++i) {
         CodePoint cp = text.items[i];
-        text_width += cp.display_width;
-        current_word_width += cp.display_width;
+        if (cp_equal(cp, cp_from_byte('\n'))) {
+            max_line_width = MAX(max_line_width, line_width);
+            max_word_width = MAX(max_word_width, current_word_width);
+            line_width = 0;
+            current_word_width = 0;
+            continue;
+        }
+
+        line_width += cp.display_width;
 
         if (cp_equal(cp, cp_from_byte(' '))) {
-            // multiple spaces in a row
-            if (current_word_width == 0) continue;
-
-            min_word_width = MIN(min_word_width, current_word_width);
+            max_word_width = MAX(max_word_width, current_word_width);
             current_word_width = 0;
+        } else {
+            current_word_width += cp.display_width;
         }
     }
 
-    node->w = text_width;
-    node->min_w = MIN(min_word_width, current_word_width);
+    max_line_width = MAX(max_line_width, line_width);
+    max_word_width = MAX(max_word_width, current_word_width);
+
+    node->w = max_line_width;
+    node->min_w = max_word_width;
 }
 
 b32 is_fill_w(LayoutNode *node);
@@ -400,7 +430,7 @@ void container_fill_width(LayoutNode *node) {
     unwrap_into(*node, LAYOUT_NODE_CONTAINER, container);
 
     LayoutNodeStyle style = container.config.style;
-    ChildrenIndexSlice children = node->children;
+    ChildrenIndices children = node->children;
     match(style.direction) {
         case(DIR_ROW) {
             i32 children_width = 0;
@@ -447,7 +477,7 @@ void container_fill_width(LayoutNode *node) {
                         Size wsize = child_container.config.style.size.w;
                         if (matches(wsize, SIZE_FILL)) {
                             unwrap_into(wsize, SIZE_FILL, fill);
-                            child->w = CLAMP(content_width, MAX(fill.min, node->min_w), fill.max);
+                            child->w = CLAMP(content_width, MAX(fill.min, child->min_w), fill.max);
                         }
                         break;
                     }
@@ -586,7 +616,7 @@ void distribute_space(i32 space, List(LayoutNodePtr) nodes) {
 
         if (target_growth == 0) target_growth = 1;
 
-        i32 space_for_distribution = MAX(space, target_growth * largest_count);
+        i32 space_for_distribution = MIN(-space, target_growth * largest_count);
         i32 each = space_for_distribution / largest_count;
         i32 extra = space_for_distribution % largest_count;
 
@@ -606,7 +636,7 @@ void distribute_space(i32 space, List(LayoutNodePtr) nodes) {
 void text_fill_width(LayoutNode *node) { UNUSED(node); }
 
 void container_wrap_text(LayoutNode *node) {
-    ChildrenIndexSlice children = node->children;
+    ChildrenIndices children = node->children;
     for (isize i = 0; i < children.count; ++i) {
         LayoutNode *child = node_by_index(children.offset + i);
         layout_wrap_text(child);
@@ -614,14 +644,40 @@ void container_wrap_text(LayoutNode *node) {
 }
 
 void text_wrap_text(LayoutNode *node) {
-    unwrap_into(*node, LAYOUT_NODE_TEXT, text);
-    //TODO: calculate height based on the now-known width
+    unwrap_into(*node, LAYOUT_NODE_TEXT, text_node);
+    List(CodePoint) text = text_node.config.text;
+    if (text.count == 0) {
+        node->h = node->min_h = 0;
+        return;
+    }
+
+    i32 max_width = MAX(node->w, 1);
+    i32 lines = 1;
+    i32 line_width = 0;
+
+    for (isize i = 0; i < text.count; ++i) {
+        CodePoint cp = text.items[i];
+        if (cp_equal(cp, cp_from_byte('\n'))) {
+            lines++;
+            line_width = 0;
+            continue;
+        }
+
+        if (line_width > 0 && line_width + cp.display_width > max_width) {
+            lines++;
+            line_width = 0;
+        }
+
+        line_width += cp.display_width;
+    }
+
+    node->h = node->min_h = lines;
 }
 
 void container_intrinsic_height(LayoutNode *node) {
     unwrap_into(*node, LAYOUT_NODE_CONTAINER, container);
 
-    ChildrenIndexSlice children = node->children;
+    ChildrenIndices children = node->children;
     for (isize i = 0; i < children.count; ++i) {
         LayoutNode *child = node_by_index(children.offset + i);
         layout_intrinsic_height(child);
@@ -631,8 +687,7 @@ void container_intrinsic_height(LayoutNode *node) {
     Size hsize = style.size.h;
     match(hsize) {
         case(SIZE_FIXED, fixed)
-            //TODO: account for border
-            node->h = node->min_h = fixed.value + 2 * style.padding;
+            node->h = node->min_h = fixed.value;
             break;
 
         case(SIZE_FILL)
@@ -670,10 +725,78 @@ void container_intrinsic_height(LayoutNode *node) {
 
 void text_intrinsic_height(LayoutNode *node) { UNUSED(node); }
 
-void container_fill_height(LayoutNode *node) { UNUSED(node); }
+void distribute_height_space(i32 space, List(LayoutNodePtr) nodes);
+b32 is_fill_h(LayoutNode *node);
+i32 max_h(LayoutNode *node);
+i32 min_h(LayoutNode *node);
+
+void container_fill_height(LayoutNode *node) {
+    unwrap_into(*node, LAYOUT_NODE_CONTAINER, container);
+
+    LayoutNodeStyle style = container.config.style;
+    ChildrenIndices children = node->children;
+    match(style.direction) {
+        case(DIR_COL) {
+            i32 children_height = 0;
+            for (isize i = 0; i < children.count; ++i) {
+                LayoutNode *child = node_by_index(children.offset + i);
+                children_height += child->h;
+            }
+
+            i32 remaining_height = node->h - children_height - 2 * style.padding
+                                   - MAX(children.count - 1, 0) * style.spacing;
+
+            i32 fill_count = 0;
+            for (isize i = 0; i < children.count; ++i)
+                fill_count += is_fill_h(node_by_index(children.offset + i));
+
+            if (fill_count == 0) break;
+
+            Scratch scratch = scratch_begin(&Layout.tmp);
+            List(LayoutNodePtr) fill_list = {
+                .items = arena_push(scratch.arena, LayoutNode *, fill_count),
+                .capacity = fill_count,
+            };
+
+            for (isize i = 0; i < children.count; ++i) {
+                LayoutNode *child = node_by_index(children.offset + i);
+                if (is_fill_h(child)) list_append(&fill_list, child);
+            }
+
+            distribute_height_space(remaining_height, fill_list);
+            scratch_end(scratch);
+            break;
+        }
+
+        case(DIR_ROW) {
+            i32 content_height = node->h - 2 * style.padding;
+            for (isize i = 0; i < children.count; ++i) {
+                LayoutNode *child = node_by_index(children.offset + i);
+                match(*child) {
+                    case(LAYOUT_NODE_TEXT) break;
+                    case(LAYOUT_NODE_CONTAINER, child_container) {
+                        Size hsize = child_container.config.style.size.h;
+                        if (matches(hsize, SIZE_FILL)) {
+                            unwrap_into(hsize, SIZE_FILL, fill);
+                            child->h = CLAMP(content_height, MAX(fill.min, child->min_h), fill.max);
+                        }
+                        break;
+                    }
+                }
+            }
+            break;
+        }
+    }
+
+    for (isize i = 0; i < children.count; ++i) {
+        layout_fill_height(node_by_index(children.offset + i));
+    }
+}
 void text_fill_height(LayoutNode *node) { UNUSED(node); }
 
 i32 align_cross(Alignment align, i32 parent_size, i32 parent_padding, i32 child_size);
+i32 align_along(Alignment align, i32 parent_size, i32 parent_padding, i32 children_size);
+Alignment child_align_self(LayoutNode *node);
 
 void container_positions(LayoutNode *node) {
     unwrap_into(*node, LAYOUT_NODE_CONTAINER, container);
@@ -681,25 +804,24 @@ void container_positions(LayoutNode *node) {
     LayoutNodeStyle style = container.config.style;
     i32 pos_x = node->x + style.padding;
     i32 pos_y = node->y + style.padding;
-    ChildrenIndexSlice children = node->children;
+    ChildrenIndices children = node->children;
 
     match(style.direction) {
         case(DIR_ROW) {
+            i32 children_width = MAX(children.count - 1, 0) * style.spacing;
+            for (isize i = 0; i < children.count; ++i)
+                children_width += node_by_index(children.offset + i)->w;
+
+            pos_x += align_along(style.align_children, node->w, style.padding, children_width);
             for (isize i = 0; i < children.count; ++i) {
                 LayoutNode *child = node_by_index(children.offset + i);
                 child->x = pos_x;
-
-                match(*child) {
-                    case(LAYOUT_NODE_TEXT) assert(false && "currently not supported");
-                    case(LAYOUT_NODE_CONTAINER, child_container) {
-                        child->y = node->y + align_cross(
-                            child_container.config.style.align_self,
-                            node->h,
-                            style.padding,
-                            child->h
-                        );
-                    }
-                }
+                child->y = node->y + align_cross(
+                    child_align_self(child),
+                    node->h,
+                    style.padding,
+                    child->h
+                );
 
                 pos_x += child->w + style.spacing;
             }
@@ -707,21 +829,20 @@ void container_positions(LayoutNode *node) {
         }
 
         case(DIR_COL) {
+            i32 children_height = MAX(children.count - 1, 0) * style.spacing;
+            for (isize i = 0; i < children.count; ++i)
+                children_height += node_by_index(children.offset + i)->h;
+
+            pos_y += align_along(style.align_children, node->h, style.padding, children_height);
             for (isize i = 0; i < children.count; ++i) {
                 LayoutNode *child = node_by_index(children.offset + i);
                 child->y = pos_y;
-
-                match(*child) {
-                    case(LAYOUT_NODE_TEXT) assert(false && "currently not supported");
-                    case(LAYOUT_NODE_CONTAINER, child_container) {
-                        child->x = node->x + align_cross(
-                            child_container.config.style.align_self,
-                            node->w,
-                            style.padding,
-                            child->w
-                        );
-                    }
-                }
+                child->x = node->x + align_cross(
+                    child_align_self(child),
+                    node->w,
+                    style.padding,
+                    child->w
+                );
 
                 pos_y += child->h + style.spacing;
             }
@@ -737,12 +858,34 @@ void container_positions(LayoutNode *node) {
 
 void text_positions(LayoutNode *node) { UNUSED(node); }
 
+Alignment child_align_self(LayoutNode *node) {
+    match(*node) {
+        case(LAYOUT_NODE_CONTAINER, container) return container.config.style.align_self;
+        case(LAYOUT_NODE_TEXT) return (Alignment) {ALIGN_START};
+        otherwise UNREACHABLE("There is no other type!");
+    }
+
+    UNREACHABLE("It must always match against alignment");
+}
+
 i32 align_cross(Alignment align, i32 parent_size, i32 parent_padding, i32 child_size) {
     i32 parent_inner = parent_size - 2 * parent_padding;
     match (align) {
         case(ALIGN_START)   return parent_padding;
         case(ALIGN_CENTER)  return parent_padding + (parent_inner - child_size) / 2;
         case(ALIGN_END)     return parent_padding + parent_inner - child_size;
+    }
+
+    UNREACHABLE("It must always match against alignment");
+}
+
+i32 align_along(Alignment align, i32 parent_size, i32 parent_padding, i32 children_size) {
+    i32 parent_inner = parent_size - 2 * parent_padding;
+    i32 remaining = MAX(parent_inner - children_size, 0);
+    match (align) {
+        case(ALIGN_START)   return 0;
+        case(ALIGN_CENTER)  return remaining / 2;
+        case(ALIGN_END)     return remaining;
     }
 
     UNREACHABLE("It must always match against alignment");
@@ -762,7 +905,7 @@ void container_commands(LayoutNode *node) {
             .color = container.config.style.color
     }));
 
-    ChildrenIndexSlice children = node->children;
+    ChildrenIndices children = node->children;
     for (isize i = 0; i < children.count; ++i) {
         LayoutNode *child = node_by_index(children.offset + i);
         layout_commands(child);
@@ -771,6 +914,186 @@ void container_commands(LayoutNode *node) {
     list_append(&Layout.cmds, tag0(LayoutCommand, LAYOUT_CMD_CLIP_END));
 }
 
-void text_commands(LayoutNode *node) { UNUSED(node); }
+void text_commands(LayoutNode *node) {
+    unwrap_into(*node, LAYOUT_NODE_TEXT, text_node);
+    List(CodePoint) text = text_node.config.text;
+    if (text.count == 0) return;
+
+    i32 max_width = MAX(node->w, 1);
+    i32 line_start = 0;
+    i32 line_count = 0;
+    i32 line_width = 0;
+    i32 y = node->y;
+
+    for (isize i = 0; i < text.count; ++i) {
+        CodePoint cp = text.items[i];
+        b32 force_break = cp_equal(cp, cp_from_byte('\n'));
+        b32 wrap_break = line_width > 0 && line_width + cp.display_width > max_width;
+
+        if (force_break || wrap_break) {
+            list_append(&Layout.cmds, tag(LayoutCommand, LAYOUT_CMD_TEXT, {
+                .x = node->x, .y = y,
+                .text = {
+                    .items = text.items + line_start,
+                    .count = line_count,
+                    .capacity = line_count,
+                },
+                .style = text_node.config.style,
+            }));
+
+            y++;
+            line_start = force_break ? i + 1 : i;
+            line_count = 0;
+            line_width = 0;
+            if (force_break) continue;
+        }
+
+        line_count++;
+        line_width += cp.display_width;
+    }
+
+    list_append(&Layout.cmds, tag(LayoutCommand, LAYOUT_CMD_TEXT, {
+        .x = node->x, .y = y,
+        .text = {
+            .items = text.items + line_start,
+            .count = line_count,
+            .capacity = line_count,
+        },
+        .style = text_node.config.style,
+    }));
+}
+
+b32 is_fill_h(LayoutNode *node) {
+    match(*node) {
+        case(LAYOUT_NODE_TEXT) return false;
+        case(LAYOUT_NODE_CONTAINER, container) return matches(container.config.style.size.h, SIZE_FILL);
+        otherwise UNREACHABLE("There is no other type!");
+    }
+    return false;
+}
+
+i32 max_h(LayoutNode *node) {
+    match(*node) {
+        case(LAYOUT_NODE_TEXT) return node->h;
+        case(LAYOUT_NODE_CONTAINER, container) {
+            Size hsize = container.config.style.size.h;
+            assert(matches(hsize, SIZE_FILL) && "function is only for fill size");
+            unwrap_into(hsize, SIZE_FILL, fill);
+            return fill.max;
+        }
+        otherwise UNREACHABLE("There is no other type!");
+    }
+    return false;
+}
+
+i32 min_h(LayoutNode *node) {
+    match(*node) {
+        case(LAYOUT_NODE_TEXT) return node->min_h;
+        case(LAYOUT_NODE_CONTAINER, container) {
+            Size hsize = container.config.style.size.h;
+            assert(matches(hsize, SIZE_FILL) && "function is only for fill size");
+            unwrap_into(hsize, SIZE_FILL, fill);
+            return MAX(fill.min, node->min_h);
+        }
+        otherwise UNREACHABLE("There is no other type!");
+    }
+    return false;
+}
+
+void distribute_height_space(i32 space, List(LayoutNodePtr) nodes) {
+    while (space > 0) {
+        i32 smallest = INT32_MAX;
+        i32 next_smallest = INT32_MAX;
+        i32 smallest_count = 0;
+
+        for (isize i = 0; i < nodes.count; ++i) {
+            LayoutNode *current = nodes.items[i];
+            if (current->h >= max_h(current)) continue;
+
+            if (current->h < smallest) {
+                smallest_count = 1;
+                next_smallest = smallest;
+                smallest = current->h;
+            } else if (current->h == smallest) {
+                smallest_count++;
+            } else if (current->h < next_smallest) {
+                next_smallest = current->h;
+            }
+        }
+
+        if (smallest_count == 0) break;
+
+        i32 target_growth = next_smallest - smallest;
+        for (isize i = 0; i < nodes.count; ++i) {
+            LayoutNode *current = nodes.items[i];
+            if (current->h != smallest || current->h >= max_h(current)) continue;
+            target_growth = MIN(target_growth, max_h(current) - current->h);
+        }
+
+        if (target_growth == 0) target_growth = 1;
+
+        i32 space_for_distribution = MIN(space, target_growth * smallest_count);
+        i32 each = space_for_distribution / smallest_count;
+        i32 extra = space_for_distribution % smallest_count;
+
+        for (isize i = 0; i < nodes.count; ++i) {
+            LayoutNode *current = nodes.items[i];
+            if (current->h != smallest || current->h >= max_h(current)) continue;
+
+            i32 add = each + (extra > 0);
+            extra -= extra > 0;
+
+            current->h += add;
+            space -= add;
+        }
+    }
+
+    while (space < 0) {
+        i32 largest = 0;
+        i32 next_largest = 0;
+        i32 largest_count = 0;
+
+        for (isize i = 0; i < nodes.count; ++i) {
+            LayoutNode *current = nodes.items[i];
+            if (current->h <= min_h(current)) continue;
+
+            if (current->h > largest) {
+                largest_count = 1;
+                next_largest = largest;
+                largest = current->h;
+            } else if (current->h == largest) {
+                largest_count++;
+            } else if (current->h > next_largest) {
+                next_largest = current->h;
+            }
+        }
+
+        if (largest_count == 0) break;
+
+        i32 target_shrink = largest - next_largest;
+        for (isize i = 0; i < nodes.count; ++i) {
+            LayoutNode *current = nodes.items[i];
+            if (current->h != largest || current->h <= min_h(current)) continue;
+            target_shrink = MIN(target_shrink, current->h - min_h(current));
+        }
+
+        if (target_shrink == 0) target_shrink = 1;
+
+        i32 space_for_distribution = MIN(-space, target_shrink * largest_count);
+        i32 each = space_for_distribution / largest_count;
+        i32 extra = space_for_distribution % largest_count;
+
+        for (isize i = 0; i < nodes.count; ++i) {
+            LayoutNode *current = nodes.items[i];
+            if (current->h != largest || current->h <= min_h(current)) continue;
+
+            i32 sub = each + (extra > 0);
+            extra -= extra > 0;
+
+            current->h -= sub;
+            space += sub;
+        }
+    }
+}
 
 #endif

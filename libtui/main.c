@@ -15,6 +15,14 @@ i32 main(i32 argc, byte *argv[]) {
     init_terminal();
     set_max_timeout_ms(100);
 
+    List(CodePoint) cps = {0};
+    s8 text = s8("LibTUI text wraps inside containers. LibTUI text wraps inside containers.");
+    byte *start = text.s;
+    byte *end = text.s + text.len;
+    while (start < end) {
+        list_append(&cps, utf8_next(&start, end));
+    }
+
     while (!is_codepoint(cp("q"))) {
         begin_frame();
         {
@@ -28,7 +36,7 @@ i32 main(i32 argc, byte *argv[]) {
                 .size = {.w = FIXED(w), .h = FIXED(h)},
             }) {
                 Container(.style = {
-                    .size = {.w = FILL(0, 10), .h = FIXED(5)},
+                    .size = {.w = FILL(0, 10), .h = FILL(0, INT32_MAX)},
                     .color = {10, 100, 254},
                     .align_self = {ALIGN_CENTER},
                 });
@@ -37,7 +45,14 @@ i32 main(i32 argc, byte *argv[]) {
                     .size = {.w = FILL(0, INT32_MAX), .h = FIXED(10)},
                     .color = {10, 250, 8},
                     .align_self = {ALIGN_CENTER},
+                    .direction = {DIR_COL},
+                    .padding = 1,
                 }) {
+                    Text(.text = cps,
+                        .style = {
+                            .color = {255, 255, 255}
+                        },
+                    );
                     Container(.style = {
                         .size = {.w = FILL(0, INT32_MAX), .h = FIXED(5)},
                         .color = {10, 9, 254},
@@ -65,6 +80,19 @@ i32 main(i32 argc, byte *argv[]) {
                                 .flags = EFFECT_BG,
                             }
                         ); break;
+                    }
+                    case(LAYOUT_CMD_TEXT, text) {
+                        i32 x = text.x;
+                        Effect effect = {
+                            .fg = *(RGB *)&text.style.color,
+                            .flags = EFFECT_FG,
+                        };
+                        for (usize j = 0; j < text.text.count; ++j) {
+                            CodePoint cp = text.text.items[j];
+                            put_cp(x, text.y, cp, effect);
+                            x += cp.display_width;
+                        }
+                        break;
                     }
                     case(LAYOUT_CMD_CLIP_START, clip) clip_push_rect(*(Rectangle *)&clip); break;
                     case(LAYOUT_CMD_CLIP_END) clip_pop(); break;
