@@ -22,6 +22,10 @@ i32 main(i32 argc, byte *argv[]) {
     while (start < end) {
         list_append(&cps, utf8_next(&start, end));
     }
+    Slice(CodePoint) slice = {
+        .items = cps.items,
+        .count = cps.count,
+    };
 
     while (!is_codepoint(cp("q"))) {
         begin_frame();
@@ -48,7 +52,7 @@ i32 main(i32 argc, byte *argv[]) {
                     .direction = {DIR_COL},
                     .padding = 1,
                 }) {
-                    Text(.text = cps,
+                    Text(.text = slice,
                         .style = {
                             .color = {255, 255, 255}
                         },
@@ -66,9 +70,9 @@ i32 main(i32 argc, byte *argv[]) {
                 });
             }
 
-            List(LayoutCommand) cmds = layout_end();
+            Slice(LayoutCommand) cmds = layout_end();
 
-            for (usize i = 0; i < cmds.count; ++i) {
+            for (isize i = 0; i < cmds.count; ++i) {
                 LayoutCommand cmd = cmds.items[i];
                 // debug_cmd(0, i, cmd);
                 match(cmd) {
@@ -87,7 +91,7 @@ i32 main(i32 argc, byte *argv[]) {
                             .fg = *(RGB *)&text.style.color,
                             .flags = EFFECT_FG,
                         };
-                        for (usize j = 0; j < text.text.count; ++j) {
+                        for (isize j = 0; j < text.text.count; ++j) {
                             CodePoint cp = text.text.items[j];
                             put_cp(x, text.y, cp, effect);
                             x += cp.display_width;

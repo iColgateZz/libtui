@@ -96,9 +96,10 @@ typedef struct {
     Color color;
 } TextStyle;
 
+slice_def(CodePoint);
+
 typedef struct {
-    //TODO: The data type should be Slice(CodePoint)
-    List(CodePoint) text;
+    Slice(CodePoint) text;
     TextStyle style;
 } TextConfig;
 
@@ -152,7 +153,7 @@ typedef struct {
         } _LAYOUT_CMD_RECT;
         struct {
             i32 x, y;
-            List(CodePoint) text;
+            Slice(CodePoint) text;
             TextStyle style;
         } _LAYOUT_CMD_TEXT;
         struct {
@@ -172,9 +173,10 @@ void debug_cmd(i32 x, i32 y, LayoutCommand cmd) {
 }
 
 list_def(LayoutCommand);
+slice_def(LayoutCommand);
 
 void layout_begin(i32 w, i32 h);
-List(LayoutCommand) layout_end();
+Slice(LayoutCommand) layout_end();
 void layout_open_text(TextConfig conf);
 void layout_open_container(ContainerConfig conf);
 void layout_close();
@@ -250,7 +252,7 @@ void layout_begin(i32 w, i32 h) {
     });
 }
 
-List(LayoutCommand) layout_end() {
+Slice(LayoutCommand) layout_end() {
     // close implicit root element
     layout_close();
 
@@ -260,7 +262,10 @@ List(LayoutCommand) layout_end() {
     layout(root);
 
     // emit commands for renderer
-    return Layout.cmds;
+    return (Slice(LayoutCommand)) {
+        .items = Layout.cmds.items,
+        .count = Layout.cmds.count,
+    };
 }
 
 void layout_open_text(TextConfig conf) {
@@ -395,7 +400,7 @@ void text_intrinsic_width(LayoutNode *node) {
     i32 max_word_width = 0;
     i32 current_word_width = 0;
 
-    List(CodePoint) text = text_node.config.text;
+    Slice(CodePoint) text = text_node.config.text;
     for (isize i = 0; i < text.count; ++i) {
         CodePoint cp = text.items[i];
         if (cp_equal(cp, cp_from_byte('\n'))) {
@@ -645,7 +650,7 @@ void container_wrap_text(LayoutNode *node) {
 
 void text_wrap_text(LayoutNode *node) {
     unwrap_into(*node, LAYOUT_NODE_TEXT, text_node);
-    List(CodePoint) text = text_node.config.text;
+    Slice(CodePoint) text = text_node.config.text;
     if (text.count == 0) {
         node->h = node->min_h = 0;
         return;
@@ -916,7 +921,7 @@ void container_commands(LayoutNode *node) {
 
 void text_commands(LayoutNode *node) {
     unwrap_into(*node, LAYOUT_NODE_TEXT, text_node);
-    List(CodePoint) text = text_node.config.text;
+    Slice(CodePoint) text = text_node.config.text;
     if (text.count == 0) return;
 
     i32 max_width = MAX(node->w, 1);
@@ -936,7 +941,6 @@ void text_commands(LayoutNode *node) {
                 .text = {
                     .items = text.items + line_start,
                     .count = line_count,
-                    .capacity = line_count,
                 },
                 .style = text_node.config.style,
             }));
@@ -957,7 +961,6 @@ void text_commands(LayoutNode *node) {
         .text = {
             .items = text.items + line_start,
             .count = line_count,
-            .capacity = line_count,
         },
         .style = text_node.config.style,
     }));

@@ -364,7 +364,7 @@ void handle_sigwinch(i32 signo) {
     update_root_scope();
 
     // trigger full redraw
-    for (usize i = 0; i < Terminal.frontbuffer.count; ++i)
+    for (isize i = 0; i < Terminal.frontbuffer.count; ++i)
         Terminal.frontbuffer.items[i] = cell(cp_from_byte(0xFF), (Effect) {0});
 
     write(Terminal.pipe.write_fd, &signo, sizeof signo);
@@ -377,7 +377,7 @@ void begin_frame() {
 
     arena_clear(&Terminal.tmp);
     list_clear(&Terminal.frame_cmds);
-    for (usize i = 0; i < Terminal.backbuffer.count; ++i)
+    for (isize i = 0; i < Terminal.backbuffer.count; ++i)
         Terminal.backbuffer.items[i] = cell_empty();
 
     Terminal.event = (Event) {0};
@@ -843,7 +843,7 @@ byte *fmt_cstr(byte *p, byte *end, byte *s) {
 }
 
 byte *fmt_s8(byte *p, byte *end, s8 s) {
-    for (usize i = 0; i < s.len; i++) {
+    for (isize i = 0; i < s.len; i++) {
         if (p < end) *p = s.s[i];
         p++;
     }
@@ -891,7 +891,7 @@ void debug(i32 x, i32 y, byte *fmt, ...) {
     va_end(args);
 
     s8 str = stream_end(s);
-    for (usize i = 0; i < str.len; i++)
+    for (isize i = 0; i < str.len; i++)
         put_cp_debug(x + i, y, cp_from_byte(str.s[i]));
 }
 
