@@ -255,48 +255,11 @@ typedef struct {
 
 static Layout__State layout__state = {0};
 
-static inline Layout__Node *layout__node_from_temp_id(Layout__TempID id) {
-    assert(0 <= id && id < layout__state.nodes.count);
-    return &layout__state.nodes.items[id];
-}
+static inline Layout__Node *layout__node_from_temp_id(Layout__TempID id);
+static inline Layout__Node *layout__node_from_child_index(i32 index);
+static inline Layout__TempID layout__node_push(Layout__Node node);
 
-static inline Layout__TempID layout__temp_id_from_child_index(i32 index) {
-    assert(0 <= index && index < layout__state.frame_children.count);
-    return layout__state.frame_children.items[index];
-}
-
-static inline Layout__Node *layout__node_from_child_index(i32 index) {
-    return layout__node_from_temp_id(layout__temp_id_from_child_index(index));
-}
-
-static inline Layout__TempID layout__node_push(Layout__Node node) {
-    Layout__TempID id = layout__state.nodes.count;
-    list_append(&layout__state.nodes, node);
-    return id;
-}
-
-static inline Layout__ScrollState *layout__scroll_state_from_id(Layout_PersistentID id) {
-    for (isize i = 0; i < layout__state.scroll_states.count; ++i) {
-        Layout__ScrollState *state = &layout__state.scroll_states.items[i];
-        if (state->id == id) return state;
-    }
-
-    list_append(&layout__state.scroll_states, ((Layout__ScrollState) {.id = id}));
-    return &list_last(&layout__state.scroll_states);
-}
-
-static inline b32 layout__node_scrolls_y(Layout__Node *node) {
-    if (node->id == LAYOUT_PERSISTENT_ID_NONE) return false;
-
-    match(*node) {
-        case(LAYOUT_NODE_CONTAINER, container) {
-            return container.config.style.scroll == SCROLL_Y;
-        }
-        case(LAYOUT_NODE_TEXT) return false;
-    }
-    return false;
-}
-
+void layout_event_push(Layout_Event event) { list_append(&layout__state.events, event); }
 
 void layout_begin(i32 w, i32 h) {
     // reset state
@@ -347,10 +310,6 @@ void layout_container_open(Layout_PersistentID id, Layout_ContainerConfig conf) 
     node.id = id;
     Layout__TempID temp_id = layout__node_push(node);
     list_append(&layout__state.open_node_stack, temp_id);
-}
-
-void layout_event_push(Layout_Event event) {
-    list_append(&layout__state.events, event);
 }
 
 void layout_close() {
@@ -468,6 +427,8 @@ static inline void layout__space_distribute(i32 space, List(Layout__NodePtr) nod
 static inline i32 layout__align_cross(Layout_Alignment align, i32 parent_size, i32 parent_padding, i32 child_size);
 static inline i32 layout__align_along(Layout_Alignment align, i32 parent_size, i32 parent_padding, i32 children_size);
 static inline Layout_Alignment layout__node_get_align_self(Layout__Node *node);
+static inline b32 layout__node_scrolls_y(Layout__Node *node);
+static inline Layout__ScrollState *layout__scroll_state_from_id(Layout_PersistentID id);
 
 static inline void layout__node_intrinsic_size(Layout__Node *node, Layout__Dimension dim) {
     dim == DIM_X ? layout__node_intrinsic_width(node) : layout__node_intrinsic_height(node);
@@ -718,6 +679,35 @@ static inline void layout__container_positions(Layout__Node *node) {
 
 static inline void layout__text_positions(Layout__Node *node) { UNUSED(node); }
 
+static void layout__node_handle_event(Layout__Node *root, Layout_Event event);
+static Layout__TempID layout__node_hit_test(Layout__Node *node, Layout_Rect parent_clip, i32 x, i32 y);
+static void layout__scroll_update_from_event(Layout_Event event);
+
+static inline void layout__node_handle_events(Layout__Node *root) {
+    for (isize i = 0; i < layout__state.events.count; ++i) {
+        layout__node_handle_event(root, layout__state.events.items[i]);
+    }
+
+    layout__state.events.count = 0;
+}
+
+static void layout__node_handle_event(Layout__Node *root, Layout_Event event) {
+    //TODO: handle more events
+    if (!layout__event_is_mouse(event)) return;
+
+    Layout_Rect root_clip = layout__rect_from_node(root);
+    layout__state.hit_id_temp = layout__node_hit_test(root, root_clip, event.mouse.x, event.mouse.y);
+    layout__state.hit_id = layout__state.hit_id_temp == LAYOUT_TEMP_ID_NONE
+                  ? LAYOUT_PERSISTENT_ID_NONE
+                  : layout__node_from_temp_id(layout__state.hit_id_temp)->id;
+
+    if (event.type == LAYOUT_EVENT_MOUSE_LEFT && event.mouse.pressed) {
+        layout__state.focused_id = layout__state.hit_id;
+    }
+
+    layout__scroll_update_from_event(event);
+}
+
 static Layout__TempID layout__node_hit_test(Layout__Node *node, Layout_Rect parent_clip, i32 x, i32 y) {
     Layout_Rect node_rect = layout__rect_from_node(node);
     Layout_Rect clip = layout__rect_intersect(parent_clip, node_rect);
@@ -747,7 +737,7 @@ static void layout__scroll_update_from_event(Layout_Event event) {
     i32 delta = event.type == LAYOUT_EVENT_SCROLL_DOWN ? 1 : -1;
     Layout__TempID current_id = layout__state.hit_id_temp;
 
-    while (current_id != LAYOUT_TEMP_ID_NONE) {
+    for (;;) {
         Layout__Node *current = layout__node_from_temp_id(current_id);
         if (layout__node_scrolls_y(current)) {
             Layout__ScrollState *scroll = layout__scroll_state_from_id(current->id);
@@ -758,30 +748,6 @@ static void layout__scroll_update_from_event(Layout_Event event) {
         if (current_id == ROOT_ID) break;
         current_id = current->parent;
     }
-}
-
-static void layout__node_handle_event(Layout__Node *root, Layout_Event event) {
-    if (!layout__event_is_mouse(event)) return;
-
-    Layout_Rect root_clip = layout__rect_from_node(root);
-    layout__state.hit_id_temp = layout__node_hit_test(root, root_clip, event.mouse.x, event.mouse.y);
-    layout__state.hit_id = layout__state.hit_id_temp == LAYOUT_TEMP_ID_NONE
-                  ? LAYOUT_PERSISTENT_ID_NONE
-                  : layout__node_from_temp_id(layout__state.hit_id_temp)->id;
-
-    if (event.type == LAYOUT_EVENT_MOUSE_LEFT && event.mouse.pressed) {
-        layout__state.focused_id = layout__state.hit_id;
-    }
-
-    layout__scroll_update_from_event(event);
-}
-
-static inline void layout__node_handle_events(Layout__Node *root) {
-    for (isize i = 0; i < layout__state.events.count; ++i) {
-        layout__node_handle_event(root, layout__state.events.items[i]);
-    }
-
-    layout__state.events.count = 0;
 }
 
 static inline void layout__container_commands(Layout__Node *node) {
@@ -855,6 +821,26 @@ static inline void layout__text_commands(Layout__Node *node) {
 }
 
 // Helper functions
+
+static inline Layout__Node *layout__node_from_temp_id(Layout__TempID id) {
+    assert(0 <= id && id < layout__state.nodes.count);
+    return &layout__state.nodes.items[id];
+}
+
+static inline Layout__TempID layout__temp_id_from_child_index(i32 index) {
+    assert(0 <= index && index < layout__state.frame_children.count);
+    return layout__state.frame_children.items[index];
+}
+
+static inline Layout__Node *layout__node_from_child_index(i32 index) {
+    return layout__node_from_temp_id(layout__temp_id_from_child_index(index));
+}
+
+static inline Layout__TempID layout__node_push(Layout__Node node) {
+    Layout__TempID id = layout__state.nodes.count;
+    list_append(&layout__state.nodes, node);
+    return id;
+}
 
 static inline b32 layout__event_is_mouse(Layout_Event event) {
     return event.type == LAYOUT_EVENT_MOUSE_LEFT ||
@@ -1093,6 +1079,28 @@ static inline void layout__space_distribute(i32 space, List(Layout__NodePtr) nod
             space += sub;
         }
     }
+}
+
+static inline Layout__ScrollState *layout__scroll_state_from_id(Layout_PersistentID id) {
+    for (isize i = 0; i < layout__state.scroll_states.count; ++i) {
+        Layout__ScrollState *state = &layout__state.scroll_states.items[i];
+        if (state->id == id) return state;
+    }
+
+    list_append(&layout__state.scroll_states, ((Layout__ScrollState) {.id = id}));
+    return &list_last(&layout__state.scroll_states);
+}
+
+static inline b32 layout__node_scrolls_y(Layout__Node *node) {
+    if (node->id == LAYOUT_PERSISTENT_ID_NONE) return false;
+
+    match(*node) {
+        case(LAYOUT_NODE_CONTAINER, container) {
+            return container.config.style.scroll == SCROLL_Y;
+        }
+        case(LAYOUT_NODE_TEXT) return false;
+    }
+    return false;
 }
 
 #endif
