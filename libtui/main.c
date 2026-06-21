@@ -9,6 +9,54 @@
 #define LIBTUI_RENDERER_IMPL
     #include "renderer.h"
 
+void push_renderer_event_to_layout(void) {
+    LayoutEvent event = {0};
+
+    if (is_event(EMouseLeft)) {
+        event = (LayoutEvent) {
+            .type = LAYOUT_EVENT_MOUSE_LEFT,
+            .mouse = {get_mouse_x(), get_mouse_y(), is_mouse_pressed()},
+        };
+    } else if (is_event(EMouseRight)) {
+        event = (LayoutEvent) {
+            .type = LAYOUT_EVENT_MOUSE_RIGHT,
+            .mouse = {get_mouse_x(), get_mouse_y(), is_mouse_pressed()},
+        };
+    } else if (is_event(EMouseMiddle)) {
+        event = (LayoutEvent) {
+            .type = LAYOUT_EVENT_MOUSE_MIDDLE,
+            .mouse = {get_mouse_x(), get_mouse_y(), is_mouse_pressed()},
+        };
+    } else if (is_event(EScrollUp)) {
+        event = (LayoutEvent) {
+            .type = LAYOUT_EVENT_SCROLL_UP,
+            .mouse = {get_mouse_x(), get_mouse_y(), is_mouse_pressed()},
+        };
+    } else if (is_event(EScrollDown)) {
+        event = (LayoutEvent) {
+            .type = LAYOUT_EVENT_SCROLL_DOWN,
+            .mouse = {get_mouse_x(), get_mouse_y(), is_mouse_pressed()},
+        };
+    } else if (is_event(EMouseDrag)) {
+        event = (LayoutEvent) {
+            .type = LAYOUT_EVENT_MOUSE_DRAG,
+            .mouse = {get_mouse_x(), get_mouse_y(), is_mouse_pressed()},
+        };
+    } else if (is_event(ETermKey)) {
+        event = (LayoutEvent) {
+            .type = LAYOUT_EVENT_KEY,
+            .key = get_term_key(),
+        };
+    } else if (is_event(ECodePoint)) {
+        event = (LayoutEvent) {
+            .type = LAYOUT_EVENT_TEXT,
+            .text = get_codepoint(),
+        };
+    }
+
+    layout_push_event(event);
+}
+
 i32 main(i32 argc, byte *argv[]) {
     REBUILD_UNITY_AUTO(argc, argv);
 
@@ -33,6 +81,7 @@ i32 main(i32 argc, byte *argv[]) {
             u32 w = get_terminal_width();
             u32 h = get_terminal_height();
             layout_begin(w, h);
+            push_renderer_event_to_layout();
 
             Container(1, .style = {
                 .color = {127, 9, 254},

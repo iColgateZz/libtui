@@ -5,7 +5,7 @@
 #include "psh_core/psh_core.h"
 #include "unicode.h"
 
-// For debug purposes only
+// For debug purposes only, the layout code must not depend on the renderer
 #include "renderer.h"
 
 //TODO: move to psh_core
@@ -61,6 +61,10 @@ typedef struct {
 } Color;
 
 typedef struct {
+    i32 x, y, w, h;
+} LayoutRect;
+
+typedef struct {
     packed_enum {
         DIR_ROW,
         DIR_COL,
@@ -103,6 +107,29 @@ typedef struct {
 } TextStyle;
 
 slice_def(CodePoint);
+
+typedef enum {
+    LAYOUT_EVENT_MOUSE_LEFT,
+    LAYOUT_EVENT_MOUSE_RIGHT,
+    LAYOUT_EVENT_MOUSE_MIDDLE,
+    LAYOUT_EVENT_SCROLL_UP,
+    LAYOUT_EVENT_SCROLL_DOWN,
+    LAYOUT_EVENT_MOUSE_DRAG,
+    LAYOUT_EVENT_KEY,
+    LAYOUT_EVENT_TEXT,
+} LayoutEventType;
+
+typedef struct {
+    LayoutEventType type;
+    union {
+        struct {
+            i32 x, y;
+            b32 pressed;
+        } mouse;
+        i32 key;
+        CodePoint text;
+    };
+} LayoutEvent;
 
 typedef struct {
     Slice(CodePoint) text;
@@ -182,12 +209,14 @@ void debug_cmd(i32 x, i32 y, LayoutCommand cmd) {
 
 list_def(LayoutCommand);
 slice_def(LayoutCommand);
+list_def(LayoutEvent);
 
 void layout_begin(i32 w, i32 h);
 Slice(LayoutCommand) layout_end();
 void layout_open_text(LayoutPersistentID id, TextConfig conf);
 void layout_open_container(LayoutPersistentID id, ContainerConfig conf);
 void layout_close();
+void layout_push_event(LayoutEvent event);
 
 static u8 _latch = 0;
 
@@ -229,6 +258,7 @@ static struct {
     List(LayoutTempID) temporary_child_stack;
     List(LayoutTempID) frame_children;
     List(LayoutCommand) commands;
+    List(LayoutEvent) events;
     List(ScrollState) scroll_states;
     LayoutTempID hit_id_temp;
     LayoutPersistentID hit_id;
@@ -286,6 +316,7 @@ void layout_begin(i32 w, i32 h) {
     Layout.temporary_child_stack.count = 0;
     Layout.frame_children.count = 0;
     Layout.commands.count = 0;
+    Layout.events.count = 0;
     Layout.hit_id_temp = LAYOUT_TEMP_ID_NONE;
     Layout.hit_id = LAYOUT_PERSISTENT_ID_NONE;
 
@@ -299,7 +330,7 @@ void layout_begin(i32 w, i32 h) {
 }
 
 void layout(LayoutNode *node);
-static void layout_update_events(LayoutNode *root);
+static inline void layout_update_events(LayoutNode *root);
 
 Slice(LayoutCommand) layout_end() {
     // close implicit root element
@@ -330,6 +361,10 @@ void layout_open_container(LayoutPersistentID id, ContainerConfig conf) {
     node.id = id;
     LayoutTempID temp_id = node_push(node);
     list_append(&Layout.open_node_stack, temp_id);
+}
+
+void layout_push_event(LayoutEvent event) {
+    list_append(&Layout.events, event);
 }
 
 void layout_close() {
@@ -668,23 +703,41 @@ void container_positions(LayoutNode *node) {
 
 static inline void text_positions(LayoutNode *node) { UNUSED(node); }
 
-static inline b32 layout_is_mouse_event(void) {
-    return is_event(EScrollUp) ||
-           is_event(EScrollDown) ||
-           is_event(EMouseDrag) ||
-           is_event(EMouseLeft) ||
-           is_event(EMouseMiddle) ||
-           is_event(EMouseRight);
+static inline b32 layout_event_is_mouse(LayoutEvent event) {
+    return event.type == LAYOUT_EVENT_MOUSE_LEFT ||
+           event.type == LAYOUT_EVENT_MOUSE_RIGHT ||
+           event.type == LAYOUT_EVENT_MOUSE_MIDDLE ||
+           event.type == LAYOUT_EVENT_SCROLL_UP ||
+           event.type == LAYOUT_EVENT_SCROLL_DOWN ||
+           event.type == LAYOUT_EVENT_MOUSE_DRAG;
 }
 
-static inline Rectangle layout_node_rect(LayoutNode *node) {
-    return (Rectangle) {.x = node->x, .y = node->y, .w = node->w, .h = node->h};
+static inline b32 layout_point_in_rect(i32 x, i32 y, LayoutRect r) {
+    return r.x <= x && x < r.x + r.w
+        && r.y <= y && y < r.y + r.h;
 }
 
-static LayoutTempID layout_hit_test_node(LayoutNode *node, Rectangle parent_clip, i32 x, i32 y) {
-    Rectangle node_rect = layout_node_rect(node);
-    Rectangle clip = rect_intersect(parent_clip, node_rect);
-    if (!point_in_rect(x, y, clip)) return LAYOUT_TEMP_ID_NONE;
+static inline LayoutRect layout_rect_intersect(LayoutRect a, LayoutRect b) {
+    i32 x1 = MAX(a.x, b.x);
+    i32 y1 = MAX(a.y, b.y);
+    i32 x2 = MIN(a.x + a.w, b.x + b.w);
+    i32 y2 = MIN(a.y + a.h, b.y + b.h);
+
+    if (x2 <= x1 || y2 <= y1) {
+        return (LayoutRect) {0, 0, 0, 0};
+    }
+
+    return (LayoutRect) {x1, y1, x2 - x1, y2 - y1};
+}
+
+static inline LayoutRect layout_node_rect(LayoutNode *node) {
+    return (LayoutRect) {.x = node->x, .y = node->y, .w = node->w, .h = node->h};
+}
+
+static LayoutTempID layout_hit_test_node(LayoutNode *node, LayoutRect parent_clip, i32 x, i32 y) {
+    LayoutRect node_rect = layout_node_rect(node);
+    LayoutRect clip = layout_rect_intersect(parent_clip, node_rect);
+    if (!layout_point_in_rect(x, y, clip)) return LAYOUT_TEMP_ID_NONE;
 
     match(*node) {
         case(LAYOUT_NODE_CONTAINER) {
@@ -702,11 +755,12 @@ static LayoutTempID layout_hit_test_node(LayoutNode *node, Rectangle parent_clip
     return node->id != LAYOUT_PERSISTENT_ID_NONE ? (LayoutTempID)(node - Layout.nodes.items) : LAYOUT_TEMP_ID_NONE;
 }
 
-static void layout_update_scroll_from_event(void) {
-    if (!is_event(EScrollUp) && !is_event(EScrollDown)) return;
+static void layout_update_scroll_from_event(LayoutEvent event) {
+    if (event.type != LAYOUT_EVENT_SCROLL_UP &&
+        event.type != LAYOUT_EVENT_SCROLL_DOWN) return;
     if (Layout.hit_id_temp == LAYOUT_TEMP_ID_NONE) return;
 
-    i32 delta = is_event(EScrollDown) ? 1 : -1;
+    i32 delta = event.type == LAYOUT_EVENT_SCROLL_DOWN ? 1 : -1;
     LayoutTempID current_id = Layout.hit_id_temp;
 
     while (current_id != LAYOUT_TEMP_ID_NONE) {
@@ -714,7 +768,6 @@ static void layout_update_scroll_from_event(void) {
         if (layout_node_scrolls_y(current)) {
             ScrollState *scroll = scroll_state_by_id(current->id);
             scroll->y = CLAMP(scroll->y + delta, 0, scroll->max_y);
-            event_consume();
             return;
         }
 
@@ -723,23 +776,26 @@ static void layout_update_scroll_from_event(void) {
     }
 }
 
-static void layout_update_events(LayoutNode *root) {
-    Layout.hit_id = LAYOUT_PERSISTENT_ID_NONE;
-    Layout.hit_id_temp = LAYOUT_TEMP_ID_NONE;
+static void layout_update_event(LayoutNode *root, LayoutEvent event) {
+    if (!layout_event_is_mouse(event)) return;
 
-    if (layout_is_mouse_event()) {
-        Rectangle root_clip = layout_node_rect(root);
-        Layout.hit_id_temp = layout_hit_test_node(root, root_clip, get_mouse_x(), get_mouse_y());
-        if (Layout.hit_id_temp != LAYOUT_TEMP_ID_NONE) {
-            Layout.hit_id = node_by_id(Layout.hit_id_temp)->id;
-        }
-    }
+    LayoutRect root_clip = layout_node_rect(root);
+    Layout.hit_id_temp = layout_hit_test_node(root, root_clip, event.mouse.x, event.mouse.y);
+    Layout.hit_id = Layout.hit_id_temp == LAYOUT_TEMP_ID_NONE
+                  ? LAYOUT_PERSISTENT_ID_NONE
+                  : node_by_id(Layout.hit_id_temp)->id;
 
-    if (is_event(EMouseLeft) && is_mouse_pressed()) {
+    if (event.type == LAYOUT_EVENT_MOUSE_LEFT && event.mouse.pressed) {
         Layout.focused_id = Layout.hit_id;
     }
 
-    layout_update_scroll_from_event();
+    layout_update_scroll_from_event(event);
+}
+
+static inline void layout_update_events(LayoutNode *root) {
+    for (isize i = 0; i < Layout.events.count; ++i) {
+        layout_update_event(root, Layout.events.items[i]);
+    }
 }
 
 void container_commands(LayoutNode *node) {

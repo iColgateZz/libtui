@@ -82,7 +82,6 @@ typedef enum {
 
 typedef struct {
     EventType type;
-    b32 handled;
     union {
         struct {
             i32 x, y;
@@ -100,8 +99,7 @@ b32 is_mouse_pressed();
 b32 is_mouse_released();
 b32 is_term_key(TermKey k);
 b32 is_codepoint(CodePoint cp);
-b32 is_event_consumed();
-void event_consume();
+TermKey get_term_key();
 CodePoint get_codepoint();
 
 typedef struct {
@@ -217,10 +215,9 @@ b32 is_mouse_pressed() { return Terminal.event.mouse.pressed; }
 b32 is_mouse_released() { return !is_mouse_pressed(); }
 b32 is_term_key(TermKey k) { return Terminal.event.term_key == k && Terminal.event.type == ETermKey; }
 b32 is_codepoint(CodePoint cp) { return cp_equal(cp, Terminal.event.parsed_cp); }
+TermKey get_term_key() { return Terminal.event.term_key; }
 CodePoint get_codepoint() { return Terminal.event.parsed_cp; }
 
-b32 is_event_consumed() { return Terminal.event.handled; }
-void event_consume() { Terminal.event.handled = true; }
 b32 is_mouse_event() { return Terminal.event.type == EScrollUp ||
                               Terminal.event.type == EScrollDown ||
                               Terminal.event.type == EMouseDrag || 
