@@ -75,6 +75,11 @@ typedef struct {
     } type;
 } Alignment;
 
+typedef enum {
+    SCROLL_NONE,
+    SCROLL_Y,
+} Scroll;
+
 typedef struct {
     Sizing size;
     Color color;
@@ -85,6 +90,7 @@ typedef struct {
     Direction direction;
     Alignment align_children;
     Alignment align_self;
+    Scroll scroll;
 } LayoutNodeStyle;
 
 typedef struct {
@@ -103,16 +109,18 @@ typedef struct {
     TextStyle style;
 } TextConfig;
 
-typedef i32 LayoutNodeID;
-
 typedef struct {
     i32 offset;
     i32 count;
 } ChildrenIndices;
 
+typedef i32 LayoutTempID;
+typedef i32 LayoutPersistentID;
+
 typedef struct {
     //TODO: using i16 is probably more than enough
-    LayoutNodeID parent;
+    LayoutTempID parent;
+    LayoutPersistentID id;
     i32 x, y; // resolved coords
     i32 w, h; // resolved w, h
     i32 min_w, min_h;
@@ -177,80 +185,121 @@ slice_def(LayoutCommand);
 
 void layout_begin(i32 w, i32 h);
 Slice(LayoutCommand) layout_end();
-void layout_open_text(TextConfig conf);
-void layout_open_container(ContainerConfig conf);
+void layout_open_text(LayoutPersistentID id, TextConfig conf);
+void layout_open_container(LayoutPersistentID id, ContainerConfig conf);
 void layout_close();
-// hit testing, event handling, and state updates
-// happen after layout phase
 
 static u8 _latch = 0;
 
-#define Container(...)                                              \
-    for (_latch = (layout_open_container((ContainerConfig) {        \
-        .style.size.w = FIT(0, INT32_MAX),                          \
-        .style.size.h = FIT(0, INT32_MAX),                          \
-        __VA_ARGS__                                                 \
-    }), 0); _latch < 1; _latch = 1, layout_close())
+#define Container(id, ...)                              \
+    for (_latch = (layout_open_container(               \
+            id,                                         \
+            (ContainerConfig) {                         \
+                .style.size.w = FIT(0, INT32_MAX),      \
+                .style.size.h = FIT(0, INT32_MAX),      \
+                __VA_ARGS__                             \
+        }), 0); _latch < 1; _latch = 1, layout_close())
 
-#define Text(...)                  \
-    for (_latch = (layout_open_text((TextConfig) {__VA_ARGS__}), 0); _latch < 1; _latch = 1, layout_close())
+#define Text(id, ...)              \
+    for (_latch = (layout_open_text(id, (TextConfig) {__VA_ARGS__}), 0); _latch < 1; _latch = 1, layout_close())
 
 #endif
 
 #ifdef LIBTUI_LAYOUT_IMPL
 
-void layout(LayoutNode *node);
-
 list_def(LayoutNode);
-list_def(LayoutNodeID);
+list_def(LayoutTempID);
 typedef LayoutNode* LayoutNodePtr;
 list_def(LayoutNodePtr);
 
+#define LAYOUT_TEMP_ID_NONE ((LayoutTempID)-1)
+#define LAYOUT_PERSISTENT_ID_NONE 0
+
+typedef struct {
+    LayoutPersistentID id;
+    i32 y;
+    i32 max_y;
+} ScrollState;
+
+list_def(ScrollState);
+
 static struct {
     List(LayoutNode) nodes;
-    List(LayoutNodeID) open_stack;
-    List(LayoutNodeID) children_temp;
-    List(LayoutNodeID) children_persistent;
-    List(LayoutCommand) cmds;
+    List(LayoutTempID) open_node_stack;
+    List(LayoutTempID) temporary_child_stack;
+    List(LayoutTempID) frame_children;
+    List(LayoutCommand) commands;
+    List(ScrollState) scroll_states;
+    LayoutTempID hit_id_temp;
+    LayoutPersistentID hit_id;
+    LayoutPersistentID focused_id;
     Arena tmp;
 } Layout = {0};
 
-LayoutNode *node_by_id(LayoutNodeID id) {
-    assert(0 <= id && (u32)id < Layout.nodes.count);
+LayoutNode *node_by_id(LayoutTempID id) {
+    assert(0 <= id && id < Layout.nodes.count);
     return &Layout.nodes.items[id];
 }
 
-LayoutNodeID id_by_index(i32 index) {
-    assert(0 <= index && (u32)index < Layout.children_persistent.count);
-    return Layout.children_persistent.items[index];
+LayoutTempID id_by_index(i32 index) {
+    assert(0 <= index && index < Layout.frame_children.count);
+    return Layout.frame_children.items[index];
 }
 
 LayoutNode *node_by_index(i32 index) {
     return node_by_id(id_by_index(index));
 }
 
-LayoutNodeID node_push(LayoutNode node) {
-    LayoutNodeID id = Layout.nodes.count;
+LayoutTempID node_push(LayoutNode node) {
+    LayoutTempID id = Layout.nodes.count;
     list_append(&Layout.nodes, node);
     return id;
 }
 
+ScrollState *scroll_state_by_id(LayoutPersistentID id) {
+    for (isize i = 0; i < Layout.scroll_states.count; ++i) {
+        ScrollState *state = &Layout.scroll_states.items[i];
+        if (state->id == id) return state;
+    }
+
+    list_append(&Layout.scroll_states, ((ScrollState) {.id = id}));
+    return &list_last(&Layout.scroll_states);
+}
+
+static inline b32 layout_node_scrolls_y(LayoutNode *node) {
+    if (node->id == LAYOUT_PERSISTENT_ID_NONE) return false;
+
+    match(*node) {
+        case(LAYOUT_NODE_CONTAINER, container) {
+            return container.config.style.scroll == SCROLL_Y;
+        }
+        case(LAYOUT_NODE_TEXT) return false;
+    }
+    return false;
+}
+
+
 void layout_begin(i32 w, i32 h) {
     // reset state
     Layout.nodes.count = 0;
-    Layout.open_stack.count = 0;
-    Layout.children_temp.count = 0;
-    Layout.children_persistent.count = 0;
-    Layout.cmds.count = 0;
+    Layout.open_node_stack.count = 0;
+    Layout.temporary_child_stack.count = 0;
+    Layout.frame_children.count = 0;
+    Layout.commands.count = 0;
+    Layout.hit_id_temp = LAYOUT_TEMP_ID_NONE;
+    Layout.hit_id = LAYOUT_PERSISTENT_ID_NONE;
 
     // open implicit root element
-    layout_open_container((ContainerConfig) {
+    layout_open_container(LAYOUT_PERSISTENT_ID_NONE, (ContainerConfig) {
         .style = {
             .size = {.w = FIXED(w), .h = FIXED(h)},
             .direction = {DIR_COL},
         }
     });
 }
+
+void layout(LayoutNode *node);
+static void layout_update_events(LayoutNode *root);
 
 Slice(LayoutCommand) layout_end() {
     // close implicit root element
@@ -260,46 +309,49 @@ Slice(LayoutCommand) layout_end() {
     #define ROOT_ID    0
     LayoutNode *root = node_by_id(ROOT_ID);
     layout(root);
+    layout_update_events(root);
 
     // emit commands for renderer
     return (Slice(LayoutCommand)) {
-        .items = Layout.cmds.items,
-        .count = Layout.cmds.count,
+        .items = Layout.commands.items,
+        .count = Layout.commands.count,
     };
 }
 
-void layout_open_text(TextConfig conf) {
+void layout_open_text(LayoutPersistentID id, TextConfig conf) {
     LayoutNode node = tag(LayoutNode, LAYOUT_NODE_TEXT, {.config = conf});
-    LayoutNodeID id = node_push(node);
-    list_append(&Layout.open_stack, id);
+    node.id = id;
+    LayoutTempID temp_id = node_push(node);
+    list_append(&Layout.open_node_stack, temp_id);
 }
 
-void layout_open_container(ContainerConfig conf) {
+void layout_open_container(LayoutPersistentID id, ContainerConfig conf) {
     LayoutNode node = tag(LayoutNode, LAYOUT_NODE_CONTAINER, {.config = conf});
-    LayoutNodeID id = node_push(node);
-    list_append(&Layout.open_stack, id);
+    node.id = id;
+    LayoutTempID temp_id = node_push(node);
+    list_append(&Layout.open_node_stack, temp_id);
 }
 
 void layout_close() {
-    LayoutNodeID closed_id = list_pop(&Layout.open_stack);
+    LayoutTempID closed_id = list_pop(&Layout.open_node_stack);
     LayoutNode *closed = node_by_id(closed_id);
-    isize start = Layout.children_temp.count - closed->children.count;
-    isize end = Layout.children_temp.count;
-    closed->children.offset = Layout.children_persistent.count;
+    isize start = Layout.temporary_child_stack.count - closed->children.count;
+    isize end = Layout.temporary_child_stack.count;
+    closed->children.offset = Layout.frame_children.count;
     // Take last IDs from the temp child stack
     // and attach them to contiguous child list
-    Layout.children_temp.count = start;
+    Layout.temporary_child_stack.count = start;
     for (isize i = start; i < end; ++i) {
-        LayoutNodeID child_id = Layout.children_temp.items[i];
-        list_append(&Layout.children_persistent, child_id);
+        LayoutTempID child_id = Layout.temporary_child_stack.items[i];
+        list_append(&Layout.frame_children, child_id);
         // Attach parent to child
         LayoutNode *child = node_by_id(child_id);
         child->parent = closed_id;
     }
 
-    list_append(&Layout.children_temp, closed_id);
+    list_append(&Layout.temporary_child_stack, closed_id);
     if (closed_id > ROOT_ID) {
-        LayoutNodeID parent_id = list_last(&Layout.open_stack);
+        LayoutTempID parent_id = list_last(&Layout.open_node_stack);
         LayoutNode *parent = node_by_id(parent_id);
         parent->children.count++;
     }
@@ -573,14 +625,15 @@ void container_positions(LayoutNode *node) {
     ChildrenIndices children = node->children;
     Dimension main_dim = direction_main_dim(style.direction);
     Dimension cross_dim = dim_other(main_dim);
-    i32 children_mainsize = child_spacing(children, style.spacing);
+    i32 children_main_size = child_spacing(children, style.spacing);
+    i32 content_bottom = node->y + style.padding;
 
     for (isize i = 0; i < children.count; ++i) {
-        children_mainsize += *size(node_by_index(children.offset + i), main_dim);
+        children_main_size += *size(node_by_index(children.offset + i), main_dim);
     }
 
     i32 cursor = *pos(node, main_dim) + style.padding
-                 + align_along(style.align_children, *size(node, main_dim), style.padding, children_mainsize);
+                 + align_along(style.align_children, *size(node, main_dim), style.padding, children_main_size);
 
     for (isize i = 0; i < children.count; ++i) {
         LayoutNode *child = node_by_index(children.offset + i);
@@ -592,7 +645,20 @@ void container_positions(LayoutNode *node) {
             *size(child, cross_dim)
         );
 
+        content_bottom = MAX(content_bottom, child->y + child->h);
         cursor += *size(child, main_dim) + style.spacing;
+    }
+
+    if (layout_node_scrolls_y(node)) {
+        ScrollState *scroll = scroll_state_by_id(node->id);
+        i32 content_h = MAX(content_bottom + style.padding - node->y, 0);
+        scroll->max_y = MAX(content_h - node->h, 0);
+        scroll->y = CLAMP(scroll->y, 0, scroll->max_y);
+
+        for (isize i = 0; i < children.count; ++i) {
+            LayoutNode *child = node_by_index(children.offset + i);
+            child->y -= scroll->y;
+        }
     }
 
     for (isize i = 0; i < children.count; ++i) {
@@ -602,15 +668,89 @@ void container_positions(LayoutNode *node) {
 
 static inline void text_positions(LayoutNode *node) { UNUSED(node); }
 
+static inline b32 layout_is_mouse_event(void) {
+    return is_event(EScrollUp) ||
+           is_event(EScrollDown) ||
+           is_event(EMouseDrag) ||
+           is_event(EMouseLeft) ||
+           is_event(EMouseMiddle) ||
+           is_event(EMouseRight);
+}
+
+static inline Rectangle layout_node_rect(LayoutNode *node) {
+    return (Rectangle) {.x = node->x, .y = node->y, .w = node->w, .h = node->h};
+}
+
+static LayoutTempID layout_hit_test_node(LayoutNode *node, Rectangle parent_clip, i32 x, i32 y) {
+    Rectangle node_rect = layout_node_rect(node);
+    Rectangle clip = rect_intersect(parent_clip, node_rect);
+    if (!point_in_rect(x, y, clip)) return LAYOUT_TEMP_ID_NONE;
+
+    match(*node) {
+        case(LAYOUT_NODE_CONTAINER) {
+            ChildrenIndices children = node->children;
+            for (isize i = children.count - 1; i >= 0; --i) {
+                LayoutNode *child = node_by_index(children.offset + i);
+                LayoutTempID hit = layout_hit_test_node(child, clip, x, y);
+                if (hit != LAYOUT_TEMP_ID_NONE) return hit;
+            }
+            break;
+        }
+        case(LAYOUT_NODE_TEXT) break;
+    }
+
+    return node->id != LAYOUT_PERSISTENT_ID_NONE ? (LayoutTempID)(node - Layout.nodes.items) : LAYOUT_TEMP_ID_NONE;
+}
+
+static void layout_update_scroll_from_event(void) {
+    if (!is_event(EScrollUp) && !is_event(EScrollDown)) return;
+    if (Layout.hit_id_temp == LAYOUT_TEMP_ID_NONE) return;
+
+    i32 delta = is_event(EScrollDown) ? 1 : -1;
+    LayoutTempID current_id = Layout.hit_id_temp;
+
+    while (current_id != LAYOUT_TEMP_ID_NONE) {
+        LayoutNode *current = node_by_id(current_id);
+        if (layout_node_scrolls_y(current)) {
+            ScrollState *scroll = scroll_state_by_id(current->id);
+            scroll->y = CLAMP(scroll->y + delta, 0, scroll->max_y);
+            event_consume();
+            return;
+        }
+
+        if (current_id == ROOT_ID) break;
+        current_id = current->parent;
+    }
+}
+
+static void layout_update_events(LayoutNode *root) {
+    Layout.hit_id = LAYOUT_PERSISTENT_ID_NONE;
+    Layout.hit_id_temp = LAYOUT_TEMP_ID_NONE;
+
+    if (layout_is_mouse_event()) {
+        Rectangle root_clip = layout_node_rect(root);
+        Layout.hit_id_temp = layout_hit_test_node(root, root_clip, get_mouse_x(), get_mouse_y());
+        if (Layout.hit_id_temp != LAYOUT_TEMP_ID_NONE) {
+            Layout.hit_id = node_by_id(Layout.hit_id_temp)->id;
+        }
+    }
+
+    if (is_event(EMouseLeft) && is_mouse_pressed()) {
+        Layout.focused_id = Layout.hit_id;
+    }
+
+    layout_update_scroll_from_event();
+}
+
 void container_commands(LayoutNode *node) {
     unwrap_into(*node, LAYOUT_NODE_CONTAINER, container);
 
-    list_append(&Layout.cmds, 
+    list_append(&Layout.commands, 
         tag(LayoutCommand, LAYOUT_CMD_CLIP_START, {
             .x = node->x, .y = node->y, .w = node->w, .h = node->h
     }));
 
-    list_append(&Layout.cmds,
+    list_append(&Layout.commands,
         tag(LayoutCommand, LAYOUT_CMD_RECT, {
             .x = node->x, .y = node->y, .w = node->w, .h = node->h,
             .color = container.config.style.color
@@ -622,7 +762,7 @@ void container_commands(LayoutNode *node) {
         layout_commands(child);
     }
 
-    list_append(&Layout.cmds, tag0(LayoutCommand, LAYOUT_CMD_CLIP_END));
+    list_append(&Layout.commands, tag0(LayoutCommand, LAYOUT_CMD_CLIP_END));
 }
 
 void text_commands(LayoutNode *node) {
@@ -642,7 +782,7 @@ void text_commands(LayoutNode *node) {
         b32 wrap_break = line_width > 0 && line_width + cp.display_width > max_width;
 
         if (force_break || wrap_break) {
-            list_append(&Layout.cmds, tag(LayoutCommand, LAYOUT_CMD_TEXT, {
+            list_append(&Layout.commands, tag(LayoutCommand, LAYOUT_CMD_TEXT, {
                 .x = node->x, .y = y,
                 .text = {
                     .items = text.items + line_start,
@@ -662,7 +802,7 @@ void text_commands(LayoutNode *node) {
         line_width += cp.display_width;
     }
 
-    list_append(&Layout.cmds, tag(LayoutCommand, LAYOUT_CMD_TEXT, {
+    list_append(&Layout.commands, tag(LayoutCommand, LAYOUT_CMD_TEXT, {
         .x = node->x, .y = y,
         .text = {
             .items = text.items + line_start,
@@ -676,7 +816,6 @@ static inline Alignment align_self(LayoutNode *node) {
     match(*node) {
         case(LAYOUT_NODE_CONTAINER, container) return container.config.style.align_self;
         case(LAYOUT_NODE_TEXT) return (Alignment) {ALIGN_START};
-        otherwise UNREACHABLE("There is no other type!");
     }
     UNREACHABLE("It must always match against alignment");
 }
@@ -751,7 +890,6 @@ static inline b32 is_fill(LayoutNode *node, Dimension dim) {
     match(*node) {
         case(LAYOUT_NODE_TEXT) return dim == DIM_X;
         case(LAYOUT_NODE_CONTAINER, container) return matches(size_style(container.config.style, dim), SIZE_FILL);
-        otherwise UNREACHABLE("There is no other type!");
     }
     return false;
 }
@@ -764,7 +902,6 @@ static inline i32 fill_max(LayoutNode *node, Dimension dim) {
             assert(matches(size, SIZE_FILL) && "function is only for fill size");
             return size_range(size).max;
         }
-        otherwise UNREACHABLE("There is no other type!");
     }
     return false;
 }
@@ -777,7 +914,6 @@ static inline i32 fill_min(LayoutNode *node, Dimension dim) {
             assert(matches(size, SIZE_FILL) && "function is only for fill size");
             return MAX(size_range(size).min, *min_size(node, dim));
         }
-        otherwise UNREACHABLE("There is no other type!");
     }
     return false;
 }

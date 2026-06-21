@@ -34,36 +34,37 @@ i32 main(i32 argc, byte *argv[]) {
             u32 h = get_terminal_height();
             layout_begin(w, h);
 
-            Container(.style = {
+            Container(1, .style = {
                 .color = {127, 9, 254},
                 .direction = {DIR_ROW},
                 .size = {.w = FIXED(w), .h = FIXED(h)},
             }) {
-                Container(.style = {
+                Container(2, .style = {
                     .size = {.w = FILL(0, 10), .h = FILL(0, INT32_MAX)},
                     .color = {10, 100, 254},
                     .align_self = {ALIGN_CENTER},
                 });
 
-                Container(.style = {
-                    .size = {.w = FILL(0, INT32_MAX), .h = FIXED(10)},
+                Container(3, .style = {
+                    .size = {.w = FILL(0, INT32_MAX), .h = FIXED(1)},
                     .color = {10, 250, 8},
                     .align_self = {ALIGN_CENTER},
                     .direction = {DIR_COL},
                     .padding = 1,
+                    .scroll = SCROLL_Y,
                 }) {
-                    Text(.text = slice,
+                    Text(4, .text = slice,
                         .style = {
                             .color = {255, 255, 255}
                         },
                     );
-                    Container(.style = {
+                    Container(5, .style = {
                         .size = {.w = FILL(0, INT32_MAX), .h = FIXED(5)},
                         .color = {10, 9, 254},
                     });
                 }
 
-                Container(.style = {
+                Container(6, .style = {
                     .size = {.w = FILL(0, 10), .h = FIXED(5)},
                     .color = {10, 100, 254},
                     .align_self = {ALIGN_CENTER},
