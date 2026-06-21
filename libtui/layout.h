@@ -276,6 +276,7 @@ void layout_begin(i32 w, i32 h) {
         .style = {
             .size = {.w = FIXED(w), .h = FIXED(h)},
             .direction = {DIR_COL},
+            .scroll = SCROLL_Y,
         }
     });
 }
@@ -286,12 +287,12 @@ Slice(Layout_Command) layout_end() {
     // close implicit root element
     layout_close();
 
-    // layout all elements
     #define ROOT_ID    0
     Layout__Node *root = layout__node_from_temp_id(ROOT_ID);
     layout__node_layout(root);
 
-    // emit commands for renderer
+    layout__state.events.count = 0;
+
     return (Slice(Layout_Command)) {
         .items = layout__state.commands.items,
         .count = layout__state.commands.count,
@@ -687,8 +688,6 @@ static inline void layout__node_handle_events(Layout__Node *root) {
     for (isize i = 0; i < layout__state.events.count; ++i) {
         layout__node_handle_event(root, layout__state.events.items[i]);
     }
-
-    layout__state.events.count = 0;
 }
 
 static void layout__node_handle_event(Layout__Node *root, Layout_Event event) {
