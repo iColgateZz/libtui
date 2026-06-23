@@ -256,7 +256,7 @@ typedef struct {
 static Layout__State layout__state = {0};
 
 static inline Layout__Node *layout__node_from_temp_id(Layout__TempID id);
-static inline Layout__Node *layout__node_from_child_index(i32 index);
+static inline Layout__Node *layout__node_from_index(i32 index);
 static inline Layout__TempID layout__node_push(Layout__Node node);
 
 void layout_event_push(Layout_Event event) { list_append(&layout__state.events, event); }
@@ -347,22 +347,6 @@ static inline void layout__node_positions(Layout__Node *node);
 static inline void layout__node_commands(Layout__Node *node);
 static inline void layout__node_handle_events(Layout__Node *root);
 
-static inline void layout__container_intrinsic_width(Layout__Node *node);
-static inline void layout__container_fill_width(Layout__Node *node);
-static inline void layout__container_wrap_text(Layout__Node *node);
-static inline void layout__container_intrinsic_height(Layout__Node *node);
-static inline void layout__container_fill_height(Layout__Node *node);
-static inline void layout__container_positions(Layout__Node *node);
-static inline void layout__container_commands(Layout__Node *node);
-
-static inline void layout__text_intrinsic_width(Layout__Node *node);
-static inline void layout__text_fill_width(Layout__Node *node);
-static inline void layout__text_wrap_text(Layout__Node *node);
-static inline void layout__text_intrinsic_height(Layout__Node *node);
-static inline void layout__text_fill_height(Layout__Node *node);
-static inline void layout__text_positions(Layout__Node *node);
-static inline void layout__text_commands(Layout__Node *node);
-
 static inline void layout__node_layout(Layout__Node *node) {
     layout__node_intrinsic_width(node);
     layout__node_fill_width(node);
@@ -373,6 +357,35 @@ static inline void layout__node_layout(Layout__Node *node) {
     layout__node_commands(node);
     layout__node_handle_events(node);
 }
+
+/*
+    fn                  | container | *generic  | text
+    ---------------------------------------------------
+    intrinsic_width     | yes       | yes       | yes
+    fill_width          | yes       | yes       | no
+    wrap_text           | yes       | no        | yes
+    intrinsic_height    | yes       | yes       | no
+    fill_height         | yes       | yes       | no
+    positions           | yes       | no        | yes
+    commands            | yes       | no        | yes
+    handle_events       | no        | no        | no
+*/
+
+static inline void layout__container_intrinsic_width(Layout__Node *node);
+static inline void layout__container_fill_width(Layout__Node *node);
+static inline void layout__container_wrap_text(Layout__Node *node);
+static inline void layout__container_intrinsic_height(Layout__Node *node);
+static inline void layout__container_fill_height(Layout__Node *node);
+static inline void layout__container_positions(Layout__Node *node);
+static inline void layout__container_commands(Layout__Node *node);
+
+static inline void layout__text_intrinsic_width(Layout__Node *node);
+static inline void layout__text_wrap_text(Layout__Node *node);
+static inline void layout__text_commands(Layout__Node *node);
+static inline void layout__text_fill_width(Layout__Node *node) { UNUSED(node); }
+static inline void layout__text_intrinsic_height(Layout__Node *node) { UNUSED(node); }
+static inline void layout__text_fill_height(Layout__Node *node) { UNUSED(node); }
+static inline void layout__text_positions(Layout__Node *node) { UNUSED(node); }
 
 #define LAYOUT__NODE_DISPATCH(operation)                                      \
     static inline void layout__node_##operation(Layout__Node *node) {         \
@@ -444,7 +457,7 @@ static inline void layout__container_intrinsic_size(Layout__Node *node, Layout__
 
     Layout__ChildrenIndices children = node->children;
     for (isize i = 0; i < children.count; ++i) {
-        layout__node_intrinsic_size(layout__node_from_child_index(children.offset + i), dim);
+        layout__node_intrinsic_size(layout__node_from_index(children.offset + i), dim);
     }
 
     Layout_ContainerStyle style = container.config.style;
@@ -462,13 +475,13 @@ static inline void layout__container_intrinsic_size(Layout__Node *node, Layout__
         resolved_size =     2 * style.padding + layout__get_children_spacing(children, style.spacing);
         resolved_min_size = 2 * style.padding + layout__get_children_spacing(children, style.spacing);
         for (isize i = 0; i < children.count; ++i) {
-            Layout__Node *child = layout__node_from_child_index(children.offset + i);
+            Layout__Node *child = layout__node_from_index(children.offset + i);
             resolved_size += *layout__node_get_size(child, dim);
             resolved_min_size += *layout__node_get_min_size(child, dim);
         }
     } else {
         for (isize i = 0; i < children.count; ++i) {
-            Layout__Node *child = layout__node_from_child_index(children.offset + i);
+            Layout__Node *child = layout__node_from_index(children.offset + i);
             resolved_size = MAX(resolved_size, *layout__node_get_size(child, dim));
             resolved_min_size = MAX(resolved_min_size, *layout__node_get_min_size(child, dim));
         }
@@ -516,8 +529,6 @@ static inline void layout__text_intrinsic_width(Layout__Node *node) {
     node->min_w = max_word_width;
 }
 
-static inline void layout__text_intrinsic_height(Layout__Node *node) { UNUSED(node); }
-
 static inline void layout__node_fill_size(Layout__Node *node, Layout__Dimension dim) {
     dim == DIM_X ? layout__node_fill_width(node) : layout__node_fill_height(node);
 }
@@ -535,7 +546,7 @@ static inline void layout__container_fill_size(Layout__Node *node, Layout__Dimen
     if (dim == layout__direction_get_main_dimension(style.direction)) {
         i32 children_size = 0;
         for (isize i = 0; i < children.count; ++i) {
-            children_size += *layout__node_get_size(layout__node_from_child_index(children.offset + i), dim);
+            children_size += *layout__node_get_size(layout__node_from_index(children.offset + i), dim);
         }
 
         i32 remaining_size = *layout__node_get_size(node, dim) - children_size - 2 * style.padding
@@ -543,7 +554,7 @@ static inline void layout__container_fill_size(Layout__Node *node, Layout__Dimen
 
         i32 fill_count = 0;
         for (isize i = 0; i < children.count; ++i) {
-            fill_count += layout__node_is_fill(layout__node_from_child_index(children.offset + i), dim);
+            fill_count += layout__node_is_fill(layout__node_from_index(children.offset + i), dim);
         }
 
         if (fill_count > 0) {
@@ -554,7 +565,7 @@ static inline void layout__container_fill_size(Layout__Node *node, Layout__Dimen
             };
 
             for (isize i = 0; i < children.count; ++i) {
-                Layout__Node *child = layout__node_from_child_index(children.offset + i);
+                Layout__Node *child = layout__node_from_index(children.offset + i);
                 if (layout__node_is_fill(child, dim)) list_append(&fill_list, child);
             }
 
@@ -564,7 +575,7 @@ static inline void layout__container_fill_size(Layout__Node *node, Layout__Dimen
     } else {
         i32 content_size = *layout__node_get_size(node, dim) - 2 * style.padding;
         for (isize i = 0; i < children.count; ++i) {
-            Layout__Node *child = layout__node_from_child_index(children.offset + i);
+            Layout__Node *child = layout__node_from_index(children.offset + i);
             match(*child) {
                 case(LAYOUT_NODE_TEXT) {
                     if (dim == DIM_X) {
@@ -585,17 +596,14 @@ static inline void layout__container_fill_size(Layout__Node *node, Layout__Dimen
     }
 
     for (isize i = 0; i < children.count; ++i) {
-        layout__node_fill_size(layout__node_from_child_index(children.offset + i), dim);
+        layout__node_fill_size(layout__node_from_index(children.offset + i), dim);
     }
 }
-
-static inline void layout__text_fill_width(Layout__Node *node) { UNUSED(node); }
-static inline void layout__text_fill_height(Layout__Node *node) { UNUSED(node); }
 
 static inline void layout__container_wrap_text(Layout__Node *node) {
     Layout__ChildrenIndices children = node->children;
     for (isize i = 0; i < children.count; ++i) {
-        layout__node_wrap_text(layout__node_from_child_index(children.offset + i));
+        layout__node_wrap_text(layout__node_from_index(children.offset + i));
     }
 }
 
@@ -641,14 +649,14 @@ static inline void layout__container_positions(Layout__Node *node) {
     i32 content_bottom = node->y + style.padding;
 
     for (isize i = 0; i < children.count; ++i) {
-        children_main_size += *layout__node_get_size(layout__node_from_child_index(children.offset + i), main_dim);
+        children_main_size += *layout__node_get_size(layout__node_from_index(children.offset + i), main_dim);
     }
 
     i32 cursor = *layout__node_get_pos(node, main_dim) + style.padding
                  + layout__align_along(style.align_children, *layout__node_get_size(node, main_dim), style.padding, children_main_size);
 
     for (isize i = 0; i < children.count; ++i) {
-        Layout__Node *child = layout__node_from_child_index(children.offset + i);
+        Layout__Node *child = layout__node_from_index(children.offset + i);
         *layout__node_get_pos(child, main_dim) = cursor;
         *layout__node_get_pos(child, cross_dim) = *layout__node_get_pos(node, cross_dim) + layout__align_cross(
             layout__node_get_align_self(child),
@@ -668,17 +676,15 @@ static inline void layout__container_positions(Layout__Node *node) {
         scroll->y = CLAMP(scroll->y, 0, scroll->max_y);
 
         for (isize i = 0; i < children.count; ++i) {
-            Layout__Node *child = layout__node_from_child_index(children.offset + i);
+            Layout__Node *child = layout__node_from_index(children.offset + i);
             child->y -= scroll->y;
         }
     }
 
     for (isize i = 0; i < children.count; ++i) {
-        layout__node_positions(layout__node_from_child_index(children.offset + i));
+        layout__node_positions(layout__node_from_index(children.offset + i));
     }
 }
-
-static inline void layout__text_positions(Layout__Node *node) { UNUSED(node); }
 
 static void layout__node_handle_event(Layout__Node *root, Layout_Event event);
 static Layout__TempID layout__node_hit_test(Layout__Node *node, Layout_Rect parent_clip, i32 x, i32 y);
@@ -716,7 +722,7 @@ static Layout__TempID layout__node_hit_test(Layout__Node *node, Layout_Rect pare
         case(LAYOUT_NODE_CONTAINER) {
             Layout__ChildrenIndices children = node->children;
             for (isize i = children.count - 1; i >= 0; --i) {
-                Layout__Node *child = layout__node_from_child_index(children.offset + i);
+                Layout__Node *child = layout__node_from_index(children.offset + i);
                 Layout__TempID hit = layout__node_hit_test(child, clip, x, y);
                 if (hit != LAYOUT_TEMP_ID_NONE) return hit;
             }
@@ -765,7 +771,7 @@ static inline void layout__container_commands(Layout__Node *node) {
 
     Layout__ChildrenIndices children = node->children;
     for (isize i = 0; i < children.count; ++i) {
-        Layout__Node *child = layout__node_from_child_index(children.offset + i);
+        Layout__Node *child = layout__node_from_index(children.offset + i);
         layout__node_commands(child);
     }
 
@@ -831,7 +837,7 @@ static inline Layout__TempID layout__temp_id_from_child_index(i32 index) {
     return layout__state.frame_children.items[index];
 }
 
-static inline Layout__Node *layout__node_from_child_index(i32 index) {
+static inline Layout__Node *layout__node_from_index(i32 index) {
     return layout__node_from_temp_id(layout__temp_id_from_child_index(index));
 }
 
