@@ -107,15 +107,10 @@ b32 point_in_rect(i32 x, i32 y, Rectangle r);
 Rectangle rect_intersect(Rectangle a, Rectangle b);
 Rectangle rect_union(Rectangle a, Rectangle b);
 
-//TODO: just typedef rectangle as clip
-typedef struct {
-    Rectangle rect;
-} Clip;
-
 void clip_push(i32 x, i32 y, i32 w, i32 h);
 void clip_push_rect(Rectangle r);
-Clip clip_pop();
-Clip clip_peek();
+Rectangle clip_pop();
+Rectangle clip_peek();
 
 void init_terminal();
 void set_fps(i32 fps);
@@ -185,7 +180,7 @@ void debug(i32 x, i32 y, byte *fmt, ...);
 #include <string.h>
 
 list_def(Cell);
-list_def(Clip);
+list_def(Rectangle);
 list_def(byte);
 list_def(Event);
 
@@ -200,7 +195,7 @@ struct {
     List(Cell) backbuffer;
     List(byte) frame_cmds;
     Arena tmp;
-    List(Clip) clips;
+    List(Rectangle) clips;
     u32 width, height;
 } Terminal = {0};
 
@@ -312,7 +307,7 @@ void init_terminal() {
 
     // manually add the terminal scope
     Rectangle r = {.w = Terminal.width, .h = Terminal.height};
-    list_append(&Terminal.clips, (Clip) {.rect = r});
+    list_append(&Terminal.clips, r);
 
     Terminal.tmp = arena_init(MB(16));
 }
@@ -327,7 +322,7 @@ void update_screen_dimensions() {
 
 void update_root_scope() {
     Rectangle r = {.w = Terminal.width, .h = Terminal.height};
-    Terminal.clips.items[0] = (Clip) {.rect = r};
+    Terminal.clips.items[0] = r;
 }
 
 void restore_term() {
@@ -698,10 +693,10 @@ void put_str_(i32 x, i32 y, byte *s, usize len, Effect e) {
 }
 
 void put_cp_(i32 x, i32 y, CodePoint cp, Effect e) {
-    Clip parent = clip_peek();
+    Rectangle parent = clip_peek();
 
     if (x < 0 || y < 0) return;
-    if (!point_in_rect(x, y, parent.rect)) return;
+    if (!point_in_rect(x, y, parent)) return;
 
     u32 w = Terminal.width;
     Cell *cells = Terminal.backbuffer.items;
@@ -728,10 +723,10 @@ void put_cp_(i32 x, i32 y, CodePoint cp, Effect e) {
 }
 
 void put_effect(i32 x, i32 y, Effect e) {
-    Clip parent = clip_peek();
+    Rectangle parent = clip_peek();
 
     if (x < 0 || y < 0) return;
-    if (!point_in_rect(x, y, parent.rect)) return;
+    if (!point_in_rect(x, y, parent)) return;
 
     u32 w = Terminal.width;
     Cell *cells = Terminal.backbuffer.items;
@@ -766,16 +761,16 @@ void clip_push(i32 x, i32 y, i32 w, i32 h) {
 }
 
 void clip_push_rect(Rectangle r) {
-    Clip parent = clip_peek();
-    Rectangle clipped = rect_intersect(parent.rect, r);
-    list_append(&Terminal.clips, (Clip){.rect = clipped});
+    Rectangle parent = clip_peek();
+    Rectangle clipped = rect_intersect(parent, r);
+    list_append(&Terminal.clips, clipped);
 }
 
-Clip clip_pop() { 
+Rectangle clip_pop() { 
     return list_pop(&Terminal.clips);
 }
 
-Clip clip_peek() {
+Rectangle clip_peek() {
     return list_last(&Terminal.clips);
 }
 
