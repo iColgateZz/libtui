@@ -25,7 +25,7 @@ i32 main(i32 argc, byte *argv[]) {
             for (isize i = 0; i < events.count; ++i) {
                 Event event = events.items[i];
                 if (event_is_codepoint(event, ctrl('x'))) quit = true;
-                if (event_is(event, ECodePoint)) last_cp = event.parsed_cp;
+                if (event_is(event, ECodePoint)) last_cp = event.codepoint;
             }
             main_loop();
         }

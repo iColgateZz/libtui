@@ -5,6 +5,7 @@
 5. https://www.phatcode.net/res/224/files/html/ch46/46-02.html
 6. https://github.com/vlang/gui/blob/main/docs/LAYOUT_ALGORITHM.md
 7. https://docs.flutter.dev/ui/layout/constraints
+8. https://ghostty.org/docs/vt/concepts/sequences
 
 When adding to an existing repo:
     git submodule add <url>

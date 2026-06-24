@@ -235,7 +235,6 @@ void calculate_dt();
 void poll_events_until(i64 deadline_ns);
 void handle_available_events(i32 timeout_ms);
 void parse_pending_input();
-void input_consume(isize count);
 void write_str_len(byte *str, usize len);
 void write_strf_impl(byte *fmt, ...);
 #define write_str(s)        write_str_len(s, sizeof(s) - 1)
@@ -244,9 +243,10 @@ void emit_absolute_cursor_move(List(byte) *a, u32 row, u32 col);
 void render();
 void update_root_scope();
 
-b32 try_parse_mouse(byte *str, isize n, Event *e);
-b32 try_parse_term_key(byte *str, isize n, Event *e);
-b32 try_parse_text(byte *str, isize n, Event *e);
+b32 try_parse_escape(byte **p, byte *end, Event *e);
+b32 try_parse_mouse(byte **p, byte *end, Event *e);
+b32 try_parse_term_key(byte **p, byte *end, Event *e);
+b32 try_parse_text(byte **p, byte *end, Event *e);
 void fix_wide_char(i32 x, i32 y);
 void emit_cells(List(byte) *out, Cell *cells, usize start, usize len);
 void emit_effect(List(byte) *out, Effect e);
@@ -550,87 +550,80 @@ void handle_available_events(i32 timeout_ms) {
     }
 }
 
-void input_consume(isize count) {
-    assert(0 <= count && count <= Terminal.input_bytes.count);
-    memmove(
-        Terminal.input_bytes.items,
-        Terminal.input_bytes.items + count,
-        (Terminal.input_bytes.count - count) * sizeof(*Terminal.input_bytes.items)
-    );
-    Terminal.input_bytes.count -= count;
-}
-
 void parse_pending_input() {
-    while (Terminal.input_bytes.count > 0) {
-        byte *str = Terminal.input_bytes.items;
-        isize n = Terminal.input_bytes.count;
-        Event e = {0};
-        isize consumed = 0;
+    byte *start = Terminal.input_bytes.items;
+    byte *p = start;
+    byte *end = start + Terminal.input_bytes.count;
 
-        if (str[0] == TERMKEY_ESCAPE) {
-            if (n == 1) break;
+    while (p < end) {
+        byte *before = p;
+        Event e = { .type = ENone };
 
-            if (try_parse_mouse(str, n, &e)) {
-                byte *end = memchr(str, e.mouse.pressed ? 'M' : 'm', n);
-                consumed = end ? end - str + 1 : 0;
-            } else if (try_parse_term_key(str, n, &e)) {
-                consumed = n < 4 || str[3] != '~' ? 3 : 4;
-            } else if (str[1] != '[') {
-                consumed = 1;
-            } else {
-                byte *end = NULL;
-                for (isize i = 2; i < n; ++i) {
-                    if (('A' <= str[i] && str[i] <= 'Z') ||
-                        ('a' <= str[i] && str[i] <= 'z') ||
-                        str[i] == '~') {
-                        end = str + i;
-                        break;
-                    }
-                }
-                if (!end) break;
-                consumed = end - str + 1;
-            }
-
-            if (consumed == 0) break;
-            if (e.type != ENone) list_append(&Terminal.events, e);
-            input_consume(consumed);
-            continue;
-        }
-
-        #define DELETE 127
-        if (str[0] == DELETE) {
-            list_append(&Terminal.events, ((Event) {
+        if (*p == TERMKEY_ESCAPE) {
+            if (!try_parse_escape(&p, end, &e)) break;
+        } else if (*p == 127) {
+            p++;
+            e = (Event) {
                 .type = ETermKey,
                 .term_key = TERMKEY_BACKSPACE,
-            }));
-            input_consume(1);
-            continue;
+            };
+        } else {
+            if (!try_parse_text(&p, end, &e)) break;
         }
 
-        u8 len = utf8_expected_len(str[0]);
-        if (n < len) break;
-
-        if (try_parse_text(str, len, &e)) {
-            list_append(&Terminal.events, e);
-        }
-        input_consume(len);
+        assert(p > before);
+        if (e.type != ENone) list_append(&Terminal.events, e);
     }
+
+    isize consumed = p - start;
+    if (consumed == 0) return;
+
+    memmove(
+        Terminal.input_bytes.items,
+        Terminal.input_bytes.items + consumed,
+        (Terminal.input_bytes.count - consumed) * sizeof(*Terminal.input_bytes.items)
+    );
+    Terminal.input_bytes.count -= consumed;
 }
 
-b32 try_parse_mouse(byte *str, isize n, Event *e) {
-    if (n < 9 || memcmp(str, "\33[<", 3) != 0) return false;
-    byte *terminator_m = memchr(str, 'm', n);
-    byte *terminator_M = memchr(str, 'M', n);
-    byte *terminator = terminator_m && terminator_M
-                     ? MIN(terminator_m, terminator_M)
-                     : (terminator_m ? terminator_m : terminator_M);
+b32 try_parse_escape(byte **p, byte *end, Event *e) {
+    byte *start = *p;
+    if (end - start == 1) return false;
+
+    if (start[1] != '[') {
+        *p = start + 1;
+        return true;
+    }
+
+    if (try_parse_mouse(p, end, e)) return true;
+    if (try_parse_term_key(p, end, e)) return true;
+
+    // Getting rid of unknown sequence
+    for (byte *it = start + 2; it < end; ++it) {
+        if (0x40 <= *it && *it <= 0x7E) {
+            *p = it + 1;
+            return true;
+        }
+    }
+
+    return false;
+}
+
+b32 try_parse_mouse(byte **p, byte *end, Event *e) {
+    byte *start = *p;
+    isize n = end - start;
+    if (n < 9 || memcmp(start, "\33[<", 3) != 0) return false;
+
+    byte *terminator_m = memchr(start, 'm', n);
+    byte *terminator_M = memchr(start, 'M', n);
+    byte *terminator = MAX(terminator_m, terminator_M);
     if (!terminator) return false;
 
-    byte *p = str;
-    u32 btn          = strtol(p + 3, &p, 10);
-    e->mouse.x       = strtol(p + 1, &p, 10) - 1;
-    e->mouse.y       = strtol(p + 1, &p, 10) - 1;
-    e->mouse.pressed = (*p == 'M');
+    byte *cursor     = start;
+    u32 btn          = strtol(cursor + 3, &cursor, 10);
+    e->mouse.x       = strtol(cursor + 1, &cursor, 10) - 1;
+    e->mouse.y       = strtol(cursor + 1, &cursor, 10) - 1;
+    e->mouse.pressed = (*cursor == 'M');
 
     switch (btn) {
         case 0:  e->type = EMouseLeft;   break;
@@ -639,9 +632,10 @@ b32 try_parse_mouse(byte *str, isize n, Event *e) {
         case 32: e->type = EMouseDrag;   break;
         case 64: e->type = EScrollUp;    break;
         case 65: e->type = EScrollDown;  break;
-        default: e->type = ENone;
+        default: assert("There are no other values to match against");
     }
 
+    *p = terminator + 1;
     return true;
 }
 
@@ -658,15 +652,18 @@ static struct {byte str[4]; TermKey k;} term_key_table[] = {
     {"[6~", TERMKEY_PAGEDOWN},
 };
 
-b32 try_parse_term_key(byte *str, isize n, Event *e) {
+b32 try_parse_term_key(byte **p, byte *end, Event *e) {
+    byte *start = *p;
+    isize n = end - start;
     if (n < 3) return false;
 
     for (usize i = 0; i < ARRAY_SIZE(term_key_table); i++) {
         byte *key = term_key_table[i].str;
         isize key_len = strlen(key);
-        if (n >= key_len + 1 && memcmp(str + 1, key, key_len) == 0) {
+        if (n >= key_len + 1 && memcmp(start + 1, key, key_len) == 0) {
             e->type = ETermKey;
             e->term_key = term_key_table[i].k;
+            *p = start + key_len + 1;
             return true;
         }
     }
@@ -674,14 +671,14 @@ b32 try_parse_term_key(byte *str, isize n, Event *e) {
     return false;
 }
 
-b32 try_parse_text(byte *str, isize n, Event *e) {
-    if (1 <= n && n <= 4) {
-        e->type = ECodePoint;
-        e->codepoint = utf8_next(&str, str + n);
-        return true;
-    }
+b32 try_parse_text(byte **p, byte *end, Event *e) {
+    byte *start = *p;
+    u8 len = utf8_expected_len(*start);
+    if (end - start < len) return false;
 
-    return false;
+    e->type = ECodePoint;
+    e->codepoint = utf8_next(p, start + len);
+    return true;
 }
 
 Cell cell(CodePoint cp, Effect e) { return (Cell) { .cp = cp, .effect = e }; }
