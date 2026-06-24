@@ -24,13 +24,18 @@ i32 main(i32 argc, byte *argv[]) {
     REBUILD_UNITY_AUTO(argc, argv);
 
     init_terminal();
-    set_max_timeout_ms(10);
+    set_fps(60);
     timer = SEC(SEC_PER_QUOTE);
     cmd_append(&cmd, "curl", "-s", "https://meowfacts.herokuapp.com/");
 
-    while (!is_codepoint(cp("q"))) {
+    b32 quit = false;
+    while (!quit) {
         begin_frame();
         {
+            Slice(Event) events = get_events();
+            for (isize i = 0; i < events.count; ++i) {
+                if (event_is_codepoint(events.items[i], cp("q"))) quit = true;
+            }
             main_loop();
         }
         end_frame();

@@ -103,8 +103,6 @@ typedef struct {
     Layout_Color color;
 } Layout_TextStyle;
 
-slice_def(CodePoint);
-
 typedef enum {
     LAYOUT_EVENT_MOUSE_LEFT,
     LAYOUT_EVENT_MOUSE_RIGHT,
@@ -127,6 +125,8 @@ typedef struct {
         CodePoint text;
     };
 } Layout_Event;
+
+slice_def(CodePoint);
 
 typedef struct {
     Slice(CodePoint) text;

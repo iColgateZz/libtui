@@ -13,13 +13,20 @@ i32 main(i32 argc, byte *argv[]) {
     REBUILD_UNITY_AUTO(argc, argv);
 
     init_terminal();
-    set_max_timeout_ms(10);
+    set_fps(60);
 
     last_cp = cp("A");
 
-    while (!is_codepoint(ctrl('x'))) {
+    b32 quit = false;
+    while (!quit) {
         begin_frame();
         {
+            Slice(Event) events = get_events();
+            for (isize i = 0; i < events.count; ++i) {
+                Event event = events.items[i];
+                if (event_is_codepoint(event, ctrl('x'))) quit = true;
+                if (event_is(event, ECodePoint)) last_cp = event.parsed_cp;
+            }
             main_loop();
         }
         end_frame();
@@ -29,10 +36,6 @@ i32 main(i32 argc, byte *argv[]) {
 }
 
 void main_loop() {
-    if (is_event(ECodePoint)) {
-        last_cp = get_codepoint();
-    }
-
     // put_cp(0, 0, last_cp);
     // put_cp(1, 0, cp("p"));
 

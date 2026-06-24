@@ -87,20 +87,17 @@ typedef struct {
             i32 x, y;
             b32 pressed;
         } mouse;
-        CodePoint parsed_cp;
+        CodePoint codepoint;
         TermKey term_key;
     };
 } Event;
 
-b32 is_event(EventType e);
-i32 get_mouse_x();
-i32 get_mouse_y();
-b32 is_mouse_pressed();
-b32 is_mouse_released();
-b32 is_term_key(TermKey k);
-b32 is_codepoint(CodePoint cp);
-TermKey get_term_key();
-CodePoint get_codepoint();
+slice_def(Event);
+Slice(Event) get_events(void);
+b32 event_is(Event event, EventType type);
+b32 event_is_mouse(Event event);
+b32 event_is_term_key(Event event, TermKey key);
+b32 event_is_codepoint(Event event, CodePoint cp);
 
 typedef struct {
     i32 x, y, w, h;
@@ -121,7 +118,7 @@ Clip clip_pop();
 Clip clip_peek();
 
 void init_terminal();
-void set_max_timeout_ms(i32 timeout);
+void set_fps(i32 fps);
 void begin_frame();
 void end_frame();
 u64 get_delta_time();
@@ -190,12 +187,14 @@ void debug(i32 x, i32 y, byte *fmt, ...);
 list_def(Cell);
 list_def(Clip);
 list_def(byte);
+list_def(Event);
 
 struct {
     struct termios orig_term;
     Unix_Pipe pipe;
-    i32 timeout;
-    Event event;
+    List(Event) events;
+    List(byte) input_bytes;
+    i64 frame_interval_ns;
     u64 saved_time, dt;
     List(Cell) frontbuffer;
     List(Cell) backbuffer;
@@ -208,32 +207,35 @@ struct {
 u64 get_delta_time() { return Terminal.dt; }
 u32 get_terminal_width() { return Terminal.width; }
 u32 get_terminal_height() { return Terminal.height; }
-b32 is_event(EventType e) { return Terminal.event.type == e; }
-i32 get_mouse_x() { return Terminal.event.mouse.x; }
-i32 get_mouse_y() { return Terminal.event.mouse.y; }
-b32 is_mouse_pressed() { return Terminal.event.mouse.pressed; }
-b32 is_mouse_released() { return !is_mouse_pressed(); }
-b32 is_term_key(TermKey k) { return Terminal.event.term_key == k && Terminal.event.type == ETermKey; }
-b32 is_codepoint(CodePoint cp) { return cp_equal(cp, Terminal.event.parsed_cp); }
-TermKey get_term_key() { return Terminal.event.term_key; }
-CodePoint get_codepoint() { return Terminal.event.parsed_cp; }
+Slice(Event) get_events(void) {
+    return (Slice(Event)) {
+        .items = Terminal.events.items,
+        .count = Terminal.events.count,
+    };
+}
 
-b32 is_mouse_event() { return Terminal.event.type == EScrollUp ||
-                              Terminal.event.type == EScrollDown ||
-                              Terminal.event.type == EMouseDrag || 
-                              Terminal.event.type == EMouseLeft ||
-                              Terminal.event.type == EMouseMiddle ||
-                              Terminal.event.type == EMouseRight; }
+b32 event_is(Event event, EventType type) { return event.type == type; }
+b32 event_is_term_key(Event event, TermKey key) { return event.type == ETermKey && event.term_key == key; }
+b32 event_is_codepoint(Event event, CodePoint cp) { return event.type == ECodePoint && cp_equal(event.codepoint, cp); }
+b32 event_is_mouse(Event event) { return event.type == EScrollUp ||
+                                         event.type == EScrollDown ||
+                                         event.type == EMouseDrag ||
+                                         event.type == EMouseLeft ||
+                                         event.type == EMouseMiddle ||
+                                         event.type == EMouseRight; }
 
 // private
 void restore_term();
 void update_screen_dimensions();
 void handle_sigwinch(i32 signo);
 i64  time_ms();
+i64  time_ns();
 void save_timestamp();
 void calculate_dt();
-void poll_event(Event *e);
-void parse_input(byte *str, isize n, Event *e);
+void poll_events_until(i64 deadline_ns);
+void handle_available_events(i32 timeout_ms);
+void parse_pending_input();
+void input_consume(isize count);
 void write_str_len(byte *str, usize len);
 void write_strf_impl(byte *fmt, ...);
 #define write_str(s)        write_str_len(s, sizeof(s) - 1)
@@ -347,6 +349,8 @@ void restore_term() {
     list_free(Terminal.frontbuffer);
     list_free(Terminal.frame_cmds);
     list_free(Terminal.clips);
+    list_free(Terminal.events);
+    list_free(Terminal.input_bytes);
 
     arena_destroy(Terminal.tmp);
 }
@@ -367,27 +371,39 @@ void handle_sigwinch(i32 signo) {
     write(Terminal.pipe.write_fd, &signo, sizeof signo);
 }
 
-void set_max_timeout_ms(i32 timeout) { Terminal.timeout = timeout; }
+void set_fps(i32 fps) {
+    Terminal.frame_interval_ns = fps <= 0 ? -1 : 1000000000ull / fps;
+}
 
 void begin_frame() {
     save_timestamp();
 
     arena_clear(&Terminal.tmp);
     list_clear(&Terminal.frame_cmds);
+    list_clear(&Terminal.events);
     for (isize i = 0; i < Terminal.backbuffer.count; ++i)
         Terminal.backbuffer.items[i] = cell_empty();
 
-    Terminal.event = (Event) {0};
-    poll_event(&Terminal.event);
+    if (Terminal.frame_interval_ns <= 0) {
+        handle_available_events(-1);
+        return;
+    }
+
+    i64 deadline = time_ns() + Terminal.frame_interval_ns;
+    poll_events_until(deadline);
 }
 
 void save_timestamp()  { Terminal.saved_time = time_ms(); }
 void calculate_dt() { Terminal.dt = time_ms() - Terminal.saved_time; }
 
-i64 time_ms() {
+i64 time_ns() {
     struct timespec ts = {0};
     clock_gettime(CLOCK_MONOTONIC, &ts);
-    return ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+    return ts.tv_sec * 1000000000ull + ts.tv_nsec;
+}
+
+i64 time_ms() {
+    return time_ns() / 1000000ull;
 }
 
 void end_frame() {
@@ -486,74 +502,129 @@ void emit_absolute_cursor_move(List(byte) *a, u32 row, u32 col) {
     list_append_many(a, result.s, result.len);
 }
 
-void poll_event(Event *e) {
+void poll_events_until(i64 deadline_ns) {
+    for (;;) {
+        i64 remaining_ns = deadline_ns - time_ns();
+        if (remaining_ns <= 0) break;
+        i32 timeout_ms = (remaining_ns + 999999) / 1000000;
+        handle_available_events(timeout_ms);
+    }
+}
+
+void handle_available_events(i32 timeout_ms) {
     #define PFD_SIZE 2
     struct pollfd pfd[PFD_SIZE] = {
         {.fd = Terminal.pipe.read_fd, .events = POLLIN},
         {.fd = STDIN_FILENO,          .events = POLLIN},
     };
 
-    i32 timeout_ms = Terminal.timeout >= 0 ? Terminal.timeout : -1;
     i32 rval = poll(pfd, PFD_SIZE, timeout_ms);
 
     if (rval < 0) {
         if (errno == EAGAIN || errno == EINTR) {
-            poll_event(e);
             return;
         }
 
         assert(false && "call to 'poll' failed");
     }
 
-    else if (rval == 0) { // timeout
-        e->type = ENone;
+    else if (rval == 0) {
         return;
     }
 
     if (pfd[0].revents & POLLIN) { // window resize
         i32 sig;
         read(Terminal.pipe.read_fd, &sig, sizeof sig);
-        e->type = EWinch;
-        return;
+        list_append(&Terminal.events, ((Event) {.type = EWinch}));
     }
 
     if (pfd[1].revents & POLLIN) {
-        isize n = 0;
-        static byte buffer[256];
-        n = read(STDIN_FILENO, buffer, sizeof buffer);
+        //TODO: Maybe read directly into input_bytes?
+        static byte buffer[4096];
+        isize n = read(STDIN_FILENO, buffer, sizeof buffer);
 
         assert(n > 0 && "read non-positive amount of bytes from STDIN");
 
-        parse_input(buffer, n, e);
-        return;
+        list_append_many(&Terminal.input_bytes, buffer, n);
+        parse_pending_input();
     }
 }
 
-void parse_input(byte *str, isize n, Event *e) {
-    if (str[0] == TERMKEY_ESCAPE) {
-        if (try_parse_mouse(str, n, e)) return;
-        if (try_parse_term_key(str, n, e)) return;
+void input_consume(isize count) {
+    assert(0 <= count && count <= Terminal.input_bytes.count);
+    memmove(
+        Terminal.input_bytes.items,
+        Terminal.input_bytes.items + count,
+        (Terminal.input_bytes.count - count) * sizeof(*Terminal.input_bytes.items)
+    );
+    Terminal.input_bytes.count -= count;
+}
 
-        // Unknown escape sequence
-        e->type = ENone;
-        return;
+void parse_pending_input() {
+    while (Terminal.input_bytes.count > 0) {
+        byte *str = Terminal.input_bytes.items;
+        isize n = Terminal.input_bytes.count;
+        Event e = {0};
+        isize consumed = 0;
+
+        if (str[0] == TERMKEY_ESCAPE) {
+            if (n == 1) break;
+
+            if (try_parse_mouse(str, n, &e)) {
+                byte *end = memchr(str, e.mouse.pressed ? 'M' : 'm', n);
+                consumed = end ? end - str + 1 : 0;
+            } else if (try_parse_term_key(str, n, &e)) {
+                consumed = n < 4 || str[3] != '~' ? 3 : 4;
+            } else if (str[1] != '[') {
+                consumed = 1;
+            } else {
+                byte *end = NULL;
+                for (isize i = 2; i < n; ++i) {
+                    if (('A' <= str[i] && str[i] <= 'Z') ||
+                        ('a' <= str[i] && str[i] <= 'z') ||
+                        str[i] == '~') {
+                        end = str + i;
+                        break;
+                    }
+                }
+                if (!end) break;
+                consumed = end - str + 1;
+            }
+
+            if (consumed == 0) break;
+            if (e.type != ENone) list_append(&Terminal.events, e);
+            input_consume(consumed);
+            continue;
+        }
+
+        #define DELETE 127
+        if (str[0] == DELETE) {
+            list_append(&Terminal.events, ((Event) {
+                .type = ETermKey,
+                .term_key = TERMKEY_BACKSPACE,
+            }));
+            input_consume(1);
+            continue;
+        }
+
+        u8 len = utf8_expected_len(str[0]);
+        if (n < len) break;
+
+        if (try_parse_text(str, len, &e)) {
+            list_append(&Terminal.events, e);
+        }
+        input_consume(len);
     }
-
-    // special case
-    #define DELETE 127
-    if (n == 1 && *str == DELETE) {
-        e->type = ETermKey;
-        e->term_key = TERMKEY_BACKSPACE;
-        return;
-    }
-
-    if (try_parse_text(str, n, e)) return;
-
-    e->type = ENone;
 }
 
 b32 try_parse_mouse(byte *str, isize n, Event *e) {
     if (n < 9 || memcmp(str, "\33[<", 3) != 0) return false;
+    byte *terminator_m = memchr(str, 'm', n);
+    byte *terminator_M = memchr(str, 'M', n);
+    byte *terminator = terminator_m && terminator_M
+                     ? MIN(terminator_m, terminator_M)
+                     : (terminator_m ? terminator_m : terminator_M);
+    if (!terminator) return false;
 
     byte *p = str;
     u32 btn          = strtol(p + 3, &p, 10);
@@ -588,11 +659,12 @@ static struct {byte str[4]; TermKey k;} term_key_table[] = {
 };
 
 b32 try_parse_term_key(byte *str, isize n, Event *e) {
-    if (n < 3 || n > 4) return false;
+    if (n < 3) return false;
 
     for (usize i = 0; i < ARRAY_SIZE(term_key_table); i++) {
         byte *key = term_key_table[i].str;
-        if (memcmp(str + 1, key, n - 1) == 0) {
+        isize key_len = strlen(key);
+        if (n >= key_len + 1 && memcmp(str + 1, key, key_len) == 0) {
             e->type = ETermKey;
             e->term_key = term_key_table[i].k;
             return true;
@@ -605,7 +677,7 @@ b32 try_parse_term_key(byte *str, isize n, Event *e) {
 b32 try_parse_text(byte *str, isize n, Event *e) {
     if (1 <= n && n <= 4) {
         e->type = ECodePoint;
-        e->parsed_cp = utf8_next(&str, str + n);
+        e->codepoint = utf8_next(&str, str + n);
         return true;
     }
 

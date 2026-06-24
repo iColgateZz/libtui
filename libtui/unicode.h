@@ -23,6 +23,7 @@ b32 cp_equal(CodePoint a, CodePoint b);
 typedef u32 Unicode;
 u8 unicode_width(Unicode ch);
 
+u8 utf8_expected_len(byte first);
 CodePoint utf8_next(byte **start, byte *end);
 
 static CodePoint UTF8_REPLACEMENT = {
@@ -34,6 +35,15 @@ static CodePoint UTF8_REPLACEMENT = {
 #endif
 
 #ifdef LIBTUI_UNICODE_IMPL
+
+u8 utf8_expected_len(byte first) {
+    u8 b = (u8)first;
+    if (b < 0x80) return 1;
+    if ((b & 0xE0) == 0xC0) return 2;
+    if ((b & 0xF0) == 0xE0) return 3;
+    if ((b & 0xF8) == 0xF0) return 4;
+    return 1;
+}
 
 CodePoint utf8_next(byte **p, byte *end) {
     byte *s = *p;

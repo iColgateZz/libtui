@@ -9,49 +9,51 @@
 #define LIBTUI_RENDERER_IMPL
     #include "renderer.h"
 
-void push_renderer_event_to_layout(void) {
+void push_renderer_event_to_layout(Event renderer_event) {
     Layout_Event event = {0};
 
-    if (is_event(EMouseLeft)) {
+    if (event_is(renderer_event, EMouseLeft)) {
         event = (Layout_Event) {
             .type = LAYOUT_EVENT_MOUSE_LEFT,
-            .mouse = {get_mouse_x(), get_mouse_y(), is_mouse_pressed()},
+            .mouse = {renderer_event.mouse.x, renderer_event.mouse.y, renderer_event.mouse.pressed},
         };
-    } else if (is_event(EMouseRight)) {
+    } else if (event_is(renderer_event, EMouseRight)) {
         event = (Layout_Event) {
             .type = LAYOUT_EVENT_MOUSE_RIGHT,
-            .mouse = {get_mouse_x(), get_mouse_y(), is_mouse_pressed()},
+            .mouse = {renderer_event.mouse.x, renderer_event.mouse.y, renderer_event.mouse.pressed},
         };
-    } else if (is_event(EMouseMiddle)) {
+    } else if (event_is(renderer_event, EMouseMiddle)) {
         event = (Layout_Event) {
             .type = LAYOUT_EVENT_MOUSE_MIDDLE,
-            .mouse = {get_mouse_x(), get_mouse_y(), is_mouse_pressed()},
+            .mouse = {renderer_event.mouse.x, renderer_event.mouse.y, renderer_event.mouse.pressed},
         };
-    } else if (is_event(EScrollUp)) {
+    } else if (event_is(renderer_event, EScrollUp)) {
         event = (Layout_Event) {
             .type = LAYOUT_EVENT_SCROLL_UP,
-            .mouse = {get_mouse_x(), get_mouse_y(), is_mouse_pressed()},
+            .mouse = {renderer_event.mouse.x, renderer_event.mouse.y, renderer_event.mouse.pressed},
         };
-    } else if (is_event(EScrollDown)) {
+    } else if (event_is(renderer_event, EScrollDown)) {
         event = (Layout_Event) {
             .type = LAYOUT_EVENT_SCROLL_DOWN,
-            .mouse = {get_mouse_x(), get_mouse_y(), is_mouse_pressed()},
+            .mouse = {renderer_event.mouse.x, renderer_event.mouse.y, renderer_event.mouse.pressed},
         };
-    } else if (is_event(EMouseDrag)) {
+    } else if (event_is(renderer_event, EMouseDrag)) {
         event = (Layout_Event) {
             .type = LAYOUT_EVENT_MOUSE_DRAG,
-            .mouse = {get_mouse_x(), get_mouse_y(), is_mouse_pressed()},
+            .mouse = {renderer_event.mouse.x, renderer_event.mouse.y, renderer_event.mouse.pressed},
         };
-    } else if (is_event(ETermKey)) {
+    } else if (event_is(renderer_event, ETermKey)) {
         event = (Layout_Event) {
             .type = LAYOUT_EVENT_KEY,
-            .key = get_term_key(),
+            .key = renderer_event.term_key,
         };
-    } else if (is_event(ECodePoint)) {
+    } else if (event_is(renderer_event, ECodePoint)) {
         event = (Layout_Event) {
             .type = LAYOUT_EVENT_TEXT,
-            .text = get_codepoint(),
+            .text = renderer_event.codepoint,
         };
+    } else {
+        return;
     }
 
     layout_event_push(event);
@@ -61,7 +63,7 @@ i32 main(i32 argc, byte *argv[]) {
     REBUILD_UNITY_AUTO(argc, argv);
 
     init_terminal();
-    set_max_timeout_ms(100);
+    set_fps(60);
 
     List(CodePoint) cps = {0};
     s8 text = s8("LibTUI text wraps inside containers. LibTUI text wraps inside containers.");
@@ -75,13 +77,21 @@ i32 main(i32 argc, byte *argv[]) {
         .count = cps.count,
     };
 
-    while (!is_codepoint(cp("q"))) {
+    b32 quit = false;
+    while (!quit) {
         begin_frame();
+
+        Slice(Event) events = get_events();
+        for (isize i = 0; i < events.count; ++i) {
+            Event event = events.items[i];
+            if (event_is_codepoint(event, cp("q"))) quit = true;
+            push_renderer_event_to_layout(event);
+        }
+
         {
             u32 w = get_terminal_width();
             u32 h = get_terminal_height();
             layout_begin(w, h);
-            push_renderer_event_to_layout();
 
             Container(1, .style = {
                 .color = {127, 9, 254},
