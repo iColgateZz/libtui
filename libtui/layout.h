@@ -1017,7 +1017,8 @@ static inline void layout__space_distribute(i32 space, List(Layout__NodePtr) nod
 
         if (target_growth == 0) target_growth = 1;
 
-        i32 space_for_distribution = MIN(space, target_growth * smallest_count);
+        i64 total_growth = (i64)target_growth * (i64)smallest_count;
+        i32 space_for_distribution = (i32)MIN((i64)space, total_growth);
         i32 each = space_for_distribution / smallest_count;
         i32 extra = space_for_distribution % smallest_count;
 
@@ -1068,7 +1069,8 @@ static inline void layout__space_distribute(i32 space, List(Layout__NodePtr) nod
 
         if (target_shrink == 0) target_shrink = 1;
 
-        i32 space_for_distribution = MIN(-space, target_shrink * largest_count);
+        i64 total_shrink = (i64)target_shrink * (i64)largest_count;
+        i32 space_for_distribution = (i32)MIN((i64)-space, total_shrink);
         i32 each = space_for_distribution / largest_count;
         i32 extra = space_for_distribution % largest_count;
 
