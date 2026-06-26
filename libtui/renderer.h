@@ -45,7 +45,6 @@ typedef struct {
 } Cell;
 
 Cell cell(CodePoint cp, Effect e);
-Cell cell_cont(Effect e);
 Cell cell_empty();
 b32 cell_equal(Cell a, Cell b);
 
@@ -120,30 +119,11 @@ u64 get_delta_time();
 u32 get_terminal_width();
 u32 get_terminal_height();
 
-void put_cp_(i32 x, i32 y, CodePoint cp, Effect e);
-#define put_cp(...)                 putx_(__VA_ARGS__, put2_, put1_)(__VA_ARGS__)
-#define putx_(a, b, c, d, e, ...)   e
-#define put1_(x, y, cp)             put_cp_(x, y, cp, (Effect) {0})
-#define put2_(x, y, cp, ef)         put_cp_(x, y, cp, ef)
-
-void put_str_(i32 x, i32 y, byte *str, usize len, Effect e);
-#define put_str(...)                 putstrx_(__VA_ARGS__, putstr2_, putstr1_)(__VA_ARGS__)
-#define putstrx_(a, b, c, d, e, f, ...) f
-#define putstr1_(x, y, s, len)       put_str_(x, y, s, len, (Effect){0})
-#define putstr2_(x, y, s, len, ef)   put_str_(x, y, s, len, ef)
-
-void draw_line_(i32 x0, i32 y0, i32 x1, i32 y1, CodePoint cp, Effect e);
-#define draw_line(...)               drawlinex_(__VA_ARGS__, drawline2_, drawline1_)(__VA_ARGS__)
-#define drawlinex_(a,b,c,d,e,f,g,...) g
-#define drawline1_(x0,y0,x1,y1,cp)   draw_line_(x0,y0,x1,y1,cp,(Effect){0})
-#define drawline2_(x0,y0,x1,y1,cp,ef) draw_line_(x0,y0,x1,y1,cp,ef)
-
-void draw_box_(Rectangle r, Effect e);
-#define draw_box(...)                drawboxx_(__VA_ARGS__, drawbox2_, drawbox1_)(__VA_ARGS__)
-#define drawboxx_(a,b,c,...)         c
-#define drawbox1_(r)                 draw_box_(r, (Effect){0})
-#define drawbox2_(r, ef)             draw_box_(r, ef)
-
+void put_cp(i32 x, i32 y, CodePoint cp);
+void put_effect(i32 x, i32 y, Effect e);
+void put_str(i32 x, i32 y, byte *s, usize len);
+void draw_line(i32 x0, i32 y0, i32 x1, i32 y1, CodePoint cp);
+void draw_box(Rectangle r);
 void fill_box(Rectangle r, Effect e);
 
 byte *vfmt(byte *p, byte *end, byte *f, va_list args);
@@ -674,28 +654,13 @@ b32 try_parse_text(byte **p, byte *end, Event *e) {
 }
 
 Cell cell(CodePoint cp, Effect e) { return (Cell) { .cp = cp, .effect = e }; }
-Cell cell_lead(CodePoint cp, Effect e) { return (Cell) { .cp = cp, .flags = CELL_WIDE_LEAD, .effect = e }; }
-Cell cell_cont(Effect e) { return (Cell) { .flags = CELL_CONTINUATION, .effect = e }; }
 Cell cell_empty() { return (Cell) { .cp = cp_from_byte(' ') }; }
 b32 cell_equal(Cell a, Cell b) { return memcmp(&a, &b, sizeof a) == 0; }
 
 b32 effect_equal(Effect a, Effect b) { return memcmp(&a, &b, sizeof a) == 0; }
 
-void put_str_(i32 x, i32 y, byte *s, usize len, Effect e) {
-    byte *p = s;
-    byte *end = s + len;
-
-    while (p < end) {
-        CodePoint cp = utf8_next(&p, end);
-        put_cp(x, y, cp, e);
-        x += cp.display_width;
-    }
-}
-
-void put_cp_(i32 x, i32 y, CodePoint cp, Effect e) {
+void put_cp(i32 x, i32 y, CodePoint cp) {
     Rectangle parent = clip_peek();
-
-    if (x < 0 || y < 0) return;
     if (!point_in_rect(x, y, parent)) return;
 
     u32 w = Terminal.width;
@@ -703,7 +668,7 @@ void put_cp_(i32 x, i32 y, CodePoint cp, Effect e) {
 
     if (cp.display_width == 1) {
         fix_wide_char(x, y);
-        cells[x + y * w] = cell(cp, e);
+        cells[x + y * w].cp = cp;
         return;
     }
 
@@ -713,32 +678,15 @@ void put_cp_(i32 x, i32 y, CodePoint cp, Effect e) {
         fix_wide_char(x, y);
         fix_wide_char(x + 1, y);
 
-        cells[x + y * w] = cell_lead(cp, e);
-        cells[(x + 1) + y * w] = cell_cont(e);
+        Cell lead = cells[x + y * w];
+        lead.cp = cp;
+        lead.flags = CELL_WIDE_LEAD;
+        Cell cont = cells[(x + 1) + y * w];
+        cont.flags = CELL_CONTINUATION;
         return;
     }
 
-    // ignore other widths
     assert(false && "a codepoint with invalid width");
-}
-
-void put_effect(i32 x, i32 y, Effect e) {
-    Rectangle parent = clip_peek();
-
-    if (x < 0 || y < 0) return;
-    if (!point_in_rect(x, y, parent)) return;
-
-    u32 w = Terminal.width;
-    Cell *cells = Terminal.backbuffer.items;
-    Cell *cur = &cells[x + y * w];
-    
-    cur->effect = e;
-
-    if ((cur->flags & CELL_WIDE_LEAD) && (u32)x + 1 < w) {
-        cells[(x + 1) + y * w].effect = e;
-    } else if ((cur->flags & CELL_CONTINUATION) && x > 0) {
-        cells[(x - 1) + y * w].effect = e;
-    }
 }
 
 void fix_wide_char(i32 x, i32 y) {
@@ -752,6 +700,33 @@ void fix_wide_char(i32 x, i32 y) {
 
     if ((c.flags & CELL_CONTINUATION) && (u32)x > 0) {
         cells[(x - 1) + y * w] = cell_empty();
+    }
+}
+
+void put_effect(i32 x, i32 y, Effect e) {
+    Rectangle parent = clip_peek();
+    if (!point_in_rect(x, y, parent)) return;
+
+    u32 w = Terminal.width;
+    Cell *cells = Terminal.backbuffer.items;
+    Cell *cur = &cells[x + y * w];
+
+    cur->effect = e;
+    if ((cur->flags & CELL_WIDE_LEAD) && (u32)x + 1 < w) {
+        cells[(x + 1) + y * w].effect = e;
+    } else if ((cur->flags & CELL_CONTINUATION) && x > 0) {
+        cells[(x - 1) + y * w].effect = e;
+    }
+}
+
+void put_str(i32 x, i32 y, byte *s, usize len) {
+    byte *p = s;
+    byte *end = s + len;
+
+    while (p < end) {
+        CodePoint cp = utf8_next(&p, end);
+        put_cp(x, y, cp);
+        x += cp.display_width;
     }
 }
 
@@ -953,7 +928,7 @@ void debug(i32 x, i32 y, byte *fmt, ...) {
         put_cp_debug(x + i, y, cp_from_byte(str.s[i]));
 }
 
-void draw_line_(i32 x0, i32 y0, i32 x1, i32 y1, CodePoint cp, Effect e) {
+void draw_line(i32 x0, i32 y0, i32 x1, i32 y1, CodePoint cp) {
     if (x0 == x1) { // vertical
         if (y1 < y0) {
             i32 tmp = y0;
@@ -962,7 +937,7 @@ void draw_line_(i32 x0, i32 y0, i32 x1, i32 y1, CodePoint cp, Effect e) {
         }
 
         for (i32 y = y0; y <= y1; y++) {
-            put_cp(x0, y, cp, e);
+            put_cp(x0, y, cp);
         }
     }
     else if (y0 == y1) { // horizontal
@@ -973,12 +948,12 @@ void draw_line_(i32 x0, i32 y0, i32 x1, i32 y1, CodePoint cp, Effect e) {
         }
 
         for (i32 x = x0; x <= x1; x++) {
-            put_cp(x, y0, cp, e);
+            put_cp(x, y0, cp);
         }
     }
 }
 
-void draw_box_(Rectangle r, Effect e) {
+void draw_box(Rectangle r) {
     if (r.w < 2 || r.h < 2) return;
 
     i32 x0 = r.x;
@@ -986,15 +961,15 @@ void draw_box_(Rectangle r, Effect e) {
     i32 x1 = r.x + r.w - 1;
     i32 y1 = r.y + r.h - 1;
 
-    put_cp(x0, y0, cp("┌"), e);
-    put_cp(x1, y0, cp("┐"), e);
-    put_cp(x0, y1, cp("└"), e);
-    put_cp(x1, y1, cp("┘"), e);
+    put_cp(x0, y0, cp("┌"));
+    put_cp(x1, y0, cp("┐"));
+    put_cp(x0, y1, cp("└"));
+    put_cp(x1, y1, cp("┘"));
 
-    draw_line(x0 + 1, y0, x1 - 1, y0, cp("─"), e);
-    draw_line(x0 + 1, y1, x1 - 1, y1, cp("─"), e);
-    draw_line(x0, y0 + 1, x0, y1 - 1, cp("│"), e);
-    draw_line(x1, y0 + 1, x1, y1 - 1, cp("│"), e);
+    draw_line(x0 + 1, y0, x1 - 1, y0, cp("─"));
+    draw_line(x0 + 1, y1, x1 - 1, y1, cp("─"));
+    draw_line(x0, y0 + 1, x0, y1 - 1, cp("│"));
+    draw_line(x1, y0 + 1, x1, y1 - 1, cp("│"));
 }
 
 void fill_box(Rectangle r, Effect e) {
