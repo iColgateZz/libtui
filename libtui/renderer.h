@@ -719,6 +719,24 @@ void put_effect(i32 x, i32 y, Effect e) {
     }
 }
 
+void merge_effect(i32 x, i32 y, Effect new) {
+    Rectangle parent = clip_peek();
+    if (!point_in_rect(x, y, parent)) return;
+
+    u32 w = Terminal.width;
+    Cell *cells = Terminal.backbuffer.items;
+    Effect *cur = &cells[x + y * w].effect;
+
+    // 0 0 | 0
+    // 0 1 | 1
+    // 1 0 | 1
+    // 1 1 | 1
+
+    cur->flags |= new.flags;
+    if (new.flags & EFFECT_FG) cur->fg = new.fg;
+    if (new.flags & EFFECT_BG) cur->fg = new.bg;
+}
+
 void put_str(i32 x, i32 y, byte *s, usize len) {
     byte *p = s;
     byte *end = s + len;

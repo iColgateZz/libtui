@@ -153,6 +153,7 @@ i32 main(i32 argc, byte *argv[]) {
                         for (isize j = 0; j < text.text.count; ++j) {
                             CodePoint cp = text.text.items[j];
                             put_cp(x, text.y, cp);
+                            merge_effect(x, text.y, effect);
                             x += cp.display_width;
                         }
                         break;
