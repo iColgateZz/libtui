@@ -35,6 +35,7 @@ b32 effect_equal(Effect a, Effect b);
 #define CELL_CONTINUATION   0x01
 #define CELL_WIDE_LEAD      0x02
 
+//TODO: this is definitely not a part of the public API
 typedef struct {
     CodePoint cp;
     u8 flags;
