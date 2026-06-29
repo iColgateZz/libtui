@@ -675,11 +675,11 @@ void put_cp(i32 x, i32 y, CodePoint cp) {
         fix_wide_char(x, y);
         fix_wide_char(x + 1, y);
 
-        Cell lead = cells[x + y * w];
-        lead.cp = cp;
-        lead.flags = CELL_WIDE_LEAD;
-        Cell cont = cells[(x + 1) + y * w];
-        cont.flags = CELL_CONTINUATION;
+        Cell *lead = &cells[x + y * w];
+        lead->cp = cp;
+        lead->flags = CELL_WIDE_LEAD;
+        Cell *cont = &cells[(x + 1) + y * w];
+        cont->flags = CELL_CONTINUATION;
         return;
     }
 
@@ -731,7 +731,7 @@ void merge_effect(i32 x, i32 y, Effect new) {
 
     cur->flags |= new.flags;
     if (new.flags & EFFECT_FG) cur->fg = new.fg;
-    if (new.flags & EFFECT_BG) cur->fg = new.bg;
+    if (new.flags & EFFECT_BG) cur->bg = new.bg;
 }
 
 void put_str(i32 x, i32 y, byte *s, usize len) {
