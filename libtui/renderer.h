@@ -4,9 +4,6 @@
 #define PSH_CORE_NO_PREFIX
     #include "psh_core/psh_core.h"
 
-#define LIBTUI_UNICODE_IMPL
-    #include "unicode.h"
-
 #define ctrl(x) cp_from_byte((x) & 0x1F)
 
 //TODO: rename file to terminal.h and add term_ prefix to functions

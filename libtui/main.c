@@ -59,6 +59,8 @@ void push_renderer_event_to_layout(Event renderer_event) {
     layout_event_push(event);
 }
 
+list_def(CodePoint);
+
 i32 main(i32 argc, byte *argv[]) {
     REBUILD_UNITY_AUTO(argc, argv);
 

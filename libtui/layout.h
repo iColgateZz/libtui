@@ -3,7 +3,6 @@
 
 #define PSH_CORE_NO_PREFIX
 #include "psh_core/psh_core.h"
-#include "unicode.h"
 
 //TODO: move to psh_core
 #define typeof __typeof__
