@@ -133,12 +133,61 @@ typedef struct {
 } Layout_TextConfig;
 
 typedef struct {
+    packed_enum {
+        LAYOUT_CMD_RECT,
+        LAYOUT_CMD_TEXT,
+        LAYOUT_CMD_CLIP_START,
+        LAYOUT_CMD_CLIP_END,
+        // LAYOUT_CMD_BORDER, // pass concrete codepoints to draw
+    } type;
+    union {
+        struct {
+            i32 x, y, w, h;
+            Layout_Color color;
+        } _LAYOUT_CMD_RECT;
+        struct {
+            i32 x, y;
+            Slice(CodePoint) text;
+            Layout_TextStyle style;
+        } _LAYOUT_CMD_TEXT;
+        struct {
+            i32 x, y, w, h;
+        } _LAYOUT_CMD_CLIP_START;
+    };
+} Layout_Command;
+
+slice_def(Layout_Command);
+typedef i32 Layout_PersistentID;
+
+void layout_begin(i32 w, i32 h);
+Slice(Layout_Command) layout_end();
+void layout_text_open(Layout_PersistentID id, Layout_TextConfig conf);
+void layout_container_open(Layout_PersistentID id, Layout_ContainerConfig conf);
+void layout_close();
+void layout_event_push(Layout_Event event);
+
+#define Container(id, ...)                              \
+    for (u8 _latch = (layout_container_open(               \
+            id,                                         \
+            (Layout_ContainerConfig) {                  \
+                .style.size.w = FIT(0, INT32_MAX),      \
+                .style.size.h = FIT(0, INT32_MAX),      \
+                __VA_ARGS__                             \
+        }), 0); _latch < 1; _latch = 1, layout_close())
+
+#define Text(id, ...)              \
+    for (u8 _latch = (layout_text_open(id, (Layout_TextConfig) {__VA_ARGS__}), 0); _latch < 1; _latch = 1, layout_close())
+
+#endif
+
+#ifdef LIBTUI_LAYOUT_IMPL
+
+typedef struct {
     i32 offset;
     i32 count;
 } Layout__ChildrenIndices;
 
 typedef i32 Layout__TempID;
-typedef i32 Layout_PersistentID;
 
 typedef struct {
     //TODO: using i16 is probably more than enough
@@ -169,59 +218,8 @@ typedef struct {
     };
 } Layout__Node;
 
-typedef struct {
-    packed_enum {
-        LAYOUT_CMD_RECT,
-        LAYOUT_CMD_TEXT,
-        LAYOUT_CMD_CLIP_START,
-        LAYOUT_CMD_CLIP_END,
-        // LAYOUT_CMD_BORDER, // pass concrete codepoints to draw
-    } type;
-    union {
-        struct {
-            i32 x, y, w, h;
-            Layout_Color color;
-        } _LAYOUT_CMD_RECT;
-        struct {
-            i32 x, y;
-            Slice(CodePoint) text;
-            Layout_TextStyle style;
-        } _LAYOUT_CMD_TEXT;
-        struct {
-            i32 x, y, w, h;
-        } _LAYOUT_CMD_CLIP_START;
-    };
-} Layout_Command;
-
 list_def(Layout_Command);
-slice_def(Layout_Command);
 list_def(Layout_Event);
-
-void layout_begin(i32 w, i32 h);
-Slice(Layout_Command) layout_end();
-void layout_text_open(Layout_PersistentID id, Layout_TextConfig conf);
-void layout_container_open(Layout_PersistentID id, Layout_ContainerConfig conf);
-void layout_close();
-void layout_event_push(Layout_Event event);
-
-static u8 _latch = 0;
-
-#define Container(id, ...)                              \
-    for (_latch = (layout_container_open(               \
-            id,                                         \
-            (Layout_ContainerConfig) {                  \
-                .style.size.w = FIT(0, INT32_MAX),      \
-                .style.size.h = FIT(0, INT32_MAX),      \
-                __VA_ARGS__                             \
-        }), 0); _latch < 1; _latch = 1, layout_close())
-
-#define Text(id, ...)              \
-    for (_latch = (layout_text_open(id, (Layout_TextConfig) {__VA_ARGS__}), 0); _latch < 1; _latch = 1, layout_close())
-
-#endif
-
-#ifdef LIBTUI_LAYOUT_IMPL
-
 list_def(Layout__Node);
 list_def(Layout__TempID);
 typedef Layout__Node* Layout__NodePtr;
