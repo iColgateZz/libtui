@@ -85,7 +85,7 @@ typedef struct {
     Layout_Color color;
     u8 padding;
     u8 spacing;
-    // u8 margin;
+    // TODO: u8 margin;
     // BorderStyle border;
     Layout_Direction direction;
     Layout_Alignment align_children;
@@ -102,6 +102,19 @@ typedef struct {
     Layout_Color color;
 } Layout_TextStyle;
 
+typedef struct {
+    byte *items;
+    isize count;
+} Layout_TextSpan;
+
+//TODO: text measurement results should probably be cached.
+typedef struct {
+    Layout_TextSpan text;
+    Layout_TextStyle style;
+} Layout_TextConfig;
+
+#define LAYOUT_TEXT(s) ((Layout_TextSpan) {.items = (byte *)(s), .count = sizeof(s) - 1})
+
 typedef enum {
     LAYOUT_EVENT_MOUSE_LEFT,
     LAYOUT_EVENT_MOUSE_RIGHT,
@@ -113,6 +126,10 @@ typedef enum {
     LAYOUT_EVENT_TEXT,
 } Layout_EventType;
 
+//TODO: get rid of events, they do not belong to layout system
+//      add API to set screen dimensions, update scroll delta and cursor position
+//      add API to query whether the cursor is above the current node or maybe do
+//      some kind of hit testing in the layout system?
 typedef struct {
     Layout_EventType type;
     union {
@@ -121,16 +138,9 @@ typedef struct {
             b32 pressed;
         } mouse;
         i32 key;
-        CodePoint text;
+        Layout_TextSpan text;
     };
 } Layout_Event;
-
-slice_def(CodePoint);
-
-typedef struct {
-    Slice(CodePoint) text;
-    Layout_TextStyle style;
-} Layout_TextConfig;
 
 typedef struct {
     packed_enum {
@@ -147,7 +157,7 @@ typedef struct {
         } _LAYOUT_CMD_RECT;
         struct {
             i32 x, y;
-            Slice(CodePoint) text;
+            Layout_TextSpan text;
             Layout_TextStyle style;
         } _LAYOUT_CMD_TEXT;
         struct {
@@ -167,7 +177,7 @@ void layout_close();
 void layout_event_push(Layout_Event event);
 
 #define Container(id, ...)                              \
-    for (u8 _latch = (layout_container_open(               \
+    for (u8 _latch = (layout_container_open(            \
             id,                                         \
             (Layout_ContainerConfig) {                  \
                 .style.size.w = FIT(0, INT32_MAX),      \
@@ -205,6 +215,8 @@ typedef struct {
 
         // Maybe instead of adding a new type just emit a custom command that gives
         // user enough context so that they can adapt it for the renderer?
+
+        // Just pass the userdata pointer transparently via a command.
         LAYOUT_NODE_CONTAINER,
         LAYOUT_NODE_TEXT,
     } type;
@@ -498,9 +510,11 @@ static inline void layout__text_intrinsic_width(Layout__Node *node) {
     i32 max_word_width = 0;
     i32 current_word_width = 0;
 
-    Slice(CodePoint) text = text_node.config.text;
-    for (isize i = 0; i < text.count; ++i) {
-        CodePoint cp = text.items[i];
+    Layout_TextSpan text = text_node.config.text;
+    byte *p = text.items;
+    byte *end = text.items + text.count;
+    while (p < end) {
+        CodePoint cp = utf8_next(&p, end);
         if (cp_equal(cp, cp_from_byte('\n'))) {
             max_line_width = MAX(max_line_width, line_width);
             max_word_width = MAX(max_word_width, current_word_width);
@@ -606,8 +620,8 @@ static inline void layout__container_wrap_text(Layout__Node *node) {
 
 static inline void layout__text_wrap_text(Layout__Node *node) {
     unwrap_into(*node, LAYOUT_NODE_TEXT, text_node);
-    Slice(CodePoint) text = text_node.config.text;
-    if (text.count == 0) {
+    Layout_TextSpan text = text_node.config.text;
+    if (text.count <= 0) {
         node->h = node->min_h = 0;
         return;
     }
@@ -616,8 +630,10 @@ static inline void layout__text_wrap_text(Layout__Node *node) {
     i32 lines = 1;
     i32 line_width = 0;
 
-    for (isize i = 0; i < text.count; ++i) {
-        CodePoint cp = text.items[i];
+    byte *p = text.items;
+    byte *end = text.items + text.count;
+    while (p < end) {
+        CodePoint cp = utf8_next(&p, end);
         if (cp_equal(cp, cp_from_byte('\n'))) {
             lines++;
             line_width = 0;
@@ -775,51 +791,77 @@ static inline void layout__container_commands(Layout__Node *node) {
     list_append(&layout__state.commands, tag0(Layout_Command, LAYOUT_CMD_CLIP_END));
 }
 
+static inline void layout__append_text_command(
+    Layout__Node *node,
+    Layout_TextStyle style,
+    Layout_TextSpan source,
+    isize line_start_byte,
+    isize line_end_byte,
+    i32 line_y
+) {
+    list_append(&layout__state.commands, tag(Layout_Command, LAYOUT_CMD_TEXT, {
+        .x = node->x,
+        .y = line_y,
+        .text = {
+            .items = source.items + line_start_byte,
+            .count = line_end_byte - line_start_byte,
+        },
+        .style = style,
+    }));
+}
+
 static inline void layout__text_commands(Layout__Node *node) {
     unwrap_into(*node, LAYOUT_NODE_TEXT, text_node);
-    Slice(CodePoint) text = text_node.config.text;
-    if (text.count == 0) return;
+    Layout_TextSpan source = text_node.config.text;
+    if (source.count <= 0) return;
 
-    i32 max_width = MAX(node->w, 1);
-    i32 line_start = 0;
-    i32 line_count = 0;
-    i32 line_width = 0;
-    i32 y = node->y;
+    i32 available_line_width = MAX(node->w, 1);
+    isize line_start_byte = 0;
+    i32 line_cell_width = 0;
+    i32 line_y = node->y;
 
-    for (isize i = 0; i < text.count; ++i) {
-        CodePoint cp = text.items[i];
-        b32 force_break = cp_equal(cp, cp_from_byte('\n'));
-        b32 wrap_break = line_width > 0 && line_width + cp.display_width > max_width;
+    isize next_byte = 0;
+    byte *source_end = source.items + source.count;
+    while (next_byte < source.count) {
+        isize codepoint_start_byte = next_byte;
+        byte *decode_cursor = source.items + next_byte;
+        CodePoint codepoint = utf8_next(&decode_cursor, source_end);
+        next_byte = decode_cursor - source.items;
 
-        if (force_break || wrap_break) {
-            list_append(&layout__state.commands, tag(Layout_Command, LAYOUT_CMD_TEXT, {
-                .x = node->x, .y = y,
-                .text = {
-                    .items = text.items + line_start,
-                    .count = line_count,
-                },
-                .style = text_node.config.style,
-            }));
+        if (cp_equal(codepoint, cp_from_byte('\n'))) {
+            layout__append_text_command(
+                node, text_node.config.style, source,
+                line_start_byte, codepoint_start_byte, line_y
+            );
 
-            y++;
-            line_start = force_break ? i + 1 : i;
-            line_count = 0;
-            line_width = 0;
-            if (force_break) continue;
+            line_start_byte = next_byte;
+            line_cell_width = 0;
+            line_y++;
+            continue;
         }
 
-        line_count++;
-        line_width += cp.display_width;
+        b32 codepoint_overflows_line =
+            line_cell_width > 0 &&
+            line_cell_width + codepoint.display_width > available_line_width;
+
+        if (codepoint_overflows_line) {
+            layout__append_text_command(
+                node, text_node.config.style, source,
+                line_start_byte, codepoint_start_byte, line_y
+            );
+
+            line_start_byte = codepoint_start_byte;
+            line_cell_width = 0;
+            line_y++;
+        }
+
+        line_cell_width += codepoint.display_width;
     }
 
-    list_append(&layout__state.commands, tag(Layout_Command, LAYOUT_CMD_TEXT, {
-        .x = node->x, .y = y,
-        .text = {
-            .items = text.items + line_start,
-            .count = line_count,
-        },
-        .style = text_node.config.style,
-    }));
+    layout__append_text_command(
+        node, text_node.config.style, source,
+        line_start_byte, source.count, line_y
+    );
 }
 
 // Helper functions

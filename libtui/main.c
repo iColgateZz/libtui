@@ -9,48 +9,51 @@
 #define LIBTUI_RENDERER_IMPL
     #include "renderer.h"
 
-void push_renderer_event_to_layout(Event renderer_event) {
+void push_renderer_event_to_layout(Event *renderer_event) {
     Layout_Event event = {0};
 
-    if (event_is(renderer_event, EMouseLeft)) {
+    if (event_is(*renderer_event, EMouseLeft)) {
         event = (Layout_Event) {
             .type = LAYOUT_EVENT_MOUSE_LEFT,
-            .mouse = {renderer_event.mouse.x, renderer_event.mouse.y, renderer_event.mouse.pressed},
+            .mouse = {renderer_event->mouse.x, renderer_event->mouse.y, renderer_event->mouse.pressed},
         };
-    } else if (event_is(renderer_event, EMouseRight)) {
+    } else if (event_is(*renderer_event, EMouseRight)) {
         event = (Layout_Event) {
             .type = LAYOUT_EVENT_MOUSE_RIGHT,
-            .mouse = {renderer_event.mouse.x, renderer_event.mouse.y, renderer_event.mouse.pressed},
+            .mouse = {renderer_event->mouse.x, renderer_event->mouse.y, renderer_event->mouse.pressed},
         };
-    } else if (event_is(renderer_event, EMouseMiddle)) {
+    } else if (event_is(*renderer_event, EMouseMiddle)) {
         event = (Layout_Event) {
             .type = LAYOUT_EVENT_MOUSE_MIDDLE,
-            .mouse = {renderer_event.mouse.x, renderer_event.mouse.y, renderer_event.mouse.pressed},
+            .mouse = {renderer_event->mouse.x, renderer_event->mouse.y, renderer_event->mouse.pressed},
         };
-    } else if (event_is(renderer_event, EScrollUp)) {
+    } else if (event_is(*renderer_event, EScrollUp)) {
         event = (Layout_Event) {
             .type = LAYOUT_EVENT_SCROLL_UP,
-            .mouse = {renderer_event.mouse.x, renderer_event.mouse.y, renderer_event.mouse.pressed},
+            .mouse = {renderer_event->mouse.x, renderer_event->mouse.y, renderer_event->mouse.pressed},
         };
-    } else if (event_is(renderer_event, EScrollDown)) {
+    } else if (event_is(*renderer_event, EScrollDown)) {
         event = (Layout_Event) {
             .type = LAYOUT_EVENT_SCROLL_DOWN,
-            .mouse = {renderer_event.mouse.x, renderer_event.mouse.y, renderer_event.mouse.pressed},
+            .mouse = {renderer_event->mouse.x, renderer_event->mouse.y, renderer_event->mouse.pressed},
         };
-    } else if (event_is(renderer_event, EMouseDrag)) {
+    } else if (event_is(*renderer_event, EMouseDrag)) {
         event = (Layout_Event) {
             .type = LAYOUT_EVENT_MOUSE_DRAG,
-            .mouse = {renderer_event.mouse.x, renderer_event.mouse.y, renderer_event.mouse.pressed},
+            .mouse = {renderer_event->mouse.x, renderer_event->mouse.y, renderer_event->mouse.pressed},
         };
-    } else if (event_is(renderer_event, ETermKey)) {
+    } else if (event_is(*renderer_event, ETermKey)) {
         event = (Layout_Event) {
             .type = LAYOUT_EVENT_KEY,
-            .key = renderer_event.term_key,
+            .key = renderer_event->term_key,
         };
-    } else if (event_is(renderer_event, ECodePoint)) {
+    } else if (event_is(*renderer_event, ECodePoint)) {
         event = (Layout_Event) {
             .type = LAYOUT_EVENT_TEXT,
-            .text = renderer_event.codepoint,
+            .text = {
+                .items = renderer_event->codepoint.raw,
+                .count = renderer_event->codepoint.raw_len,
+            },
         };
     } else {
         return;
@@ -59,25 +62,11 @@ void push_renderer_event_to_layout(Event renderer_event) {
     layout_event_push(event);
 }
 
-list_def(CodePoint);
-
 i32 main(i32 argc, byte *argv[]) {
     REBUILD_UNITY_AUTO(argc, argv);
 
     init_terminal();
     set_fps(60);
-
-    List(CodePoint) cps = {0};
-    s8 text = s8("LibTUI text wraps inside containers. LibTUI text wraps inside containers.");
-    byte *start = text.s;
-    byte *end = text.s + text.len;
-    while (start < end) {
-        list_append(&cps, utf8_next(&start, end));
-    }
-    Slice(CodePoint) slice = {
-        .items = cps.items,
-        .count = cps.count,
-    };
 
     b32 quit = false;
     while (!quit) {
@@ -87,7 +76,7 @@ i32 main(i32 argc, byte *argv[]) {
         for (isize i = 0; i < events.count; ++i) {
             Event event = events.items[i];
             if (event_is_codepoint(event, cp("q"))) quit = true;
-            push_renderer_event_to_layout(event);
+            push_renderer_event_to_layout(&events.items[i]);
         }
 
         {
@@ -114,7 +103,7 @@ i32 main(i32 argc, byte *argv[]) {
                     .padding = 1,
                     .scroll = SCROLL_Y,
                 }) {
-                    Text(4, .text = slice,
+                    Text(4, .text = LAYOUT_TEXT("LibTUI text wraps inside containers. LibTUI text wraps inside containers."),
                         .style = {
                             .color = {255, 255, 255}
                         },
@@ -152,8 +141,10 @@ i32 main(i32 argc, byte *argv[]) {
                             .fg = *(RGB *)&text.style.color,
                             .flags = EFFECT_FG,
                         };
-                        for (isize j = 0; j < text.text.count; ++j) {
-                            CodePoint cp = text.text.items[j];
+                        byte *start = text.text.items;
+                        byte *end = text.text.items + text.text.count;
+                        while (start < end) {
+                            CodePoint cp = utf8_next(&start, end);
                             put_cp(x, text.y, cp);
                             merge_effect(x, text.y, effect);
                             x += cp.display_width;
