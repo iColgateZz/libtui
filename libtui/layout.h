@@ -121,33 +121,6 @@ typedef struct {
 
 #define LAYOUT_TEXT(s) ((Layout_TextSpan) {.items = (byte *)(s), .count = sizeof(s) - 1})
 
-typedef enum {
-    LAYOUT_EVENT_MOUSE_LEFT,
-    LAYOUT_EVENT_MOUSE_RIGHT,
-    LAYOUT_EVENT_MOUSE_MIDDLE,
-    LAYOUT_EVENT_SCROLL_UP,
-    LAYOUT_EVENT_SCROLL_DOWN,
-    LAYOUT_EVENT_MOUSE_DRAG,
-    LAYOUT_EVENT_KEY,
-    LAYOUT_EVENT_TEXT,
-} Layout_EventType;
-
-//TODO: get rid of events, they do not belong to layout system
-//      add API to set screen dimensions, update scroll delta and cursor position
-//      add API to query whether the cursor is above the current node or maybe do
-//      some kind of hit testing in the layout system?
-typedef struct {
-    Layout_EventType type;
-    union {
-        struct {
-            i32 x, y;
-            b32 pressed;
-        } mouse;
-        i32 key;
-        Layout_TextSpan text;
-    };
-} Layout_Event;
-
 typedef struct {
     packed_enum {
         LAYOUT_CMD_RECT,
@@ -175,12 +148,16 @@ typedef struct {
 slice_def(Layout_Command);
 typedef i32 Layout_PersistentID;
 
-void layout_begin(i32 w, i32 h);
+void layout_screen_set_dimensions(i32 w, i32 h);
+void layout_cursor_set_position(i32 x, i32 y);
+void layout_scroll_update(i32 delta_y);
+b32 layout_cursor_is_hovered();
+Layout_PersistentID layout_cursor_get_hovered_id();
+void layout_begin();
 Slice(Layout_Command) layout_end();
 void layout_text_open(Layout_PersistentID id, Layout_TextConfig conf);
 void layout_container_open(Layout_PersistentID id, Layout_ContainerConfig conf);
 void layout_close();
-void layout_event_push(Layout_Event event);
 
 #define Container(id, ...)                              \
     for (u8 _latch = (layout_container_open(            \
@@ -237,7 +214,6 @@ typedef struct {
 } Layout__Node;
 
 list_def(Layout_Command);
-list_def(Layout_Event);
 list_def(Layout__Node);
 list_def(Layout__TempID);
 typedef Layout__Node* Layout__NodePtr;
@@ -261,11 +237,11 @@ typedef struct {
     List(Layout__TempID) temporary_child_stack;
     List(Layout__TempID) frame_children;
     List(Layout_Command) commands;
-    List(Layout_Event) events;
     List(Layout__ScrollState) scroll_states;
-    Layout__TempID hit_id_temp;
-    Layout_PersistentID hit_id;
-    Layout_PersistentID focused_id;
+    i32 width, height;
+    i32 cursor_x, cursor_y;
+    Layout__TempID hovered_temp_id;
+    Layout_PersistentID hovered_persistent_id;
     Arena tmp;
 } Layout__State;
 
@@ -274,23 +250,47 @@ static Layout__State layout__state = {0};
 static inline Layout__Node *layout__node_from_temp_id(Layout__TempID id);
 static inline Layout__Node *layout__node_from_index(i32 index);
 static inline Layout__TempID layout__node_push(Layout__Node node);
+static inline void layout__hover_test();
 
-void layout_event_push(Layout_Event event) { list_append(&layout__state.events, event); }
+void layout_screen_set_dimensions(i32 w, i32 h) {
+    layout__state.width = w;
+    layout__state.height = h;
+}
 
-void layout_begin(i32 w, i32 h) {
+void layout_cursor_set_position(i32 x, i32 y) {
+    layout__state.cursor_x = x;
+    layout__state.cursor_y = y;
+}
+
+Layout_PersistentID layout_cursor_get_hovered_id() {
+    return layout__state.hovered_persistent_id;
+}
+
+b32 layout_cursor_is_hovered() {
+    if (layout__state.open_node_stack.count == 0) return false;
+
+    Layout__TempID current_id = list_last(&layout__state.open_node_stack);
+    Layout_PersistentID persistent_id = layout__node_from_temp_id(current_id)->id;
+    return persistent_id != LAYOUT_PERSISTENT_ID_NONE &&
+           persistent_id == layout__state.hovered_persistent_id;
+}
+
+void layout_begin() {
     // reset state
     layout__state.nodes.count = 0;
     layout__state.open_node_stack.count = 0;
     layout__state.temporary_child_stack.count = 0;
     layout__state.frame_children.count = 0;
     layout__state.commands.count = 0;
-    layout__state.hit_id_temp = LAYOUT_TEMP_ID_NONE;
-    layout__state.hit_id = LAYOUT_PERSISTENT_ID_NONE;
+    layout__state.hovered_temp_id = LAYOUT_TEMP_ID_NONE;
 
     // open implicit root element
     layout_container_open(LAYOUT_PERSISTENT_ID_NONE, (Layout_ContainerConfig) {
         .style = {
-            .size = {.w = FIXED(w), .h = FIXED(h)},
+            .size = {
+                .w = FIXED(layout__state.width),
+                .h = FIXED(layout__state.height),
+            },
             .direction = {DIR_COL},
             .scroll = SCROLL_Y,
         }
@@ -306,8 +306,7 @@ Slice(Layout_Command) layout_end() {
     #define ROOT_ID    0
     Layout__Node *root = layout__node_from_temp_id(ROOT_ID);
     layout__node_layout(root);
-
-    layout__state.events.count = 0;
+    layout__hover_test();
 
     return (Slice(Layout_Command)) {
         .items = layout__state.commands.items,
@@ -361,7 +360,6 @@ static inline void layout__node_intrinsic_height(Layout__Node *node);
 static inline void layout__node_fill_height(Layout__Node *node);
 static inline void layout__node_positions(Layout__Node *node);
 static inline void layout__node_commands(Layout__Node *node);
-static inline void layout__node_handle_events(Layout__Node *root);
 
 static inline void layout__node_layout(Layout__Node *node) {
     layout__node_intrinsic_width(node);
@@ -371,7 +369,6 @@ static inline void layout__node_layout(Layout__Node *node) {
     layout__node_fill_height(node);
     layout__node_positions(node);
     layout__node_commands(node);
-    layout__node_handle_events(node);
 }
 
 /*
@@ -384,7 +381,6 @@ static inline void layout__node_layout(Layout__Node *node) {
     fill_height         | yes       | yes       | no
     positions           | yes       | no        | yes
     commands            | yes       | no        | yes
-    handle_events       | no        | no        | no
 */
 
 static inline void layout__container_intrinsic_width(Layout__Node *node);
@@ -438,7 +434,6 @@ typedef struct {
     i32 max;
 } Layout__SizeRange;
 
-static inline b32 layout__event_is_mouse(Layout_Event event);
 static inline b32 layout__rect_contains_point(i32 x, i32 y, Layout_Rect r);
 static inline Layout_Rect layout__rect_intersect(Layout_Rect a, Layout_Rect b);
 static inline Layout_Rect layout__rect_from_node(Layout__Node *node);
@@ -457,7 +452,7 @@ static inline void layout__space_distribute(i32 space, List(Layout__NodePtr) nod
 static inline i32 layout__align_cross(Layout_Alignment align, i32 parent_size, i32 parent_padding, i32 child_size);
 static inline i32 layout__align_along(Layout_Alignment align, i32 parent_size, i32 parent_padding, i32 children_size);
 static inline Layout_Alignment layout__node_get_align_self(Layout__Node *node);
-static inline b32 layout__node_scrolls_y(Layout__Node *node);
+static inline b32 layout__node_is_scroll_y(Layout__Node *node);
 static inline Layout__ScrollState *layout__scroll_state_from_id(Layout_PersistentID id);
 
 static inline void layout__node_intrinsic_size(Layout__Node *node, Layout__Dimension dim) {
@@ -689,7 +684,7 @@ static inline void layout__container_positions(Layout__Node *node) {
         cursor += *layout__node_get_size(child, main_dim) + style.spacing;
     }
 
-    if (layout__node_scrolls_y(node)) {
+    if (layout__node_is_scroll_y(node)) {
         Layout__ScrollState *scroll = layout__scroll_state_from_id(node->id);
         i32 content_h = MAX(content_bottom + style.padding - node->y, 0);
         scroll->max_y = MAX(content_h - node->h, 0);
@@ -704,33 +699,6 @@ static inline void layout__container_positions(Layout__Node *node) {
     for (isize i = 0; i < children.count; ++i) {
         layout__node_positions(layout__node_from_index(children.offset + i));
     }
-}
-
-static void layout__node_handle_event(Layout__Node *root, Layout_Event event);
-static Layout__TempID layout__node_hit_test(Layout__Node *node, Layout_Rect parent_clip, i32 x, i32 y);
-static void layout__scroll_update_from_event(Layout_Event event);
-
-static inline void layout__node_handle_events(Layout__Node *root) {
-    for (isize i = 0; i < layout__state.events.count; ++i) {
-        layout__node_handle_event(root, layout__state.events.items[i]);
-    }
-}
-
-static void layout__node_handle_event(Layout__Node *root, Layout_Event event) {
-    //TODO: handle more events
-    if (!layout__event_is_mouse(event)) return;
-
-    Layout_Rect root_clip = layout__rect_from_node(root);
-    layout__state.hit_id_temp = layout__node_hit_test(root, root_clip, event.mouse.x, event.mouse.y);
-    layout__state.hit_id = layout__state.hit_id_temp == LAYOUT_TEMP_ID_NONE
-                  ? LAYOUT_PERSISTENT_ID_NONE
-                  : layout__node_from_temp_id(layout__state.hit_id_temp)->id;
-
-    if (event.type == LAYOUT_EVENT_MOUSE_LEFT && event.mouse.pressed) {
-        layout__state.focused_id = layout__state.hit_id;
-    }
-
-    layout__scroll_update_from_event(event);
 }
 
 static Layout__TempID layout__node_hit_test(Layout__Node *node, Layout_Rect parent_clip, i32 x, i32 y) {
@@ -754,19 +722,28 @@ static Layout__TempID layout__node_hit_test(Layout__Node *node, Layout_Rect pare
     return node->id != LAYOUT_PERSISTENT_ID_NONE ? (Layout__TempID)(node - layout__state.nodes.items) : LAYOUT_TEMP_ID_NONE;
 }
 
-static void layout__scroll_update_from_event(Layout_Event event) {
-    if (event.type != LAYOUT_EVENT_SCROLL_UP &&
-        event.type != LAYOUT_EVENT_SCROLL_DOWN) return;
-    if (layout__state.hit_id_temp == LAYOUT_TEMP_ID_NONE) return;
+static inline void layout__hover_test() {
+    Layout__Node *root = layout__node_from_temp_id(ROOT_ID);
+    Layout_Rect root_clip = layout__rect_from_node(root);
+    layout__state.hovered_temp_id = layout__node_hit_test(
+        root, root_clip,
+        layout__state.cursor_x, layout__state.cursor_y
+    );
 
-    i32 delta = event.type == LAYOUT_EVENT_SCROLL_DOWN ? 1 : -1;
-    Layout__TempID current_id = layout__state.hit_id_temp;
+    if (layout__state.hovered_temp_id == LAYOUT_TEMP_ID_NONE) return;
+
+    layout__state.hovered_persistent_id = layout__node_from_temp_id(layout__state.hovered_temp_id)->id;
+}
+
+void layout_scroll_update(i32 delta_y) {
+    Layout__TempID current_id = layout__state.hovered_temp_id;
+    if (delta_y == 0 || current_id == LAYOUT_TEMP_ID_NONE) return;
 
     for (;;) {
         Layout__Node *current = layout__node_from_temp_id(current_id);
-        if (layout__node_scrolls_y(current)) {
+        if (layout__node_is_scroll_y(current)) {
             Layout__ScrollState *scroll = layout__scroll_state_from_id(current->id);
-            scroll->y = CLAMP(scroll->y + delta, 0, scroll->max_y);
+            scroll->y = CLAMP(scroll->y + delta_y, 0, scroll->max_y);
             return;
         }
 
@@ -891,15 +868,6 @@ static inline Layout__TempID layout__node_push(Layout__Node node) {
     Layout__TempID id = layout__state.nodes.count;
     list_append(&layout__state.nodes, node);
     return id;
-}
-
-static inline b32 layout__event_is_mouse(Layout_Event event) {
-    return event.type == LAYOUT_EVENT_MOUSE_LEFT ||
-           event.type == LAYOUT_EVENT_MOUSE_RIGHT ||
-           event.type == LAYOUT_EVENT_MOUSE_MIDDLE ||
-           event.type == LAYOUT_EVENT_SCROLL_UP ||
-           event.type == LAYOUT_EVENT_SCROLL_DOWN ||
-           event.type == LAYOUT_EVENT_MOUSE_DRAG;
 }
 
 static inline b32 layout__rect_contains_point(i32 x, i32 y, Layout_Rect r) {
@@ -1144,7 +1112,7 @@ static inline Layout__ScrollState *layout__scroll_state_from_id(Layout_Persisten
     return &list_last(&layout__state.scroll_states);
 }
 
-static inline b32 layout__node_scrolls_y(Layout__Node *node) {
+static inline b32 layout__node_is_scroll_y(Layout__Node *node) {
     if (node->id == LAYOUT_PERSISTENT_ID_NONE) return false;
 
     match(*node) {

@@ -9,57 +9,16 @@
 #define LIBTUI_RENDERER_IMPL
     #include "renderer.h"
 
-void push_renderer_event_to_layout(Event *renderer_event) {
-    Layout_Event event = {0};
+void update_layout_input(Event event) {
+    if (!event_is_mouse(event)) return;
 
-    if (event_is(*renderer_event, EMouseLeft)) {
-        event = (Layout_Event) {
-            .type = LAYOUT_EVENT_MOUSE_LEFT,
-            .mouse = {renderer_event->mouse.x, renderer_event->mouse.y, renderer_event->mouse.pressed},
-        };
-    } else if (event_is(*renderer_event, EMouseRight)) {
-        event = (Layout_Event) {
-            .type = LAYOUT_EVENT_MOUSE_RIGHT,
-            .mouse = {renderer_event->mouse.x, renderer_event->mouse.y, renderer_event->mouse.pressed},
-        };
-    } else if (event_is(*renderer_event, EMouseMiddle)) {
-        event = (Layout_Event) {
-            .type = LAYOUT_EVENT_MOUSE_MIDDLE,
-            .mouse = {renderer_event->mouse.x, renderer_event->mouse.y, renderer_event->mouse.pressed},
-        };
-    } else if (event_is(*renderer_event, EScrollUp)) {
-        event = (Layout_Event) {
-            .type = LAYOUT_EVENT_SCROLL_UP,
-            .mouse = {renderer_event->mouse.x, renderer_event->mouse.y, renderer_event->mouse.pressed},
-        };
-    } else if (event_is(*renderer_event, EScrollDown)) {
-        event = (Layout_Event) {
-            .type = LAYOUT_EVENT_SCROLL_DOWN,
-            .mouse = {renderer_event->mouse.x, renderer_event->mouse.y, renderer_event->mouse.pressed},
-        };
-    } else if (event_is(*renderer_event, EMouseDrag)) {
-        event = (Layout_Event) {
-            .type = LAYOUT_EVENT_MOUSE_DRAG,
-            .mouse = {renderer_event->mouse.x, renderer_event->mouse.y, renderer_event->mouse.pressed},
-        };
-    } else if (event_is(*renderer_event, ETermKey)) {
-        event = (Layout_Event) {
-            .type = LAYOUT_EVENT_KEY,
-            .key = renderer_event->term_key,
-        };
-    } else if (event_is(*renderer_event, ECodePoint)) {
-        event = (Layout_Event) {
-            .type = LAYOUT_EVENT_TEXT,
-            .text = {
-                .items = renderer_event->codepoint.raw,
-                .count = renderer_event->codepoint.raw_len,
-            },
-        };
-    } else {
-        return;
+    layout_cursor_set_position(event.mouse.x, event.mouse.y);
+
+    if (event_is(event, EScrollUp)) {
+        layout_scroll_update(-1);
+    } else if (event_is(event, EScrollDown)) {
+        layout_scroll_update(1);
     }
-
-    layout_event_push(event);
 }
 
 i32 main(i32 argc, byte *argv[]) {
@@ -76,13 +35,14 @@ i32 main(i32 argc, byte *argv[]) {
         for (isize i = 0; i < events.count; ++i) {
             Event event = events.items[i];
             if (event_is_codepoint(event, cp("q"))) quit = true;
-            push_renderer_event_to_layout(&events.items[i]);
+            update_layout_input(event);
         }
 
         {
             u32 w = get_terminal_width();
             u32 h = get_terminal_height();
-            layout_begin(w, h);
+            layout_screen_set_dimensions(w, h);
+            layout_begin();
 
             Container(1, .style = {
                 .color = {196, 240, 120},
