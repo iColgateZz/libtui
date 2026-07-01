@@ -22,6 +22,8 @@
 
 #define packed_enum enum __attribute__((__packed__))
 
+//TODO: namespace all public symbols
+//TODO: percentage sizing?
 typedef struct {
     packed_enum {
         SIZE_FIT,
@@ -83,6 +85,7 @@ typedef enum {
 typedef struct {
     Layout_Sizing size;
     Layout_Color color;
+    //TODO: add per-size padding
     u8 padding;
     u8 spacing;
     // TODO: u8 margin;
@@ -108,6 +111,9 @@ typedef struct {
 } Layout_TextSpan;
 
 //TODO: text measurement results should probably be cached.
+//TODO: create one internal line-breaking pass reused for height calculation and command emission
+//TODO: maybe add different text wrapping policies?
+//TODO: maybe add text alignment? can this be done by placing it in a container?
 typedef struct {
     Layout_TextSpan text;
     Layout_TextStyle style;
@@ -240,6 +246,7 @@ list_def(Layout__NodePtr);
 #define LAYOUT_TEMP_ID_NONE ((Layout__TempID)-1)
 #define LAYOUT_PERSISTENT_ID_NONE 0
 
+//TODO: externally supplied scroll offsets?
 typedef struct {
     Layout_PersistentID id;
     i32 y;
