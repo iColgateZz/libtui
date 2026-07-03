@@ -145,5 +145,9 @@ i32 main(i32 argc, byte *argv[]) {
         if (!psh_cmd_run(&cmd)) return 1;
     }
 
+    psh_cmd_append(&cmd, EXECUTABLE);
+    psh_list_append_many(&cmd, argv, argc);
+    if (!psh_cmd_run(&cmd)) return 1;
+
     return 0;
 }
