@@ -1,11 +1,8 @@
 #define PSH_CORE_IMPL
-#define PSH_NO_ECHO
-#define PSH_CORE_NO_PREFIX
-    #include "psh_core/psh_core.h"
+    #include "psh_core.h"
 #undef PSH_CORE_IMPL
 
-#define LIBTUI_LAYOUT_IMPL
-    #include "layout.h"
+#include "layla.h"
 #define LIBTUI_RENDERER_IMPL
     #include "renderer.h"
 
@@ -21,9 +18,7 @@ void update_layout_input(Event event) {
     }
 }
 
-i32 main(i32 argc, byte *argv[]) {
-    REBUILD_UNITY_AUTO(argc, argv);
-
+i32 main() {
     init_terminal();
     set_fps(60);
 

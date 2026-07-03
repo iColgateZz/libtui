@@ -1,9 +1,10 @@
-#define PSH_CORE_IMPL
-#include "psh_core/psh_core.h"
-
 #define BUILD_DIR "build"
 #define EXECUTABLE BUILD_DIR "/app"
 #define PATH_CAPACITY 256
+
+#define PSH_CC_MORE_FLAGS "-Ilayla", "-Ipsh_core"
+#define PSH_CORE_IMPL
+#include "psh_core/psh_core.h"
 
 //TODO: something should definitely go to psh_core.
 static psh_ternary object_needs_rebuild(byte *object, byte *source) {
@@ -19,7 +20,7 @@ static psh_ternary object_needs_rebuild(byte *object, byte *source) {
     if (!psh_pipe_open(&pipe)) return err;
 
     Psh_Cmd cmd = {0};
-    psh_cmd_append(&cmd, PSH_CC, "-MM", source);
+    psh_cmd_append(&cmd, PSH_CC, PSH_CC_MORE_FLAGS, "-MM", source);
     if (!psh_cmd_run(&cmd, .fdout = pipe.write_fd)) {
         psh_list_free(cmd);
         return err;
@@ -95,6 +96,7 @@ i32 main(i32 argc, byte *argv[]) {
 
     byte *source_files[] = {
         "main.c",
+        "layla/src/layla.c",
     };
 
     usize source_count = psh_countof(source_files);
@@ -146,6 +148,7 @@ i32 main(i32 argc, byte *argv[]) {
     }
 
     psh_cmd_append(&cmd, EXECUTABLE);
+    psh_shift(argv, argc);
     psh_list_append_many(&cmd, argv, argc);
     if (!psh_cmd_run(&cmd)) return 1;
 

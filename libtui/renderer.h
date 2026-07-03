@@ -156,6 +156,7 @@ void debug(i32 x, i32 y, byte *fmt, ...);
 #include <signal.h>
 #include <errno.h>
 #include <string.h>
+#include <sys/poll.h>
 
 list_def(Cell);
 list_def(Rectangle);
