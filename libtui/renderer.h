@@ -43,7 +43,7 @@ typedef struct {
 } Cell;
 
 Cell cell(CodePoint cp, Effect e);
-Cell cell_empty();
+Cell cell_empty(void);
 b32 cell_equal(Cell a, Cell b);
 
 typedef enum {
@@ -86,10 +86,11 @@ typedef struct {
         } mouse;
         CodePoint codepoint;
         TermKey term_key;
-    };
+    } as;
 } Event;
 
-slice_def(Event);
+slice_def(Event)
+
 Slice(Event) get_events(void);
 b32 event_is(Event event, EventType type);
 b32 event_is_mouse(Event event);
@@ -106,16 +107,16 @@ Rectangle rect_union(Rectangle a, Rectangle b);
 
 void clip_push(i32 x, i32 y, i32 w, i32 h);
 void clip_push_rect(Rectangle r);
-Rectangle clip_pop();
-Rectangle clip_peek();
+Rectangle clip_pop(void);
+Rectangle clip_peek(void);
 
-void init_terminal();
+void init_terminal(void);
 void set_fps(i32 fps);
-void begin_frame();
-void end_frame();
-u64 get_delta_time();
-u32 get_terminal_width();
-u32 get_terminal_height();
+void begin_frame(void);
+void end_frame(void);
+u64 get_delta_time(void);
+u32 get_terminal_width(void);
+u32 get_terminal_height(void);
 
 void put_cp(i32 x, i32 y, CodePoint cp);
 void put_effect(i32 x, i32 y, Effect e);
@@ -158,10 +159,10 @@ void debug(i32 x, i32 y, byte *fmt, ...);
 #include <string.h>
 #include <sys/poll.h>
 
-list_def(Cell);
-list_def(Rectangle);
-list_def(byte);
-list_def(Event);
+list_def(Cell)
+list_def(Rectangle)
+list_def(byte)
+list_def(Event)
 
 struct {
     struct termios orig_term;
@@ -178,9 +179,9 @@ struct {
     u32 width, height;
 } Terminal = {0};
 
-u64 get_delta_time() { return Terminal.dt; }
-u32 get_terminal_width() { return Terminal.width; }
-u32 get_terminal_height() { return Terminal.height; }
+u64 get_delta_time(void) { return Terminal.dt; }
+u32 get_terminal_width(void) { return Terminal.width; }
+u32 get_terminal_height(void) { return Terminal.height; }
 Slice(Event) get_events(void) {
     return (Slice(Event)) {
         .items = Terminal.events.items,
@@ -189,8 +190,8 @@ Slice(Event) get_events(void) {
 }
 
 b32 event_is(Event event, EventType type) { return event.type == type; }
-b32 event_is_term_key(Event event, TermKey key) { return event.type == ETermKey && event.term_key == key; }
-b32 event_is_codepoint(Event event, CodePoint cp) { return event.type == ECodePoint && cp_equal(event.codepoint, cp); }
+b32 event_is_term_key(Event event, TermKey key) { return event.type == ETermKey && event.as.term_key == key; }
+b32 event_is_codepoint(Event event, CodePoint cp) { return event.type == ECodePoint && cp_equal(event.as.codepoint, cp); }
 b32 event_is_mouse(Event event) { return event.type == EScrollUp ||
                                          event.type == EScrollDown ||
                                          event.type == EMouseDrag ||
@@ -199,23 +200,23 @@ b32 event_is_mouse(Event event) { return event.type == EScrollUp ||
                                          event.type == EMouseRight; }
 
 // private
-void restore_term();
-void update_screen_dimensions();
+void restore_term(void);
+void update_screen_dimensions(void);
 void handle_sigwinch(i32 signo);
-i64  time_ms();
-i64  time_ns();
-void save_timestamp();
-void calculate_dt();
+i64  time_ms(void);
+i64  time_ns(void);
+void save_timestamp(void);
+void calculate_dt(void);
 void poll_events_until(i64 deadline_ns);
 void handle_available_events(i32 timeout_ms);
-void parse_pending_input();
+void parse_pending_input(void);
 void write_str_len(byte *str, usize len);
 void write_strf_impl(byte *fmt, ...);
 #define write_str(s)        write_str_len(s, sizeof(s) - 1)
 #define write_strf(...)     write_strf_impl(__VA_ARGS__)
 void emit_absolute_cursor_move(List(byte) *a, u32 row, u32 col);
-void render();
-void update_root_scope();
+void render(void);
+void update_root_scope(void);
 
 b32 try_parse_escape(byte **p, byte *end, Event *e);
 b32 try_parse_mouse(byte **p, byte *end, Event *e);
@@ -245,7 +246,7 @@ void write_strf_impl(byte *fmt, ...) {
     }
 }
 
-void init_terminal() {
+void init_terminal(void) {
     assert(tcgetattr(STDIN_FILENO, &Terminal.orig_term) == 0);
     
     struct termios raw = Terminal.orig_term;
@@ -291,7 +292,7 @@ void init_terminal() {
     Terminal.tmp = arena_init(MB(16));
 }
 
-void update_screen_dimensions() {
+void update_screen_dimensions(void) {
     struct winsize ws = {0};
     assert(ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == 0);
 
@@ -299,12 +300,12 @@ void update_screen_dimensions() {
     Terminal.height = ws.ws_row;
 }
 
-void update_root_scope() {
+void update_root_scope(void) {
     Rectangle r = {.w = Terminal.width, .h = Terminal.height};
     Terminal.clips.items[0] = r;
 }
 
-void restore_term() {
+void restore_term(void) {
     assert(tcsetattr(STDIN_FILENO, TCSAFLUSH, &Terminal.orig_term) == 0);
 
     write_str("\33[?1000l");                     // disable mouse
@@ -346,7 +347,7 @@ void set_fps(i32 fps) {
     Terminal.frame_interval_ns = fps <= 0 ? -1 : 1000000000ull / fps;
 }
 
-void begin_frame() {
+void begin_frame(void) {
     save_timestamp();
 
     arena_clear(&Terminal.tmp);
@@ -364,27 +365,27 @@ void begin_frame() {
     poll_events_until(deadline);
 }
 
-void save_timestamp()  { Terminal.saved_time = time_ms(); }
-void calculate_dt() { Terminal.dt = time_ms() - Terminal.saved_time; }
+void save_timestamp(void) { Terminal.saved_time = time_ms(); }
+void calculate_dt(void) { Terminal.dt = time_ms() - Terminal.saved_time; }
 
-i64 time_ns() {
+i64 time_ns(void) {
     struct timespec ts = {0};
     clock_gettime(CLOCK_MONOTONIC, &ts);
     return ts.tv_sec * 1000000000ull + ts.tv_nsec;
 }
 
-i64 time_ms() {
+i64 time_ms(void) {
     return time_ns() / 1000000ull;
 }
 
-void end_frame() {
+void end_frame(void) {
     render();
     write_str_len(Terminal.frame_cmds.items, Terminal.frame_cmds.count);
     calculate_dt();
 }
 
 //TODO: maybe hash each row and compare hashes?
-void render() {
+void render(void) {
     Cell *back_items = Terminal.backbuffer.items;
     Cell *front_items = Terminal.frontbuffer.items;
     u32 screen_w = Terminal.width;
@@ -521,7 +522,7 @@ void handle_available_events(i32 timeout_ms) {
     }
 }
 
-void parse_pending_input() {
+void parse_pending_input(void) {
     byte *start = Terminal.input_bytes.items;
     byte *p = start;
     byte *end = start + Terminal.input_bytes.count;
@@ -536,7 +537,7 @@ void parse_pending_input() {
             p++;
             e = (Event) {
                 .type = ETermKey,
-                .term_key = TERMKEY_BACKSPACE,
+                .as.term_key = TERMKEY_BACKSPACE,
             };
         } else {
             if (!try_parse_text(&p, end, &e)) break;
@@ -592,9 +593,9 @@ b32 try_parse_mouse(byte **p, byte *end, Event *e) {
 
     byte *cursor     = start;
     u32 btn          = strtol(cursor + 3, &cursor, 10);
-    e->mouse.x       = strtol(cursor + 1, &cursor, 10) - 1;
-    e->mouse.y       = strtol(cursor + 1, &cursor, 10) - 1;
-    e->mouse.pressed = (*cursor == 'M');
+    e->as.mouse.x       = strtol(cursor + 1, &cursor, 10) - 1;
+    e->as.mouse.y       = strtol(cursor + 1, &cursor, 10) - 1;
+    e->as.mouse.pressed = (*cursor == 'M');
 
     switch (btn) {
         case 0:  e->type = EMouseLeft;   break;
@@ -633,7 +634,7 @@ b32 try_parse_term_key(byte **p, byte *end, Event *e) {
         isize key_len = strlen(key);
         if (n >= key_len + 1 && memcmp(start + 1, key, key_len) == 0) {
             e->type = ETermKey;
-            e->term_key = term_key_table[i].k;
+            e->as.term_key = term_key_table[i].k;
             *p = start + key_len + 1;
             return true;
         }
@@ -648,12 +649,12 @@ b32 try_parse_text(byte **p, byte *end, Event *e) {
     if (end - start < len) return false;
 
     e->type = ECodePoint;
-    e->codepoint = utf8_next(p, start + len);
+    e->as.codepoint = utf8_next(p, start + len);
     return true;
 }
 
 Cell cell(CodePoint cp, Effect e) { return (Cell) { .cp = cp, .effect = e }; }
-Cell cell_empty() { return (Cell) { .cp = cp_from_byte(' ') }; }
+Cell cell_empty(void) { return (Cell) { .cp = cp_from_byte(' ') }; }
 b32 cell_equal(Cell a, Cell b) { return memcmp(&a, &b, sizeof a) == 0; }
 
 b32 effect_equal(Effect a, Effect b) { return memcmp(&a, &b, sizeof a) == 0; }
@@ -758,11 +759,11 @@ void clip_push_rect(Rectangle r) {
     list_append(&Terminal.clips, clipped);
 }
 
-Rectangle clip_pop() { 
+Rectangle clip_pop(void) { 
     return list_pop(&Terminal.clips);
 }
 
-Rectangle clip_peek() {
+Rectangle clip_peek(void) {
     return list_last(&Terminal.clips);
 }
 

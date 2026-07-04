@@ -9,7 +9,7 @@
 void update_layout_input(Event event) {
     if (!event_is_mouse(event)) return;
 
-    layout_cursor_set_position(event.mouse.x, event.mouse.y);
+    layout_cursor_set_position(event.as.mouse.x, event.as.mouse.y);
 
     if (event_is(event, EScrollUp)) {
         layout_scroll_update(-1);
