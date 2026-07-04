@@ -175,7 +175,7 @@ static inline Layout__ScrollState *layout__scroll_state_from_id(Layout_Persisten
 static inline void layout__append_text_command(
     Layout__Node *node,
     Layout_TextStyle style,
-    Layout_TextSpan source,
+    Layout_TextSlice source,
     isize line_start_byte,
     isize line_end_byte,
     i32 line_y

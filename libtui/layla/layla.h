@@ -104,42 +104,46 @@ typedef struct {
 typedef struct {
     byte *items;
     isize count;
-} Layout_TextSpan;
+} Layout_TextSlice;
 
 //TODO: text measurement results should probably be cached.
 //TODO: create one internal line-breaking pass reused for height calculation and command emission
 //TODO: maybe add different text wrapping policies?
 //TODO: maybe add text alignment? can this be done by placing it in a container?
 typedef struct {
-    Layout_TextSpan text;
+    Layout_TextSlice text;
     Layout_TextStyle style;
 } Layout_TextConfig;
 
-#define LAYOUT_TEXT(s) ((Layout_TextSpan) {.items = (byte *)(s), .count = sizeof(s) - 1})
+#define LAYOUT_TEXT(s) ((Layout_TextSlice) {.items = (byte *)(s), .count = sizeof(s) - 1})
 
 typedef struct {
     LAYOUT_PACKED_ENUM {
-        LAYOUT_CMD_RECT,
+        LAYOUT_CMD_RECTANGLE,
         LAYOUT_CMD_TEXT,
         LAYOUT_CMD_CLIP_START,
         LAYOUT_CMD_CLIP_END,
         // LAYOUT_CMD_BORDER, // pass concrete codepoints to draw
     } type;
     union {
-        struct {
+        struct CommandRectangle {
             i32 x, y, w, h;
             Layout_Color color;
-        } _LAYOUT_CMD_RECT;
-        struct {
+        } rectangle;
+        struct CommandText {
             i32 x, y;
-            Layout_TextSpan text;
+            Layout_TextSlice text_slice;
             Layout_TextStyle style;
-        } _LAYOUT_CMD_TEXT;
-        struct {
+        } text;
+        struct CommandClipStart {
             i32 x, y, w, h;
-        } _LAYOUT_CMD_CLIP_START;
-    };
+        } clip_start;
+    } as;
 } Layout_Command;
+
+typedef struct CommandRectangle CommandRectangle;
+typedef struct CommandText CommandText;
+typedef struct CommandClipStart CommandClipStart;
 
 typedef struct {
     Layout_Command *items;

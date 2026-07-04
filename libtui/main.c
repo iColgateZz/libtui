@@ -81,56 +81,49 @@ i32 main() {
             for (isize i = 0; i < cmds.count; ++i) {
                 Layout_Command cmd = cmds.items[i];
                 switch (cmd.type) {
-                    case LAYOUT_CMD_RECT: {
-                        Rectangle rect = {
-                            .x = cmd._LAYOUT_CMD_RECT.x,
-                            .y = cmd._LAYOUT_CMD_RECT.y,
-                            .w = cmd._LAYOUT_CMD_RECT.w,
-                            .h = cmd._LAYOUT_CMD_RECT.h,
-                        };
+                    case LAYOUT_CMD_RECTANGLE: {
+                        CommandRectangle rectangle = cmd.as.rectangle;
                         fill_box(
-                            rect,
-                            (Effect) {
-                                .bg = {
-                                    cmd._LAYOUT_CMD_RECT.color.r,
-                                    cmd._LAYOUT_CMD_RECT.color.g,
-                                    cmd._LAYOUT_CMD_RECT.color.b,
-                                },
-                                .flags = EFFECT_BG,
-                            }
-                        ); break;
+                            *(Rectangle *)&rectangle,
+                            (Effect) { .bg = *(RGB *)&rectangle.color, .flags = EFFECT_BG }
+                        );
+
+                        break;
                     }
+
                     case LAYOUT_CMD_TEXT: {
-                        i32 x = cmd._LAYOUT_CMD_TEXT.x;
+                        CommandText text = cmd.as.text;
+
                         Effect effect = {
-                            .fg = {
-                                cmd._LAYOUT_CMD_TEXT.style.color.r,
-                                cmd._LAYOUT_CMD_TEXT.style.color.g,
-                                cmd._LAYOUT_CMD_TEXT.style.color.b,
-                            },
+                            .fg = *(RGB *)&text.style.color,
                             .flags = EFFECT_FG,
                         };
-                        byte *start = cmd._LAYOUT_CMD_TEXT.text.items;
-                        byte *end = start + cmd._LAYOUT_CMD_TEXT.text.count;
+
+                        i32 x = text.x;
+                        byte *start = text.text_slice.items;
+                        byte *end = start + text.text_slice.count;
+
                         while (start < end) {
                             CodePoint cp = utf8_next(&start, end);
-                            put_cp(x, cmd._LAYOUT_CMD_TEXT.y, cp);
-                            merge_effect(x, cmd._LAYOUT_CMD_TEXT.y, effect);
+                            put_cp(x, text.y, cp);
+                            merge_effect(x, text.y, effect);
                             x += cp.display_width;
                         }
+
                         break;
                     }
+
                     case LAYOUT_CMD_CLIP_START: {
-                        Rectangle clip = {
-                            .x = cmd._LAYOUT_CMD_CLIP_START.x,
-                            .y = cmd._LAYOUT_CMD_CLIP_START.y,
-                            .w = cmd._LAYOUT_CMD_CLIP_START.w,
-                            .h = cmd._LAYOUT_CMD_CLIP_START.h,
-                        };
-                        clip_push_rect(clip);
+                        CommandClipStart clip_start = cmd.as.clip_start;
+                        clip_push_rect(*(Rectangle *)&clip_start);
                         break;
                     }
-                    case LAYOUT_CMD_CLIP_END: clip_pop(); break;
+
+                    case LAYOUT_CMD_CLIP_END: {
+                        clip_pop();
+                        break;
+                    }
+
                     default: assert(false && "unknown cmd type");
                 }
             }

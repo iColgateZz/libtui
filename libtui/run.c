@@ -2,7 +2,7 @@
 #define EXECUTABLE BUILD_DIR "/app"
 #define PATH_CAPACITY 256
 
-#define PSH_CC_MORE_FLAGS "-std=c99", "-Ilayla", "-Ipsh_core"
+#define PSH_CC_MORE_FLAGS "-std=c99", "-Ilayla", "-Ipsh_core", "-Wpedantic"
 #define PSH_CORE_IMPL
 #include "psh_core/psh_core.h"
 

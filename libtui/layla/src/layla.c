@@ -191,7 +191,7 @@ static inline void layout__text_intrinsic_width(Layout__Node *node) {
     i32 max_word_width = 0;
     i32 current_word_width = 0;
 
-    Layout_TextSpan text = text_node.config.text;
+    Layout_TextSlice text = text_node.config.text;
     byte *p = text.items;
     byte *end = text.items + text.count;
     while (p < end) {
@@ -300,7 +300,7 @@ static inline void layout__container_wrap_text(Layout__Node *node) {
 
 static inline void layout__text_wrap_text(Layout__Node *node) {
     unwrap_into(*node, LAYOUT_NODE_TEXT, text_node);
-    Layout_TextSpan text = text_node.config.text;
+    Layout_TextSlice text = text_node.config.text;
     if (text.count <= 0) {
         node->h = node->min_h = 0;
         return;
@@ -434,15 +434,17 @@ static inline void layout__container_commands(Layout__Node *node) {
     unwrap_into(*node, LAYOUT_NODE_CONTAINER, container);
 
     list_append(&layout__state.commands, 
-        tag(Layout_Command, LAYOUT_CMD_CLIP_START, {
+        ((Layout_Command) {.type = LAYOUT_CMD_CLIP_START, .as.clip_start = {
             .x = node->x, .y = node->y, .w = node->w, .h = node->h
-    }));
+        }})
+    );
 
     list_append(&layout__state.commands,
-        tag(Layout_Command, LAYOUT_CMD_RECT, {
+        ((Layout_Command) {.type = LAYOUT_CMD_RECTANGLE, .as.rectangle = {
             .x = node->x, .y = node->y, .w = node->w, .h = node->h,
             .color = container.config.style.color
-    }));
+        }})
+    );
 
     Layout__ChildrenIndices children = node->children;
     for (isize i = 0; i < children.count; ++i) {
@@ -456,25 +458,27 @@ static inline void layout__container_commands(Layout__Node *node) {
 static inline void layout__append_text_command(
     Layout__Node *node,
     Layout_TextStyle style,
-    Layout_TextSpan source,
+    Layout_TextSlice source,
     isize line_start_byte,
     isize line_end_byte,
     i32 line_y
 ) {
-    list_append(&layout__state.commands, tag(Layout_Command, LAYOUT_CMD_TEXT, {
-        .x = node->x,
-        .y = line_y,
-        .text = {
-            .items = source.items + line_start_byte,
-            .count = line_end_byte - line_start_byte,
-        },
-        .style = style,
-    }));
+    list_append(&layout__state.commands,
+        ((Layout_Command) {.type = LAYOUT_CMD_TEXT, .as.text = {
+            .x = node->x,
+            .y = line_y,
+            .text_slice = {
+                .items = source.items + line_start_byte,
+                .count = line_end_byte - line_start_byte,
+            },
+            .style = style,
+        }})
+    );
 }
 
 static inline void layout__text_commands(Layout__Node *node) {
     unwrap_into(*node, LAYOUT_NODE_TEXT, text_node);
-    Layout_TextSpan source = text_node.config.text;
+    Layout_TextSlice source = text_node.config.text;
     if (source.count <= 0) return;
 
     i32 available_line_width = MAX(node->w, 1);
