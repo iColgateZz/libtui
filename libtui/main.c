@@ -41,20 +41,20 @@ i32 main() {
 
             Container(1, .style = {
                 .color = {196, 240, 120},
-                .direction = {DIR_ROW},
+                .direction = DIR_ROW,
                 .size = {.w = FIXED(w), .h = FIXED(h)},
             }) {
                 Container(2, .style = {
                     .size = {.w = FILL(0, 10), .h = FILL(0, INT32_MAX)},
                     .color = {255, 133, 182},
-                    .align_self = {ALIGN_CENTER},
+                    .align_self = ALIGN_CENTER,
                 });
 
                 Container(3, .style = {
                     .size = {.w = FILL(0, INT32_MAX), .h = FIXED(1)},
                     .color = {233, 255, 57},
-                    .align_self = {ALIGN_CENTER},
-                    .direction = {DIR_COL},
+                    .align_self = ALIGN_CENTER,
+                    .direction = DIR_COL,
                     .padding = 1,
                     .scroll = SCROLL_Y,
                 }) {
@@ -72,7 +72,7 @@ i32 main() {
                 Container(6, .style = {
                     .size = {.w = FILL(0, INT32_MAX), .h = FIXED(5)},
                     .color = {195, 255, 57},
-                    .align_self = {ALIGN_CENTER},
+                    .align_self = ALIGN_CENTER,
                 });
             }
 

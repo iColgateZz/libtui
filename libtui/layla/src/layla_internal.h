@@ -6,22 +6,6 @@
 #define PSH_CORE_NO_PREFIX
 #include "psh_core.h"
 
-//TODO: get rid of match and typeof?
-#define typeof __typeof__
-#define match(tu) for (typeof(tu) _tu = tu, *p = &_tu; p; p = NULL) switch ((tu).type)
-// may be fixed with __VA_OPT(__VA_ARGS__,) in C23 or
-// https://medium.com/@pauljlucas/using-advanced-c-preprocessor-macros-for-a-pre-c23-c-20-va-opt-substitute-bccefde27817
-#define case(...)   xcase(__VA_ARGS__, _case2, _case1)(__VA_ARGS__)
-#define xcase(a, b, c, ...) c
-#define _case2(tag, varname) case (tag): ;typeof(_tu._##tag) varname = _tu._##tag;
-#define _case1(tag) case (tag): ;
-#define otherwise default:
-#define unwrap_into(tu, tag, varname) typeof((tu)._##tag) varname = (tu)._##tag;
-#define matches(tu, tag) (tu).type == tag
-
-#define tag(T, tag, ...) ((T) {.type = tag, ._##tag = __VA_ARGS__})
-#define tag0(T, tag) ((T) {.type = tag})
-
 typedef struct {
     i32 offset;
     i32 count;
@@ -53,11 +37,11 @@ typedef struct {
     union {
         struct {
             Layout_ContainerConfig config;
-        } _LAYOUT_NODE_CONTAINER;
+        } container;
         struct {
             Layout_TextConfig config;
-        } _LAYOUT_NODE_TEXT;
-    };
+        } text;
+    } as;
 } Layout__Node;
 
 list_def(Layout_Command);

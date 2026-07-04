@@ -41,7 +41,7 @@ void layout_begin() {
                 .w = FIXED(layout__state.width),
                 .h = FIXED(layout__state.height),
             },
-            .direction = {DIR_COL},
+            .direction = DIR_COL,
             .scroll = SCROLL_Y,
         }
     });
@@ -62,15 +62,21 @@ Layout_CommandSlice layout_end() {
 }
 
 void layout_text_open(Layout_PersistentID id, Layout_TextConfig conf) {
-    Layout__Node node = tag(Layout__Node, LAYOUT_NODE_TEXT, {.config = conf});
-    node.id = id;
+    Layout__Node node = {
+        .id = id,
+        .type = LAYOUT_NODE_TEXT,
+        .as.text.config = conf,
+    };
     Layout__TempID temp_id = layout__node_push(node);
     list_append(&layout__state.open_node_stack, temp_id);
 }
 
 void layout_container_open(Layout_PersistentID id, Layout_ContainerConfig conf) {
-    Layout__Node node = tag(Layout__Node, LAYOUT_NODE_CONTAINER, {.config = conf});
-    node.id = id;
+    Layout__Node node = {
+        .id = id,
+        .type = LAYOUT_NODE_CONTAINER,
+        .as.container.config = conf,
+    };
     Layout__TempID temp_id = layout__node_push(node);
     list_append(&layout__state.open_node_stack, temp_id);
 }
@@ -110,30 +116,54 @@ static inline void layout__node_layout(Layout__Node *node) {
     layout__node_commands(node);
 }
 
-#define LAYOUT__NODE_DISPATCH(operation)                                      \
-    static inline void layout__node_##operation(Layout__Node *node) {         \
-        match(*node) {                                                        \
-            case(LAYOUT_NODE_TEXT)                                            \
-                layout__text_##operation(node);                               \
-                break;                                                        \
-                                                                              \
-            case(LAYOUT_NODE_CONTAINER)                                       \
-                layout__container_##operation(node);                          \
-                break;                                                        \
-                                                                              \
-            otherwise UNREACHABLE("Unknown type");                            \
-        }                                                                     \
+static inline void layout__node_intrinsic_width(Layout__Node *node) {
+    switch (node->type) {
+        case LAYOUT_NODE_TEXT: layout__text_intrinsic_width(node); break;
+        case LAYOUT_NODE_CONTAINER: layout__container_intrinsic_width(node); break;
     }
+}
 
-LAYOUT__NODE_DISPATCH(intrinsic_width)
-LAYOUT__NODE_DISPATCH(fill_width)
-LAYOUT__NODE_DISPATCH(wrap_text)
-LAYOUT__NODE_DISPATCH(intrinsic_height)
-LAYOUT__NODE_DISPATCH(fill_height)
-LAYOUT__NODE_DISPATCH(positions)
-LAYOUT__NODE_DISPATCH(commands)
+static inline void layout__node_fill_width(Layout__Node *node) {
+    switch (node->type) {
+        case LAYOUT_NODE_TEXT: layout__text_fill_width(node); break;
+        case LAYOUT_NODE_CONTAINER: layout__container_fill_width(node); break;
+    }
+}
 
-#undef LAYOUT__NODE_DISPATCH
+static inline void layout__node_wrap_text(Layout__Node *node) {
+    switch (node->type) {
+        case LAYOUT_NODE_TEXT: layout__text_wrap_text(node); break;
+        case LAYOUT_NODE_CONTAINER: layout__container_wrap_text(node); break;
+    }
+}
+
+static inline void layout__node_intrinsic_height(Layout__Node *node) {
+    switch (node->type) {
+        case LAYOUT_NODE_TEXT: layout__text_intrinsic_height(node); break;
+        case LAYOUT_NODE_CONTAINER: layout__container_intrinsic_height(node); break;
+    }
+}
+
+static inline void layout__node_fill_height(Layout__Node *node) {
+    switch (node->type) {
+        case LAYOUT_NODE_TEXT: layout__text_fill_height(node); break;
+        case LAYOUT_NODE_CONTAINER: layout__container_fill_height(node); break;
+    }
+}
+
+static inline void layout__node_positions(Layout__Node *node) {
+    switch (node->type) {
+        case LAYOUT_NODE_TEXT: layout__text_positions(node); break;
+        case LAYOUT_NODE_CONTAINER: layout__container_positions(node); break;
+    }
+}
+
+static inline void layout__node_commands(Layout__Node *node) {
+    switch (node->type) {
+        case LAYOUT_NODE_TEXT: layout__text_commands(node); break;
+        case LAYOUT_NODE_CONTAINER: layout__container_commands(node); break;
+    }
+}
 
 static inline void layout__node_intrinsic_size(Layout__Node *node, Layout__Dimension dim) {
     dim == DIM_X ? layout__node_intrinsic_width(node) : layout__node_intrinsic_height(node);
@@ -143,18 +173,15 @@ static inline void layout__container_intrinsic_width(Layout__Node *node) { layou
 static inline void layout__container_intrinsic_height(Layout__Node *node) { layout__container_intrinsic_size(node, DIM_Y); }
 
 static inline void layout__container_intrinsic_size(Layout__Node *node, Layout__Dimension dim) {
-    unwrap_into(*node, LAYOUT_NODE_CONTAINER, container);
-
     Layout__ChildrenIndices children = node->children;
     for (isize i = 0; i < children.count; ++i) {
         layout__node_intrinsic_size(layout__node_from_index(children.offset + i), dim);
     }
 
-    Layout_ContainerStyle style = container.config.style;
+    Layout_ContainerStyle style = node->as.container.config.style;
     Layout_SizeStyle size_style = layout__get_size_style(style, dim);
-    if (matches(size_style, SIZE_FIXED)) {
-        unwrap_into(size_style, SIZE_FIXED, fixed);
-        *layout__node_get_size(node, dim) = *layout__node_get_min_size(node, dim) = fixed.value;
+    if (size_style.type == SIZE_FIXED) {
+        *layout__node_get_size(node, dim) = *layout__node_get_min_size(node, dim) = size_style.as.fixed.value;
         return;
     }
 
@@ -185,13 +212,12 @@ static inline void layout__container_intrinsic_size(Layout__Node *node, Layout__
 }
 
 static inline void layout__text_intrinsic_width(Layout__Node *node) {
-    unwrap_into(*node, LAYOUT_NODE_TEXT, text_node);
     i32 line_width = 0;
     i32 max_line_width = 0;
     i32 max_word_width = 0;
     i32 current_word_width = 0;
 
-    Layout_TextSlice text = text_node.config.text;
+    Layout_TextSlice text = node->as.text.config.text;
     byte *p = text.items;
     byte *end = text.items + text.count;
     while (p < end) {
@@ -229,9 +255,7 @@ static inline void layout__container_fill_width(Layout__Node *node) { layout__co
 static inline void layout__container_fill_height(Layout__Node *node) { layout__container_fill_size(node, DIM_Y); }
 
 static inline void layout__container_fill_size(Layout__Node *node, Layout__Dimension dim) {
-    unwrap_into(*node, LAYOUT_NODE_CONTAINER, container);
-
-    Layout_ContainerStyle style = container.config.style;
+    Layout_ContainerStyle style = node->as.container.config.style;
     Layout__ChildrenIndices children = node->children;
 
     if (dim == layout__direction_get_main_dimension(style.direction)) {
@@ -267,16 +291,16 @@ static inline void layout__container_fill_size(Layout__Node *node, Layout__Dimen
         i32 content_size = *layout__node_get_size(node, dim) - 2 * style.padding;
         for (isize i = 0; i < children.count; ++i) {
             Layout__Node *child = layout__node_from_index(children.offset + i);
-            match(*child) {
-                case(LAYOUT_NODE_TEXT) {
+            switch (child->type) {
+                case LAYOUT_NODE_TEXT: {
                     if (dim == DIM_X) {
                         *layout__node_get_size(child, dim) = MAX(content_size, *layout__node_get_min_size(child, dim));
                     }
                     break;
                 }
-                case(LAYOUT_NODE_CONTAINER, container) {
-                    Layout_SizeStyle size_style = layout__get_size_style(container.config.style, dim);
-                    if (matches(size_style, SIZE_FILL)) {
+                case LAYOUT_NODE_CONTAINER: {
+                    Layout_SizeStyle size_style = layout__get_size_style(child->as.container.config.style, dim);
+                    if (size_style.type == SIZE_FILL) {
                         Layout__SizeRange range = layout__get_size_range(size_style);
                         *layout__node_get_size(child, dim) = CLAMP(content_size, MAX(range.min, *layout__node_get_min_size(child, dim)), range.max);
                     }
@@ -299,8 +323,7 @@ static inline void layout__container_wrap_text(Layout__Node *node) {
 }
 
 static inline void layout__text_wrap_text(Layout__Node *node) {
-    unwrap_into(*node, LAYOUT_NODE_TEXT, text_node);
-    Layout_TextSlice text = text_node.config.text;
+    Layout_TextSlice text = node->as.text.config.text;
     if (text.count <= 0) {
         node->h = node->min_h = 0;
         return;
@@ -332,9 +355,7 @@ static inline void layout__text_wrap_text(Layout__Node *node) {
 }
 
 static inline void layout__container_positions(Layout__Node *node) {
-    unwrap_into(*node, LAYOUT_NODE_CONTAINER, container);
-
-    Layout_ContainerStyle style = container.config.style;
+    Layout_ContainerStyle style = node->as.container.config.style;
     Layout__ChildrenIndices children = node->children;
     Layout__Dimension main_dim = layout__direction_get_main_dimension(style.direction);
     Layout__Dimension cross_dim = layout__dimension_get_other(main_dim);
@@ -384,8 +405,8 @@ static Layout__TempID layout__node_hit_test(Layout__Node *node, Layout_Rect pare
     Layout_Rect clip = layout__rect_intersect(parent_clip, node_rect);
     if (!layout__rect_contains_point(x, y, clip)) return LAYOUT_TEMP_ID_NONE;
 
-    match(*node) {
-        case(LAYOUT_NODE_CONTAINER) {
+    switch (node->type) {
+        case LAYOUT_NODE_CONTAINER: {
             Layout__ChildrenIndices children = node->children;
             for (isize i = children.count - 1; i >= 0; --i) {
                 Layout__Node *child = layout__node_from_index(children.offset + i);
@@ -394,7 +415,7 @@ static Layout__TempID layout__node_hit_test(Layout__Node *node, Layout_Rect pare
             }
             break;
         }
-        case(LAYOUT_NODE_TEXT) break;
+        case LAYOUT_NODE_TEXT: break;
     }
 
     return node->id != LAYOUT_PERSISTENT_ID_NONE ? (Layout__TempID)(node - layout__state.nodes.items) : LAYOUT_TEMP_ID_NONE;
@@ -431,8 +452,6 @@ void layout_scroll_update(i32 delta_y) {
 }
 
 static inline void layout__container_commands(Layout__Node *node) {
-    unwrap_into(*node, LAYOUT_NODE_CONTAINER, container);
-
     list_append(&layout__state.commands, 
         ((Layout_Command) {.type = LAYOUT_CMD_CLIP_START, .as.clip_start = {
             .x = node->x, .y = node->y, .w = node->w, .h = node->h
@@ -442,7 +461,7 @@ static inline void layout__container_commands(Layout__Node *node) {
     list_append(&layout__state.commands,
         ((Layout_Command) {.type = LAYOUT_CMD_RECTANGLE, .as.rectangle = {
             .x = node->x, .y = node->y, .w = node->w, .h = node->h,
-            .color = container.config.style.color
+            .color = node->as.container.config.style.color
         }})
     );
 
@@ -452,7 +471,9 @@ static inline void layout__container_commands(Layout__Node *node) {
         layout__node_commands(child);
     }
 
-    list_append(&layout__state.commands, tag0(Layout_Command, LAYOUT_CMD_CLIP_END));
+    list_append(&layout__state.commands, ((Layout_Command) {
+        .type = LAYOUT_CMD_CLIP_END,
+    }));
 }
 
 static inline void layout__append_text_command(
@@ -477,8 +498,8 @@ static inline void layout__append_text_command(
 }
 
 static inline void layout__text_commands(Layout__Node *node) {
-    unwrap_into(*node, LAYOUT_NODE_TEXT, text_node);
-    Layout_TextSlice source = text_node.config.text;
+    Layout_TextConfig config = node->as.text.config;
+    Layout_TextSlice source = config.text;
     if (source.count <= 0) return;
 
     i32 available_line_width = MAX(node->w, 1);
@@ -496,7 +517,7 @@ static inline void layout__text_commands(Layout__Node *node) {
 
         if (cp_equal(codepoint, cp_from_byte('\n'))) {
             layout__append_text_command(
-                node, text_node.config.style, source,
+                node, config.style, source,
                 line_start_byte, codepoint_start_byte, line_y
             );
 
@@ -512,7 +533,7 @@ static inline void layout__text_commands(Layout__Node *node) {
 
         if (codepoint_overflows_line) {
             layout__append_text_command(
-                node, text_node.config.style, source,
+                node, config.style, source,
                 line_start_byte, codepoint_start_byte, line_y
             );
 
@@ -525,7 +546,7 @@ static inline void layout__text_commands(Layout__Node *node) {
     }
 
     layout__append_text_command(
-        node, text_node.config.style, source,
+        node, config.style, source,
         line_start_byte, source.count, line_y
     );
 }
@@ -575,19 +596,19 @@ static inline Layout_Rect layout__rect_from_node(Layout__Node *node) {
 }
 
 static inline Layout_Alignment layout__node_get_align_self(Layout__Node *node) {
-    match(*node) {
-        case(LAYOUT_NODE_CONTAINER, container) return container.config.style.align_self;
-        case(LAYOUT_NODE_TEXT) return (Layout_Alignment) {ALIGN_START};
+    switch (node->type) {
+        case LAYOUT_NODE_CONTAINER: return node->as.container.config.style.align_self;
+        case LAYOUT_NODE_TEXT: return ALIGN_START;
     }
     UNREACHABLE("It must always match against alignment");
 }
 
 static inline i32 layout__align_cross(Layout_Alignment align, i32 parent_size, i32 parent_padding, i32 child_size) {
     i32 parent_inner = parent_size - 2 * parent_padding;
-    match (align) {
-        case(ALIGN_START)   return parent_padding;
-        case(ALIGN_CENTER)  return parent_padding + (parent_inner - child_size) / 2;
-        case(ALIGN_END)     return parent_padding + parent_inner - child_size;
+    switch (align) {
+        case ALIGN_START:  return parent_padding;
+        case ALIGN_CENTER: return parent_padding + (parent_inner - child_size) / 2;
+        case ALIGN_END:    return parent_padding + parent_inner - child_size;
     }
 
     UNREACHABLE("It must always match against alignment");
@@ -596,10 +617,10 @@ static inline i32 layout__align_cross(Layout_Alignment align, i32 parent_size, i
 static inline i32 layout__align_along(Layout_Alignment align, i32 parent_size, i32 parent_padding, i32 children_size) {
     i32 parent_inner = parent_size - 2 * parent_padding;
     i32 remaining = MAX(parent_inner - children_size, 0);
-    match (align) {
-        case(ALIGN_START)   return 0;
-        case(ALIGN_CENTER)  return remaining / 2;
-        case(ALIGN_END)     return remaining;
+    switch (align) {
+        case ALIGN_START:  return 0;
+        case ALIGN_CENTER: return remaining / 2;
+        case ALIGN_END:    return remaining;
     }
 
     UNREACHABLE("It must always match against alignment");
@@ -610,7 +631,7 @@ static inline Layout__Dimension layout__dimension_get_other(Layout__Dimension di
 }
 
 static inline Layout__Dimension layout__direction_get_main_dimension(Layout_Direction direction) {
-    switch (direction.type) {
+    switch (direction) {
         case DIR_ROW: return DIM_X;
         case DIR_COL: return DIM_Y;
     }
@@ -635,9 +656,9 @@ static inline Layout_SizeStyle layout__get_size_style(Layout_ContainerStyle styl
 
 static inline Layout__SizeRange layout__get_size_range(Layout_SizeStyle size) {
     switch (size.type) {
-        case SIZE_FIXED: return (Layout__SizeRange) {size._SIZE_FIXED.value, size._SIZE_FIXED.value};
-        case SIZE_FIT:   return (Layout__SizeRange) {size._SIZE_FIT.min, size._SIZE_FIT.max};
-        case SIZE_FILL:  return (Layout__SizeRange) {size._SIZE_FILL.min, size._SIZE_FILL.max};
+        case SIZE_FIXED: return (Layout__SizeRange) {size.as.fixed.value, size.as.fixed.value};
+        case SIZE_FIT:   return (Layout__SizeRange) {size.as.fit.min, size.as.fit.max};
+        case SIZE_FILL:  return (Layout__SizeRange) {size.as.fill.min, size.as.fill.max};
     }
     UNREACHABLE("Unknown size type");
 }
@@ -647,19 +668,20 @@ static inline i32 layout__get_children_spacing(Layout__ChildrenIndices children,
 }
 
 static inline b32 layout__node_is_fill(Layout__Node *node, Layout__Dimension dim) {
-    match(*node) {
-        case(LAYOUT_NODE_TEXT) return dim == DIM_X;
-        case(LAYOUT_NODE_CONTAINER, container) return matches(layout__get_size_style(container.config.style, dim), SIZE_FILL);
+    switch (node->type) {
+        case LAYOUT_NODE_TEXT: return dim == DIM_X;
+        case LAYOUT_NODE_CONTAINER:
+            return layout__get_size_style(node->as.container.config.style, dim).type == SIZE_FILL;
     }
     return false;
 }
 
 static inline i32 layout__node_get_fill_max(Layout__Node *node, Layout__Dimension dim) {
-    match(*node) {
-        case(LAYOUT_NODE_TEXT) return *layout__node_get_size(node, dim);
-        case(LAYOUT_NODE_CONTAINER, container) {
-            Layout_SizeStyle size = layout__get_size_style(container.config.style, dim);
-            assert(matches(size, SIZE_FILL) && "function is only for fill size");
+    switch (node->type) {
+        case LAYOUT_NODE_TEXT: return *layout__node_get_size(node, dim);
+        case LAYOUT_NODE_CONTAINER: {
+            Layout_SizeStyle size = layout__get_size_style(node->as.container.config.style, dim);
+            assert(size.type == SIZE_FILL && "function is only for fill size");
             return layout__get_size_range(size).max;
         }
     }
@@ -667,11 +689,11 @@ static inline i32 layout__node_get_fill_max(Layout__Node *node, Layout__Dimensio
 }
 
 static inline i32 layout__node_get_fill_min(Layout__Node *node, Layout__Dimension dim) {
-    match(*node) {
-        case(LAYOUT_NODE_TEXT) return *layout__node_get_min_size(node, dim);
-        case(LAYOUT_NODE_CONTAINER, container) {
-            Layout_SizeStyle size = layout__get_size_style(container.config.style, dim);
-            assert(matches(size, SIZE_FILL) && "function is only for fill size");
+    switch (node->type) {
+        case LAYOUT_NODE_TEXT: return *layout__node_get_min_size(node, dim);
+        case LAYOUT_NODE_CONTAINER: {
+            Layout_SizeStyle size = layout__get_size_style(node->as.container.config.style, dim);
+            assert(size.type == SIZE_FILL && "function is only for fill size");
             return MAX(layout__get_size_range(size).min, *layout__node_get_min_size(node, dim));
         }
     }
@@ -797,11 +819,11 @@ static inline Layout__ScrollState *layout__scroll_state_from_id(Layout_Persisten
 static inline b32 layout__node_is_scroll_y(Layout__Node *node) {
     if (node->id == LAYOUT_PERSISTENT_ID_NONE) return false;
 
-    match(*node) {
-        case(LAYOUT_NODE_CONTAINER, container) {
-            return container.config.style.scroll == SCROLL_Y;
+    switch (node->type) {
+        case LAYOUT_NODE_CONTAINER: {
+            return node->as.container.config.style.scroll == SCROLL_Y;
         }
-        case(LAYOUT_NODE_TEXT) return false;
+        case LAYOUT_NODE_TEXT: return false;
     }
     return false;
 }

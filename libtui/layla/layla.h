@@ -16,31 +16,31 @@ typedef struct {
     union {
         struct {
             i32 value;
-        } _SIZE_FIXED;
+        } fixed;
         struct {
             i32 min;
             i32 max;
-        } _SIZE_FIT;
+        } fit;
         struct {
             i32 min;
             i32 max;
-        } _SIZE_FILL;
-    };
+        } fill;
+    } as;
 } Layout_SizeStyle;
 
-#define FIXED(fixed_value) ((Layout_SizeStyle) {                        \
+#define FIXED(fixed_value) ((Layout_SizeStyle) {                       \
     .type = SIZE_FIXED,                                                \
-    ._SIZE_FIXED = {.value = (fixed_value)},                           \
+    .as.fixed = {.value = (fixed_value)},                              \
 })
 
 #define FIT(min_value, max_value) ((Layout_SizeStyle) {                \
     .type = SIZE_FIT,                                                  \
-    ._SIZE_FIT = {.min = (min_value), .max = (max_value)},             \
+    .as.fit = {.min = (min_value), .max = (max_value)},                \
 })
 
 #define FILL(min_value, max_value) ((Layout_SizeStyle) {               \
     .type = SIZE_FILL,                                                 \
-    ._SIZE_FILL = {.min = (min_value), .max = (max_value)},            \
+    .as.fill = {.min = (min_value), .max = (max_value)},               \
 })
 
 typedef struct {
@@ -56,21 +56,15 @@ typedef struct {
     i32 x, y, w, h;
 } Layout_Rect;
 
-//TODO: get rid of unnecessary 'type' fields.
-//      these can just be packed enums
-typedef struct {
-    LAYOUT_PACKED_ENUM {
-        DIR_ROW,
-        DIR_COL,
-    } type;
+typedef LAYOUT_PACKED_ENUM {
+    DIR_ROW,
+    DIR_COL,
 } Layout_Direction;
 
-typedef struct {
-    LAYOUT_PACKED_ENUM {
-        ALIGN_START,
-        ALIGN_CENTER,
-        ALIGN_END,
-    } type;
+typedef LAYOUT_PACKED_ENUM {
+    ALIGN_START,
+    ALIGN_CENTER,
+    ALIGN_END,
 } Layout_Alignment;
 
 typedef enum {
