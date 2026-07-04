@@ -18,7 +18,7 @@ void update_layout_input(Event event) {
     }
 }
 
-i32 main() {
+i32 main(void) {
     init_terminal();
     set_fps(60);
 

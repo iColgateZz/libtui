@@ -149,13 +149,13 @@ typedef i32 Layout_PersistentID;
 void layout_screen_set_dimensions(i32 w, i32 h);
 void layout_cursor_set_position(i32 x, i32 y);
 void layout_scroll_update(i32 delta_y);
-b32 layout_cursor_is_hovered();
-Layout_PersistentID layout_cursor_get_hovered_id();
-void layout_begin();
-Layout_CommandSlice layout_end();
+b32 layout_cursor_is_hovered(void);
+Layout_PersistentID layout_cursor_get_hovered_id(void);
+void layout_begin(void);
+Layout_CommandSlice layout_end(void);
 void layout_text_open(Layout_PersistentID id, Layout_TextConfig conf);
 void layout_container_open(Layout_PersistentID id, Layout_ContainerConfig conf);
-void layout_close();
+void layout_close(void);
 
 #define Container(id, ...)                              \
     for (u8 _latch = (layout_container_open(            \

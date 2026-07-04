@@ -44,11 +44,11 @@ typedef struct {
     } as;
 } Layout__Node;
 
-list_def(Layout_Command);
-list_def(Layout__Node);
-list_def(Layout__TempID);
+list_def(Layout_Command)
+list_def(Layout__Node)
+list_def(Layout__TempID)
 typedef Layout__Node* Layout__NodePtr;
-list_def(Layout__NodePtr);
+list_def(Layout__NodePtr)
 
 #define LAYOUT_TEMP_ID_NONE ((Layout__TempID)-1)
 #define LAYOUT_PERSISTENT_ID_NONE 0
@@ -61,7 +61,7 @@ typedef struct {
     i32 max_y;
 } Layout__ScrollState;
 
-list_def(Layout__ScrollState);
+list_def(Layout__ScrollState)
 
 typedef enum {
     DIM_X,

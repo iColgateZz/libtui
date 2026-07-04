@@ -12,11 +12,11 @@ void layout_cursor_set_position(i32 x, i32 y) {
     layout__state.cursor_y = y;
 }
 
-Layout_PersistentID layout_cursor_get_hovered_id() {
+Layout_PersistentID layout_cursor_get_hovered_id(void) {
     return layout__state.hovered_persistent_id;
 }
 
-b32 layout_cursor_is_hovered() {
+b32 layout_cursor_is_hovered(void) {
     if (layout__state.open_node_stack.count == 0) return false;
 
     Layout__TempID current_id = list_last(&layout__state.open_node_stack);
@@ -25,7 +25,7 @@ b32 layout_cursor_is_hovered() {
            persistent_id == layout__state.hovered_persistent_id;
 }
 
-void layout_begin() {
+void layout_begin(void) {
     // reset state
     layout__state.nodes.count = 0;
     layout__state.open_node_stack.count = 0;
@@ -47,7 +47,7 @@ void layout_begin() {
     });
 }
 
-Layout_CommandSlice layout_end() {
+Layout_CommandSlice layout_end(void) {
     // close implicit root element
     layout_close();
 
@@ -81,7 +81,7 @@ void layout_container_open(Layout_PersistentID id, Layout_ContainerConfig conf) 
     list_append(&layout__state.open_node_stack, temp_id);
 }
 
-void layout_close() {
+void layout_close(void) {
     Layout__TempID closed_id = list_pop(&layout__state.open_node_stack);
     Layout__Node *closed = layout__node_from_temp_id(closed_id);
     isize start = layout__state.temporary_child_stack.count - closed->children.count;
@@ -421,7 +421,7 @@ static Layout__TempID layout__node_hit_test(Layout__Node *node, Layout_Rect pare
     return node->id != LAYOUT_PERSISTENT_ID_NONE ? (Layout__TempID)(node - layout__state.nodes.items) : LAYOUT_TEMP_ID_NONE;
 }
 
-static inline void layout__hover_test() {
+static inline void layout__hover_test(void) {
     Layout__Node *root = layout__node_from_temp_id(LAYOUT_ROOT_ID);
     Layout_Rect root_clip = layout__rect_from_node(root);
     layout__state.hovered_temp_id = layout__node_hit_test(
