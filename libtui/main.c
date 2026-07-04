@@ -76,39 +76,62 @@ i32 main() {
                 });
             }
 
-            Slice(Layout_Command) cmds = layout_end();
+            Layout_CommandSlice cmds = layout_end();
 
             for (isize i = 0; i < cmds.count; ++i) {
                 Layout_Command cmd = cmds.items[i];
-                match(cmd) {
-                    case(LAYOUT_CMD_RECT, rect) {
+                switch (cmd.type) {
+                    case LAYOUT_CMD_RECT: {
+                        Rectangle rect = {
+                            .x = cmd._LAYOUT_CMD_RECT.x,
+                            .y = cmd._LAYOUT_CMD_RECT.y,
+                            .w = cmd._LAYOUT_CMD_RECT.w,
+                            .h = cmd._LAYOUT_CMD_RECT.h,
+                        };
                         fill_box(
-                            *(Rectangle *)&rect,
+                            rect,
                             (Effect) {
-                                .bg = *(RGB *)&rect.color,
+                                .bg = {
+                                    cmd._LAYOUT_CMD_RECT.color.r,
+                                    cmd._LAYOUT_CMD_RECT.color.g,
+                                    cmd._LAYOUT_CMD_RECT.color.b,
+                                },
                                 .flags = EFFECT_BG,
                             }
                         ); break;
                     }
-                    case(LAYOUT_CMD_TEXT, text) {
-                        i32 x = text.x;
+                    case LAYOUT_CMD_TEXT: {
+                        i32 x = cmd._LAYOUT_CMD_TEXT.x;
                         Effect effect = {
-                            .fg = *(RGB *)&text.style.color,
+                            .fg = {
+                                cmd._LAYOUT_CMD_TEXT.style.color.r,
+                                cmd._LAYOUT_CMD_TEXT.style.color.g,
+                                cmd._LAYOUT_CMD_TEXT.style.color.b,
+                            },
                             .flags = EFFECT_FG,
                         };
-                        byte *start = text.text.items;
-                        byte *end = text.text.items + text.text.count;
+                        byte *start = cmd._LAYOUT_CMD_TEXT.text.items;
+                        byte *end = start + cmd._LAYOUT_CMD_TEXT.text.count;
                         while (start < end) {
                             CodePoint cp = utf8_next(&start, end);
-                            put_cp(x, text.y, cp);
-                            merge_effect(x, text.y, effect);
+                            put_cp(x, cmd._LAYOUT_CMD_TEXT.y, cp);
+                            merge_effect(x, cmd._LAYOUT_CMD_TEXT.y, effect);
                             x += cp.display_width;
                         }
                         break;
                     }
-                    case(LAYOUT_CMD_CLIP_START, clip) clip_push_rect(*(Rectangle *)&clip); break;
-                    case(LAYOUT_CMD_CLIP_END) clip_pop(); break;
-                    otherwise assert(false && "unknown cmd type");
+                    case LAYOUT_CMD_CLIP_START: {
+                        Rectangle clip = {
+                            .x = cmd._LAYOUT_CMD_CLIP_START.x,
+                            .y = cmd._LAYOUT_CMD_CLIP_START.y,
+                            .w = cmd._LAYOUT_CMD_CLIP_START.w,
+                            .h = cmd._LAYOUT_CMD_CLIP_START.h,
+                        };
+                        clip_push_rect(clip);
+                        break;
+                    }
+                    case LAYOUT_CMD_CLIP_END: clip_pop(); break;
+                    default: assert(false && "unknown cmd type");
                 }
             }
         }

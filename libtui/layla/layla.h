@@ -1,31 +1,14 @@
 #ifndef LIBTUI_LAYLA_INCLUDE
 #define LIBTUI_LAYLA_INCLUDE
 
-#define PSH_CORE_NO_PREFIX
 #include "psh_core.h"
 
-//TODO: move to psh_core
-#define typeof __typeof__
-#define match(tu) for (typeof(tu) _tu = tu, *p = &_tu; p; p = NULL) switch ((tu).type)
-// may be fixed with __VA_OPT(__VA_ARGS__,) in C23 or
-// https://medium.com/@pauljlucas/using-advanced-c-preprocessor-macros-for-a-pre-c23-c-20-va-opt-substitute-bccefde27817
-#define case(...)   xcase(__VA_ARGS__, _case2, _case1)(__VA_ARGS__)
-#define xcase(a, b, c, ...) c
-#define _case2(tag, varname) case (tag): ;typeof(_tu._##tag) varname = _tu._##tag;
-#define _case1(tag) case (tag): ;
-#define otherwise default:
-#define unwrap_into(tu, tag, varname) typeof((tu)._##tag) varname = (tu)._##tag;
-#define matches(tu, tag) (tu).type == tag
-
-#define tag(T, tag, ...) ((T) {.type = tag, ._##tag = __VA_ARGS__})
-#define tag0(T, tag) ((T) {.type = tag})
-
-#define packed_enum enum __attribute__((__packed__))
+#define LAYOUT_PACKED_ENUM enum __attribute__((__packed__))
 
 //TODO: namespace all public symbols
 //TODO: percentage sizing?
 typedef struct {
-    packed_enum {
+    LAYOUT_PACKED_ENUM {
         SIZE_FIT,
         SIZE_FILL,
         SIZE_FIXED,
@@ -45,9 +28,20 @@ typedef struct {
     };
 } Layout_SizeStyle;
 
-#define FIXED(value)    tag(Layout_SizeStyle, SIZE_FIXED, {value})
-#define FIT(min, max)   tag(Layout_SizeStyle, SIZE_FIT, {min, max})
-#define FILL(min, max)  tag(Layout_SizeStyle, SIZE_FILL, {min, max})
+#define FIXED(fixed_value) ((Layout_SizeStyle) {                        \
+    .type = SIZE_FIXED,                                                \
+    ._SIZE_FIXED = {.value = (fixed_value)},                           \
+})
+
+#define FIT(min_value, max_value) ((Layout_SizeStyle) {                \
+    .type = SIZE_FIT,                                                  \
+    ._SIZE_FIT = {.min = (min_value), .max = (max_value)},             \
+})
+
+#define FILL(min_value, max_value) ((Layout_SizeStyle) {               \
+    .type = SIZE_FILL,                                                 \
+    ._SIZE_FILL = {.min = (min_value), .max = (max_value)},            \
+})
 
 typedef struct {
     Layout_SizeStyle w;
@@ -62,15 +56,17 @@ typedef struct {
     i32 x, y, w, h;
 } Layout_Rect;
 
+//TODO: get rid of unnecessary 'type' fields.
+//      these can just be packed enums
 typedef struct {
-    packed_enum {
+    LAYOUT_PACKED_ENUM {
         DIR_ROW,
         DIR_COL,
     } type;
 } Layout_Direction;
 
 typedef struct {
-    packed_enum {
+    LAYOUT_PACKED_ENUM {
         ALIGN_START,
         ALIGN_CENTER,
         ALIGN_END,
@@ -122,7 +118,7 @@ typedef struct {
 #define LAYOUT_TEXT(s) ((Layout_TextSpan) {.items = (byte *)(s), .count = sizeof(s) - 1})
 
 typedef struct {
-    packed_enum {
+    LAYOUT_PACKED_ENUM {
         LAYOUT_CMD_RECT,
         LAYOUT_CMD_TEXT,
         LAYOUT_CMD_CLIP_START,
@@ -145,7 +141,11 @@ typedef struct {
     };
 } Layout_Command;
 
-slice_def(Layout_Command);
+typedef struct {
+    Layout_Command *items;
+    isize count;
+} Layout_CommandSlice;
+
 typedef i32 Layout_PersistentID;
 
 void layout_screen_set_dimensions(i32 w, i32 h);
@@ -154,7 +154,7 @@ void layout_scroll_update(i32 delta_y);
 b32 layout_cursor_is_hovered();
 Layout_PersistentID layout_cursor_get_hovered_id();
 void layout_begin();
-Slice(Layout_Command) layout_end();
+Layout_CommandSlice layout_end();
 void layout_text_open(Layout_PersistentID id, Layout_TextConfig conf);
 void layout_container_open(Layout_PersistentID id, Layout_ContainerConfig conf);
 void layout_close();
