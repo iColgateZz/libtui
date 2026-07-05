@@ -91,10 +91,6 @@ typedef struct {
 } Layla_ContainerConfig;
 
 typedef struct {
-    Layla_Color color;
-} Layla_TextStyle;
-
-typedef struct {
     byte *items;
     isize count;
 } Layla_TextSlice;
@@ -104,10 +100,14 @@ typedef LAYLA_PACKED_ENUM {
 } Layla_TextWrapPolicy;
 
 typedef struct {
-    Layla_TextSlice text;
-    Layla_TextStyle style;
+    Layla_Color color;
     Layla_Alignment alignment;
     Layla_TextWrapPolicy wrap_policy;
+} Layla_TextStyle;
+
+typedef struct {
+    Layla_TextSlice text;
+    Layla_TextStyle style;
 } Layla_TextConfig;
 
 #define LAYLA_TEXT_SLICE(s) ((Layla_TextSlice) {.items = (byte *)(s), .count = sizeof(s) - 1})
@@ -128,7 +128,7 @@ typedef struct {
         struct Layla_CommandText {
             i32 x, y;
             Layla_TextSlice text_slice;
-            Layla_TextStyle style;
+            Layla_Color color;
         } text;
         struct Layla_CommandClipStart {
             i32 x, y, w, h;

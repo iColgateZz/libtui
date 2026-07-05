@@ -60,9 +60,9 @@ i32 main(void) {
                 }) {
                     Layla_Text(4, .text = LAYLA_TEXT_SLICE("LibTUI text wraps inside containers. LibTUI text wraps inside containers."),
                         .style = {
-                            .color = {255, 255, 255}
+                            .color = {255, 255, 255},
+                            .alignment = LAYLA_ALIGN_CENTER,
                         },
-                        .alignment = LAYLA_ALIGN_CENTER,
                     );
                     Layla_Container(5, .style = {
                         .size = {.w = LAYLA_FILL(0, INT32_MAX), .h = LAYLA_FIXED(5)},
@@ -96,7 +96,7 @@ i32 main(void) {
                         Layla_CommandText text = cmd.as.text;
 
                         Effect effect = {
-                            .fg = *(RGB *)&text.style.color,
+                            .fg = *(RGB *)&text.color,
                             .flags = EFFECT_FG,
                         };
 

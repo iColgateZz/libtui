@@ -403,10 +403,11 @@ static inline void text_commands(Node *node) {
 static inline TextMeasurement text_process(Node *node, i32 wrap_width, b32 emit_commands) {
     Layla_TextConfig config = node->as.text.config;
     Layla_TextSlice source = config.text;
+    Layla_TextStyle style = config.style;
     TextMeasurement measurement = {0};
     if (source.count <= 0) return measurement;
 
-    switch (config.wrap_policy) {
+    switch (style.wrap_policy) {
         case LAYLA_TEXT_WRAP_WORD: break;
         default: UNREACHABLE("Unknown text wrapping policy");
     }
@@ -428,9 +429,9 @@ static inline TextMeasurement text_process(Node *node, i32 wrap_width, b32 emit_
             measurement.natural_width = MAX(measurement.natural_width, unwrapped_line_width);
 
             if (emit_commands) {
-                i32 line_x = node->x + align_along(config.alignment, node->w, 0, line_width);
+                i32 line_x = node->x + align_along(style.alignment, node->w, 0, line_width);
                 append_text_command(
-                    config.style, source,
+                    style.color, source,
                     line_start_byte, line_end_byte,
                     line_x, node->y + measurement.line_count
                 );
@@ -474,9 +475,9 @@ static inline TextMeasurement text_process(Node *node, i32 wrap_width, b32 emit_
         b32 word_overflows_line = wrap_width > 0 && line_has_word && width_with_word > wrap_width;
         if (word_overflows_line) {
             if (emit_commands) {
-                i32 line_x = node->x + align_along(config.alignment, node->w, 0, line_width);
+                i32 line_x = node->x + align_along(style.alignment, node->w, 0, line_width);
                 append_text_command(
-                    config.style, source,
+                    style.color, source,
                     line_start_byte, line_end_byte,
                     line_x, node->y + measurement.line_count
                 );
@@ -499,9 +500,9 @@ static inline TextMeasurement text_process(Node *node, i32 wrap_width, b32 emit_
     line_end_byte = source.count;
 
     if (emit_commands) {
-        i32 line_x = node->x + align_along(config.alignment, node->w, 0, line_width);
+        i32 line_x = node->x + align_along(style.alignment, node->w, 0, line_width);
         append_text_command(
-            config.style, source,
+            style.color, source,
             line_start_byte, line_end_byte,
             line_x, node->y + measurement.line_count
         );
@@ -512,7 +513,7 @@ static inline TextMeasurement text_process(Node *node, i32 wrap_width, b32 emit_
 }
 
 static inline void append_text_command(
-    Layla_TextStyle style,
+    Layla_Color color,
     Layla_TextSlice source,
     isize line_start_byte,
     isize line_end_byte,
@@ -527,7 +528,7 @@ static inline void append_text_command(
                 .items = source.items + line_start_byte,
                 .count = line_end_byte - line_start_byte,
             },
-            .style = style,
+            .color = color,
         }})
     );
 }
