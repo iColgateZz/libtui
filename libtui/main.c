@@ -101,8 +101,8 @@ i32 main(void) {
                         };
 
                         i32 x = text.x;
-                        byte *start = text.text_slice.items;
-                        byte *end = start + text.text_slice.count;
+                        byte *start = text.slice.items;
+                        byte *end = start + text.slice.count;
 
                         while (start < end) {
                             CodePoint cp = utf8_next(&start, end);

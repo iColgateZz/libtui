@@ -377,7 +377,8 @@ static inline void container_commands(Node *node) {
     list_append(&state.commands,
         ((Layla_Command) {.type = LAYLA_CMD_RECTANGLE, .as.rectangle = {
             .x = node->x, .y = node->y, .w = node->w, .h = node->h,
-            .color = node->as.container.config.style.color
+            .color = node->as.container.config.style.color,
+            .userdata = node->as.container.config.userdata,
         }})
     );
 
@@ -431,7 +432,7 @@ static inline TextMeasurement text_process(Node *node, i32 wrap_width, b32 emit_
             if (emit_commands) {
                 i32 line_x = node->x + align_along(style.alignment, node->w, 0, line_width);
                 append_text_command(
-                    style.color, source,
+                    config,
                     line_start_byte, line_end_byte,
                     line_x, node->y + measurement.line_count
                 );
@@ -477,7 +478,7 @@ static inline TextMeasurement text_process(Node *node, i32 wrap_width, b32 emit_
             if (emit_commands) {
                 i32 line_x = node->x + align_along(style.alignment, node->w, 0, line_width);
                 append_text_command(
-                    style.color, source,
+                    config,
                     line_start_byte, line_end_byte,
                     line_x, node->y + measurement.line_count
                 );
@@ -502,7 +503,7 @@ static inline TextMeasurement text_process(Node *node, i32 wrap_width, b32 emit_
     if (emit_commands) {
         i32 line_x = node->x + align_along(style.alignment, node->w, 0, line_width);
         append_text_command(
-            style.color, source,
+            config,
             line_start_byte, line_end_byte,
             line_x, node->y + measurement.line_count
         );
@@ -513,22 +514,24 @@ static inline TextMeasurement text_process(Node *node, i32 wrap_width, b32 emit_
 }
 
 static inline void append_text_command(
-    Layla_Color color,
-    Layla_TextSlice source,
+    Layla_TextConfig config,
     isize line_start_byte,
     isize line_end_byte,
     i32 line_x,
     i32 line_y
 ) {
+    Layla_TextSlice source = config.text;
+    Layla_TextStyle style = config.style;
     list_append(&state.commands,
         ((Layla_Command) {.type = LAYLA_CMD_TEXT, .as.text = {
             .x = line_x,
             .y = line_y,
-            .text_slice = {
+            .slice = {
                 .items = source.items + line_start_byte,
                 .count = line_end_byte - line_start_byte,
             },
-            .color = color,
+            .color = style.color,
+            .userdata = config.userdata,
         }})
     );
 }

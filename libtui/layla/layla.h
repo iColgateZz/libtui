@@ -87,7 +87,7 @@ typedef struct {
 
 typedef struct {
     Layla_ContainerStyle style;
-    // void *userdata;
+    void *userdata;
 } Layla_ContainerConfig;
 
 typedef struct {
@@ -108,6 +108,7 @@ typedef struct {
 typedef struct {
     Layla_TextSlice text;
     Layla_TextStyle style;
+    void *userdata;
 } Layla_TextConfig;
 
 #define LAYLA_TEXT_SLICE(s) ((Layla_TextSlice) {.items = (byte *)(s), .count = sizeof(s) - 1})
@@ -124,11 +125,13 @@ typedef struct {
         struct Layla_CommandRectangle {
             i32 x, y, w, h;
             Layla_Color color;
+            void *userdata;
         } rectangle;
         struct Layla_CommandText {
             i32 x, y;
-            Layla_TextSlice text_slice;
+            Layla_TextSlice slice;
             Layla_Color color;
+            void *userdata;
         } text;
         struct Layla_CommandClipStart {
             i32 x, y, w, h;
@@ -158,13 +161,13 @@ void layla_text_open(Layla_PersistentID id, Layla_TextConfig conf);
 void layla_container_open(Layla_PersistentID id, Layla_ContainerConfig conf);
 void layla_close(void);
 
-#define Layla_Container(id, ...)                              \
-    for (u8 _latch = (layla_container_open(            \
-            id,                                         \
-            (Layla_ContainerConfig) {                  \
-                .style.size.w = LAYLA_FIT(0, INT32_MAX), \
-                .style.size.h = LAYLA_FIT(0, INT32_MAX), \
-                __VA_ARGS__                             \
+#define Layla_Container(id, ...)                            \
+    for (u8 _latch = (layla_container_open(                 \
+            id,                                             \
+            (Layla_ContainerConfig) {                       \
+                .style.size.w = LAYLA_FIT(0, INT32_MAX),    \
+                .style.size.h = LAYLA_FIT(0, INT32_MAX),    \
+                __VA_ARGS__                                 \
         }), 0); _latch < 1; _latch = 1, layla_close())
 
 #define Layla_Text(id, ...)              \

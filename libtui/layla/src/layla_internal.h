@@ -22,7 +22,6 @@ typedef struct {
     ChildrenIndices children;
     
     LAYLA_PACKED_ENUM {
-        //TODO: for custom nodes just pass the userdata pointer transparently via a command.
         LAYLA_NODE_CONTAINER,
         LAYLA_NODE_TEXT,
     } type;
@@ -131,8 +130,7 @@ static inline Layla_Alignment node_get_align_self(Node *node);
 static inline b32 node_is_scroll_y(Node *node);
 static inline ScrollState *scroll_state_from_id(Layla_PersistentID id);
 static inline void append_text_command(
-    Layla_Color color,
-    Layla_TextSlice source,
+    Layla_TextConfig config,
     isize line_start_byte,
     isize line_end_byte,
     i32 line_x,
