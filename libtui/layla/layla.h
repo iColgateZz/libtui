@@ -53,7 +53,7 @@ typedef struct {
 
 typedef struct {
     i32 x, y, w, h;
-} Layla_Rect;
+} Layla_Rectangle;
 
 typedef LAYLA_PACKED_ENUM {
     LAYLA_DIR_ROW,

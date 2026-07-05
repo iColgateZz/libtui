@@ -14,7 +14,6 @@ typedef struct {
 typedef i32 TempID;
 
 typedef struct {
-    //TODO: using i16 is probably more than enough
     TempID parent;
     Layla_PersistentID id;
     i32 x, y; // resolved coords
@@ -103,10 +102,10 @@ static inline void text_intrinsic_width(Node *node);
 static inline void text_wrap_text(Node *node);
 static inline void text_commands(Node *node);
 
-static TempID node_hit_test(Node *node, Layla_Rect parent_clip, i32 x, i32 y);
-static inline b32 rect_contains_point(i32 x, i32 y, Layla_Rect r);
-static inline Layla_Rect rect_intersect(Layla_Rect a, Layla_Rect b);
-static inline Layla_Rect rect_from_node(Node *node);
+static TempID node_hit_test(Node *node, Layla_Rectangle parent_clip, i32 x, i32 y);
+static inline b32 rect_contains_point(i32 x, i32 y, Layla_Rectangle r);
+static inline Layla_Rectangle rect_intersect(Layla_Rectangle a, Layla_Rectangle b);
+static inline Layla_Rectangle rect_from_node(Node *node);
 static inline Dimension dimension_get_other(Dimension dim);
 static inline Dimension direction_get_main_dimension(Layla_Direction direction);
 static inline i32 *node_get_pos(Node *node, Dimension dim);

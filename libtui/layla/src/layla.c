@@ -379,9 +379,9 @@ static inline void container_positions(Node *node) {
     }
 }
 
-static TempID node_hit_test(Node *node, Layla_Rect parent_clip, i32 x, i32 y) {
-    Layla_Rect node_rect = rect_from_node(node);
-    Layla_Rect clip = rect_intersect(parent_clip, node_rect);
+static TempID node_hit_test(Node *node, Layla_Rectangle parent_clip, i32 x, i32 y) {
+    Layla_Rectangle node_rect = rect_from_node(node);
+    Layla_Rectangle clip = rect_intersect(parent_clip, node_rect);
     if (!rect_contains_point(x, y, clip)) return LAYLA_TEMP_ID_NONE;
 
     ChildrenIndices children = node->children;
@@ -396,7 +396,7 @@ static TempID node_hit_test(Node *node, Layla_Rect parent_clip, i32 x, i32 y) {
 
 static inline void hover_test(void) {
     Node *root = node_from_temp_id(LAYLA_ROOT_ID);
-    Layla_Rect root_clip = rect_from_node(root);
+    Layla_Rectangle root_clip = rect_from_node(root);
     state.hovered_temp_id = node_hit_test(
         root, root_clip,
         state.cursor_x, state.cursor_y
@@ -550,26 +550,26 @@ static inline TempID node_push(Node node) {
     return id;
 }
 
-static inline b32 rect_contains_point(i32 x, i32 y, Layla_Rect r) {
+static inline b32 rect_contains_point(i32 x, i32 y, Layla_Rectangle r) {
     return r.x <= x && x < r.x + r.w
         && r.y <= y && y < r.y + r.h;
 }
 
-static inline Layla_Rect rect_intersect(Layla_Rect a, Layla_Rect b) {
+static inline Layla_Rectangle rect_intersect(Layla_Rectangle a, Layla_Rectangle b) {
     i32 x1 = MAX(a.x, b.x);
     i32 y1 = MAX(a.y, b.y);
     i32 x2 = MIN(a.x + a.w, b.x + b.w);
     i32 y2 = MIN(a.y + a.h, b.y + b.h);
 
     if (x2 <= x1 || y2 <= y1) {
-        return (Layla_Rect) {0, 0, 0, 0};
+        return (Layla_Rectangle) {0, 0, 0, 0};
     }
 
-    return (Layla_Rect) {x1, y1, x2 - x1, y2 - y1};
+    return (Layla_Rectangle) {x1, y1, x2 - x1, y2 - y1};
 }
 
-static inline Layla_Rect rect_from_node(Node *node) {
-    return (Layla_Rect) {.x = node->x, .y = node->y, .w = node->w, .h = node->h};
+static inline Layla_Rectangle rect_from_node(Node *node) {
+    return (Layla_Rectangle) {.x = node->x, .y = node->y, .w = node->w, .h = node->h};
 }
 
 static inline Layla_Alignment node_get_align_self(Node *node) {
