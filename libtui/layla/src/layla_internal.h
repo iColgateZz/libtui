@@ -16,13 +16,13 @@ typedef i32 Layout__TempID;
 typedef struct {
     //TODO: using i16 is probably more than enough
     Layout__TempID parent;
-    Layout_PersistentID id;
+    Layla_PersistentID id;
     i32 x, y; // resolved coords
     i32 w, h; // resolved w, h
     i32 min_w, min_h;
     Layout__ChildrenIndices children;
     
-    LAYOUT_PACKED_ENUM {
+    LAYLA_PACKED_ENUM {
         //TODO: for custom nodes there may be 2 variants:
         //      one that has a vtable with all pipeline methods,
         //      one that only has a custom draw method that emits renderer commands.
@@ -36,15 +36,15 @@ typedef struct {
     } type;
     union {
         struct {
-            Layout_ContainerConfig config;
+            Layla_ContainerConfig config;
         } container;
         struct {
-            Layout_TextConfig config;
+            Layla_TextConfig config;
         } text;
     } as;
 } Layout__Node;
 
-list_def(Layout_Command)
+list_def(Layla_Command)
 list_def(Layout__Node)
 list_def(Layout__TempID)
 typedef Layout__Node* Layout__NodePtr;
@@ -56,7 +56,7 @@ list_def(Layout__NodePtr)
 
 //TODO: externally supplied scroll offsets?
 typedef struct {
-    Layout_PersistentID id;
+    Layla_PersistentID id;
     i32 y;
     i32 max_y;
 } Layout__ScrollState;
@@ -78,12 +78,12 @@ typedef struct {
     List(Layout__TempID) open_node_stack;
     List(Layout__TempID) temporary_child_stack;
     List(Layout__TempID) frame_children;
-    List(Layout_Command) commands;
+    List(Layla_Command) commands;
     List(Layout__ScrollState) scroll_states;
     i32 width, height;
     i32 cursor_x, cursor_y;
     Layout__TempID hovered_temp_id;
-    Layout_PersistentID hovered_persistent_id;
+    Layla_PersistentID hovered_persistent_id;
     Arena tmp;
 } Layout__State;
 
@@ -135,31 +135,31 @@ static inline void layout__text_intrinsic_height(Layout__Node *node) { UNUSED(no
 static inline void layout__text_fill_height(Layout__Node *node) { UNUSED(node); }
 static inline void layout__text_positions(Layout__Node *node) { UNUSED(node); }
 
-static Layout__TempID layout__node_hit_test(Layout__Node *node, Layout_Rect parent_clip, i32 x, i32 y);
-static inline b32 layout__rect_contains_point(i32 x, i32 y, Layout_Rect r);
-static inline Layout_Rect layout__rect_intersect(Layout_Rect a, Layout_Rect b);
-static inline Layout_Rect layout__rect_from_node(Layout__Node *node);
+static Layout__TempID layout__node_hit_test(Layout__Node *node, Layla_Rect parent_clip, i32 x, i32 y);
+static inline b32 layout__rect_contains_point(i32 x, i32 y, Layla_Rect r);
+static inline Layla_Rect layout__rect_intersect(Layla_Rect a, Layla_Rect b);
+static inline Layla_Rect layout__rect_from_node(Layout__Node *node);
 static inline Layout__Dimension layout__dimension_get_other(Layout__Dimension dim);
-static inline Layout__Dimension layout__direction_get_main_dimension(Layout_Direction direction);
+static inline Layout__Dimension layout__direction_get_main_dimension(Layla_Direction direction);
 static inline i32 *layout__node_get_pos(Layout__Node *node, Layout__Dimension dim);
 static inline i32 *layout__node_get_size(Layout__Node *node, Layout__Dimension dim);
 static inline i32 *layout__node_get_min_size(Layout__Node *node, Layout__Dimension dim);
-static inline Layout_SizeStyle layout__get_size_style(Layout_ContainerStyle style, Layout__Dimension dim);
-static inline Layout__SizeRange layout__get_size_range(Layout_SizeStyle size);
+static inline Layla_SizeStyle layout__get_size_style(Layla_ContainerStyle style, Layout__Dimension dim);
+static inline Layout__SizeRange layout__get_size_range(Layla_SizeStyle size);
 static inline i32 layout__get_children_spacing(Layout__ChildrenIndices children, i32 spacing);
 static inline b32 layout__node_is_fill(Layout__Node *node, Layout__Dimension dim);
 static inline i32 layout__node_get_fill_max(Layout__Node *node, Layout__Dimension dim);
 static inline i32 layout__node_get_fill_min(Layout__Node *node, Layout__Dimension dim);
 static inline void layout__space_distribute(i32 space, List(Layout__NodePtr) nodes, Layout__Dimension dim);
-static inline i32 layout__align_cross(Layout_Alignment align, i32 parent_size, i32 parent_padding, i32 child_size);
-static inline i32 layout__align_along(Layout_Alignment align, i32 parent_size, i32 parent_padding, i32 children_size);
-static inline Layout_Alignment layout__node_get_align_self(Layout__Node *node);
+static inline i32 layout__align_cross(Layla_Alignment align, i32 parent_size, i32 parent_padding, i32 child_size);
+static inline i32 layout__align_along(Layla_Alignment align, i32 parent_size, i32 parent_padding, i32 children_size);
+static inline Layla_Alignment layout__node_get_align_self(Layout__Node *node);
 static inline b32 layout__node_is_scroll_y(Layout__Node *node);
-static inline Layout__ScrollState *layout__scroll_state_from_id(Layout_PersistentID id);
+static inline Layout__ScrollState *layout__scroll_state_from_id(Layla_PersistentID id);
 static inline void layout__append_text_command(
     Layout__Node *node,
-    Layout_TextStyle style,
-    Layout_TextSlice source,
+    Layla_TextStyle style,
+    Layla_TextSlice source,
     isize line_start_byte,
     isize line_end_byte,
     i32 line_y

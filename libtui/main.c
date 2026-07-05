@@ -9,12 +9,12 @@
 void update_layout_input(Event event) {
     if (!event_is_mouse(event)) return;
 
-    layout_cursor_set_position(event.as.mouse.x, event.as.mouse.y);
+    layla_cursor_set_position(event.as.mouse.x, event.as.mouse.y);
 
     if (event_is(event, EScrollUp)) {
-        layout_scroll_update(-1);
+        layla_scroll_update(-1);
     } else if (event_is(event, EScrollDown)) {
-        layout_scroll_update(1);
+        layla_scroll_update(1);
     }
 }
 
@@ -36,53 +36,53 @@ i32 main(void) {
         {
             u32 w = get_terminal_width();
             u32 h = get_terminal_height();
-            layout_screen_set_dimensions(w, h);
-            layout_begin();
+            layla_screen_set_dimensions(w, h);
+            layla_begin();
 
-            Container(1, .style = {
+            Layla_Container(1, .style = {
                 .color = {196, 240, 120},
-                .direction = DIR_ROW,
-                .size = {.w = FIXED(w), .h = FIXED(h)},
+                .direction = LAYLA_DIR_ROW,
+                .size = {.w = LAYLA_FIXED(w), .h = LAYLA_FIXED(h)},
             }) {
-                Container(2, .style = {
-                    .size = {.w = FILL(0, 10), .h = FILL(0, INT32_MAX)},
+                Layla_Container(2, .style = {
+                    .size = {.w = LAYLA_FILL(0, 10), .h = LAYLA_FILL(0, INT32_MAX)},
                     .color = {255, 133, 182},
-                    .align_self = ALIGN_CENTER,
+                    .align_self = LAYLA_ALIGN_CENTER,
                 });
 
-                Container(3, .style = {
-                    .size = {.w = FILL(0, INT32_MAX), .h = FIXED(1)},
+                Layla_Container(3, .style = {
+                    .size = {.w = LAYLA_FILL(0, INT32_MAX), .h = LAYLA_FIXED(1)},
                     .color = {233, 255, 57},
-                    .align_self = ALIGN_CENTER,
-                    .direction = DIR_COL,
+                    .align_self = LAYLA_ALIGN_CENTER,
+                    .direction = LAYLA_DIR_COL,
                     .padding = 1,
-                    .scroll = SCROLL_Y,
+                    .scroll = LAYLA_SCROLL_Y,
                 }) {
-                    Text(4, .text = LAYOUT_TEXT("LibTUI text wraps inside containers. LibTUI text wraps inside containers."),
+                    Layla_Text(4, .text = LAYLA_TEXT_SLICE("LibTUI text wraps inside containers. LibTUI text wraps inside containers."),
                         .style = {
                             .color = {255, 255, 255}
                         },
                     );
-                    Container(5, .style = {
-                        .size = {.w = FILL(0, INT32_MAX), .h = FIXED(5)},
+                    Layla_Container(5, .style = {
+                        .size = {.w = LAYLA_FILL(0, INT32_MAX), .h = LAYLA_FIXED(5)},
                         .color = {10, 9, 254},
                     });
                 }
 
-                Container(6, .style = {
-                    .size = {.w = FILL(0, INT32_MAX), .h = FIXED(5)},
+                Layla_Container(6, .style = {
+                    .size = {.w = LAYLA_FILL(0, INT32_MAX), .h = LAYLA_FIXED(5)},
                     .color = {195, 255, 57},
-                    .align_self = ALIGN_CENTER,
+                    .align_self = LAYLA_ALIGN_CENTER,
                 });
             }
 
-            Layout_CommandSlice cmds = layout_end();
+            Layla_CommandSlice cmds = layla_end();
 
             for (isize i = 0; i < cmds.count; ++i) {
-                Layout_Command cmd = cmds.items[i];
+                Layla_Command cmd = cmds.items[i];
                 switch (cmd.type) {
-                    case LAYOUT_CMD_RECTANGLE: {
-                        CommandRectangle rectangle = cmd.as.rectangle;
+                    case LAYLA_CMD_RECTANGLE: {
+                        Layla_CommandRectangle rectangle = cmd.as.rectangle;
                         fill_box(
                             *(Rectangle *)&rectangle,
                             (Effect) { .bg = *(RGB *)&rectangle.color, .flags = EFFECT_BG }
@@ -91,8 +91,8 @@ i32 main(void) {
                         break;
                     }
 
-                    case LAYOUT_CMD_TEXT: {
-                        CommandText text = cmd.as.text;
+                    case LAYLA_CMD_TEXT: {
+                        Layla_CommandText text = cmd.as.text;
 
                         Effect effect = {
                             .fg = *(RGB *)&text.style.color,
@@ -113,13 +113,13 @@ i32 main(void) {
                         break;
                     }
 
-                    case LAYOUT_CMD_CLIP_START: {
-                        CommandClipStart clip_start = cmd.as.clip_start;
+                    case LAYLA_CMD_CLIP_START: {
+                        Layla_CommandClipStart clip_start = cmd.as.clip_start;
                         clip_push_rect(*(Rectangle *)&clip_start);
                         break;
                     }
 
-                    case LAYOUT_CMD_CLIP_END: {
+                    case LAYLA_CMD_CLIP_END: {
                         clip_pop();
                         break;
                     }

@@ -3,15 +3,14 @@
 
 #include "psh_core.h"
 
-#define LAYOUT_PACKED_ENUM enum __attribute__((__packed__))
+#define LAYLA_PACKED_ENUM enum __attribute__((__packed__))
 
-//TODO: namespace all public symbols
 //TODO: percentage sizing?
 typedef struct {
-    LAYOUT_PACKED_ENUM {
-        SIZE_FIT,
-        SIZE_FILL,
-        SIZE_FIXED,
+    LAYLA_PACKED_ENUM {
+        LAYLA_SIZE_FIT,
+        LAYLA_SIZE_FILL,
+        LAYLA_SIZE_FIXED,
     } type;
     union {
         struct {
@@ -26,147 +25,147 @@ typedef struct {
             i32 max;
         } fill;
     } as;
-} Layout_SizeStyle;
+} Layla_SizeStyle;
 
-#define FIXED(fixed_value) ((Layout_SizeStyle) {                       \
-    .type = SIZE_FIXED,                                                \
-    .as.fixed = {.value = (fixed_value)},                              \
+#define LAYLA_FIXED(fixed_value) ((Layla_SizeStyle) {          \
+    .type = LAYLA_SIZE_FIXED,                                 \
+    .as.fixed = {.value = (fixed_value)},                      \
 })
 
-#define FIT(min_value, max_value) ((Layout_SizeStyle) {                \
-    .type = SIZE_FIT,                                                  \
-    .as.fit = {.min = (min_value), .max = (max_value)},                \
+#define LAYLA_FIT(min_value, max_value) ((Layla_SizeStyle) {   \
+    .type = LAYLA_SIZE_FIT,                                   \
+    .as.fit = {.min = (min_value), .max = (max_value)},        \
 })
 
-#define FILL(min_value, max_value) ((Layout_SizeStyle) {               \
-    .type = SIZE_FILL,                                                 \
-    .as.fill = {.min = (min_value), .max = (max_value)},               \
+#define LAYLA_FILL(min_value, max_value) ((Layla_SizeStyle) {  \
+    .type = LAYLA_SIZE_FILL,                                  \
+    .as.fill = {.min = (min_value), .max = (max_value)},       \
 })
 
 typedef struct {
-    Layout_SizeStyle w;
-    Layout_SizeStyle h;
-} Layout_Sizing;
+    Layla_SizeStyle w;
+    Layla_SizeStyle h;
+} Layla_Sizing;
 
 typedef struct {
     u8 r, g, b;
-} Layout_Color;
+} Layla_Color;
 
 typedef struct {
     i32 x, y, w, h;
-} Layout_Rect;
+} Layla_Rect;
 
-typedef LAYOUT_PACKED_ENUM {
-    DIR_ROW,
-    DIR_COL,
-} Layout_Direction;
+typedef LAYLA_PACKED_ENUM {
+    LAYLA_DIR_ROW,
+    LAYLA_DIR_COL,
+} Layla_Direction;
 
-typedef LAYOUT_PACKED_ENUM {
-    ALIGN_START,
-    ALIGN_CENTER,
-    ALIGN_END,
-} Layout_Alignment;
+typedef LAYLA_PACKED_ENUM {
+    LAYLA_ALIGN_START,
+    LAYLA_ALIGN_CENTER,
+    LAYLA_ALIGN_END,
+} Layla_Alignment;
 
 typedef enum {
-    SCROLL_NONE,
-    SCROLL_Y,
-} Layout_Scroll;
+    LAYLA_SCROLL_NONE,
+    LAYLA_SCROLL_Y,
+} Layla_Scroll;
 
 typedef struct {
-    Layout_Sizing size;
-    Layout_Color color;
+    Layla_Sizing size;
+    Layla_Color color;
     //TODO: add per-size padding
     u8 padding;
     u8 spacing;
     // TODO: u8 margin;
     // BorderStyle border;
-    Layout_Direction direction;
-    Layout_Alignment align_children;
-    Layout_Alignment align_self;
-    Layout_Scroll scroll;
-} Layout_ContainerStyle;
+    Layla_Direction direction;
+    Layla_Alignment align_children;
+    Layla_Alignment align_self;
+    Layla_Scroll scroll;
+} Layla_ContainerStyle;
 
 typedef struct {
-    Layout_ContainerStyle style;
+    Layla_ContainerStyle style;
     // void *userdata;
-} Layout_ContainerConfig;
+} Layla_ContainerConfig;
 
 typedef struct {
-    Layout_Color color;
-} Layout_TextStyle;
+    Layla_Color color;
+} Layla_TextStyle;
 
 typedef struct {
     byte *items;
     isize count;
-} Layout_TextSlice;
+} Layla_TextSlice;
 
 //TODO: text measurement results should probably be cached.
 //TODO: create one internal line-breaking pass reused for height calculation and command emission
 //TODO: maybe add different text wrapping policies?
 //TODO: maybe add text alignment? can this be done by placing it in a container?
 typedef struct {
-    Layout_TextSlice text;
-    Layout_TextStyle style;
-} Layout_TextConfig;
+    Layla_TextSlice text;
+    Layla_TextStyle style;
+} Layla_TextConfig;
 
-#define LAYOUT_TEXT(s) ((Layout_TextSlice) {.items = (byte *)(s), .count = sizeof(s) - 1})
+#define LAYLA_TEXT_SLICE(s) ((Layla_TextSlice) {.items = (byte *)(s), .count = sizeof(s) - 1})
 
 typedef struct {
-    LAYOUT_PACKED_ENUM {
-        LAYOUT_CMD_RECTANGLE,
-        LAYOUT_CMD_TEXT,
-        LAYOUT_CMD_CLIP_START,
-        LAYOUT_CMD_CLIP_END,
-        // LAYOUT_CMD_BORDER, // pass concrete codepoints to draw
+    LAYLA_PACKED_ENUM {
+        LAYLA_CMD_RECTANGLE,
+        LAYLA_CMD_TEXT,
+        LAYLA_CMD_CLIP_START,
+        LAYLA_CMD_CLIP_END,
+        // LAYLA_CMD_BORDER, // pass concrete codepoints to draw
     } type;
     union {
-        struct CommandRectangle {
+        struct Layla_CommandRectangle {
             i32 x, y, w, h;
-            Layout_Color color;
+            Layla_Color color;
         } rectangle;
-        struct CommandText {
+        struct Layla_CommandText {
             i32 x, y;
-            Layout_TextSlice text_slice;
-            Layout_TextStyle style;
+            Layla_TextSlice text_slice;
+            Layla_TextStyle style;
         } text;
-        struct CommandClipStart {
+        struct Layla_CommandClipStart {
             i32 x, y, w, h;
         } clip_start;
     } as;
-} Layout_Command;
+} Layla_Command;
 
-typedef struct CommandRectangle CommandRectangle;
-typedef struct CommandText CommandText;
-typedef struct CommandClipStart CommandClipStart;
+typedef struct Layla_CommandRectangle Layla_CommandRectangle;
+typedef struct Layla_CommandText Layla_CommandText;
+typedef struct Layla_CommandClipStart Layla_CommandClipStart;
 
 typedef struct {
-    Layout_Command *items;
+    Layla_Command *items;
     isize count;
-} Layout_CommandSlice;
+} Layla_CommandSlice;
 
-typedef i32 Layout_PersistentID;
+typedef i32 Layla_PersistentID;
 
-void layout_screen_set_dimensions(i32 w, i32 h);
-void layout_cursor_set_position(i32 x, i32 y);
-void layout_scroll_update(i32 delta_y);
-b32 layout_cursor_is_hovered(void);
-Layout_PersistentID layout_cursor_get_hovered_id(void);
-void layout_begin(void);
-Layout_CommandSlice layout_end(void);
-void layout_text_open(Layout_PersistentID id, Layout_TextConfig conf);
-void layout_container_open(Layout_PersistentID id, Layout_ContainerConfig conf);
-void layout_close(void);
+void layla_screen_set_dimensions(i32 w, i32 h);
+void layla_cursor_set_position(i32 x, i32 y);
+void layla_scroll_update(i32 delta_y);
+b32 layla_cursor_is_hovered(void);
+Layla_PersistentID layla_cursor_get_hovered_id(void);
+void layla_begin(void);
+Layla_CommandSlice layla_end(void);
+void layla_text_open(Layla_PersistentID id, Layla_TextConfig conf);
+void layla_container_open(Layla_PersistentID id, Layla_ContainerConfig conf);
+void layla_close(void);
 
-#define Container(id, ...)                              \
-    for (u8 _latch = (layout_container_open(            \
+#define Layla_Container(id, ...)                              \
+    for (u8 _latch = (layla_container_open(            \
             id,                                         \
-            (Layout_ContainerConfig) {                  \
-                .style.size.w = FIT(0, INT32_MAX),      \
-                .style.size.h = FIT(0, INT32_MAX),      \
+            (Layla_ContainerConfig) {                  \
+                .style.size.w = LAYLA_FIT(0, INT32_MAX), \
+                .style.size.h = LAYLA_FIT(0, INT32_MAX), \
                 __VA_ARGS__                             \
-        }), 0); _latch < 1; _latch = 1, layout_close())
+        }), 0); _latch < 1; _latch = 1, layla_close())
 
-#define Text(id, ...)              \
-    for (u8 _latch = (layout_text_open(id, (Layout_TextConfig) {__VA_ARGS__}), 0); _latch < 1; _latch = 1, layout_close())
+#define Layla_Text(id, ...)              \
+    for (u8 _latch = (layla_text_open(id, (Layla_TextConfig) {__VA_ARGS__}), 0); _latch < 1; _latch = 1, layla_close())
 
 #endif
