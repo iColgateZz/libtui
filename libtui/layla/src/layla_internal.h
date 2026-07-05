@@ -31,8 +31,8 @@ typedef struct {
         // user enough context so that they can adapt it for the renderer?
 
         // Just pass the userdata pointer transparently via a command.
-        LAYOUT_NODE_CONTAINER,
-        LAYOUT_NODE_TEXT,
+        LAYLA_NODE_CONTAINER,
+        LAYLA_NODE_TEXT,
     } type;
     union {
         struct {
@@ -50,9 +50,9 @@ list_def(TempID)
 typedef Node* NodePtr;
 list_def(NodePtr)
 
-#define LAYOUT_TEMP_ID_NONE ((TempID)-1)
-#define LAYOUT_PERSISTENT_ID_NONE 0
-#define LAYOUT_ROOT_ID 0
+#define LAYLA_TEMP_ID_NONE ((TempID)-1)
+#define LAYLA_PERSISTENT_ID_NONE 0
+#define LAYLA_ROOT_ID 0
 
 //TODO: externally supplied scroll offsets?
 typedef struct {
