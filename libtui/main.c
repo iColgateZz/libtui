@@ -62,6 +62,7 @@ i32 main(void) {
                         .style = {
                             .color = {255, 255, 255}
                         },
+                        .alignment = LAYLA_ALIGN_CENTER,
                     );
                     Layla_Container(5, .style = {
                         .size = {.w = LAYLA_FILL(0, INT32_MAX), .h = LAYLA_FIXED(5)},

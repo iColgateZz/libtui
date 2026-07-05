@@ -428,10 +428,11 @@ static inline TextMeasurement text_process(Node *node, i32 wrap_width, b32 emit_
             measurement.natural_width = MAX(measurement.natural_width, unwrapped_line_width);
 
             if (emit_commands) {
+                i32 line_x = node->x + align_along(config.alignment, node->w, 0, line_width);
                 append_text_command(
-                    node, config.style, source,
+                    config.style, source,
                     line_start_byte, line_end_byte,
-                    line_width, node->y + measurement.line_count
+                    line_x, node->y + measurement.line_count
                 );
             }
 
@@ -473,10 +474,11 @@ static inline TextMeasurement text_process(Node *node, i32 wrap_width, b32 emit_
         b32 word_overflows_line = wrap_width > 0 && line_has_word && width_with_word > wrap_width;
         if (word_overflows_line) {
             if (emit_commands) {
+                i32 line_x = node->x + align_along(config.alignment, node->w, 0, line_width);
                 append_text_command(
-                    node, config.style, source,
+                    config.style, source,
                     line_start_byte, line_end_byte,
-                    line_width, node->y + measurement.line_count
+                    line_x, node->y + measurement.line_count
                 );
             }
 
@@ -497,10 +499,11 @@ static inline TextMeasurement text_process(Node *node, i32 wrap_width, b32 emit_
     line_end_byte = source.count;
 
     if (emit_commands) {
+        i32 line_x = node->x + align_along(config.alignment, node->w, 0, line_width);
         append_text_command(
-            node, config.style, source,
+            config.style, source,
             line_start_byte, line_end_byte,
-            line_width, node->y + measurement.line_count
+            line_x, node->y + measurement.line_count
         );
     }
     measurement.line_count++;
@@ -509,23 +512,13 @@ static inline TextMeasurement text_process(Node *node, i32 wrap_width, b32 emit_
 }
 
 static inline void append_text_command(
-    Node *node,
     Layla_TextStyle style,
     Layla_TextSlice source,
     isize line_start_byte,
     isize line_end_byte,
-    i32 line_width,
+    i32 line_x,
     i32 line_y
 ) {
-    i32 remaining_width = MAX(node->w - line_width, 0);
-    i32 line_x = node->x;
-    switch (node->as.text.config.alignment) {
-        case LAYLA_ALIGN_START: break;
-        case LAYLA_ALIGN_CENTER: line_x += remaining_width / 2; break;
-        case LAYLA_ALIGN_END: line_x += remaining_width; break;
-        default: UNREACHABLE("Unknown text alignment");
-    }
-
     list_append(&state.commands,
         ((Layla_Command) {.type = LAYLA_CMD_TEXT, .as.text = {
             .x = line_x,

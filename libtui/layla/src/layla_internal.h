@@ -131,12 +131,11 @@ static inline Layla_Alignment node_get_align_self(Node *node);
 static inline b32 node_is_scroll_y(Node *node);
 static inline ScrollState *scroll_state_from_id(Layla_PersistentID id);
 static inline void append_text_command(
-    Node *node,
     Layla_TextStyle style,
     Layla_TextSlice source,
     isize line_start_byte,
     isize line_end_byte,
-    i32 line_width,
+    i32 line_x,
     i32 line_y
 );
 
