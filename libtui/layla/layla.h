@@ -3,6 +3,7 @@
 
 #include "psh_core.h"
 
+//TODO: make cross-platform/cross-compiler
 #define LAYLA_PACKED_ENUM enum __attribute__((__packed__))
 
 //TODO: percentage sizing?
@@ -150,6 +151,8 @@ typedef struct {
 
 typedef i32 Layla_PersistentID;
 
+//TODO: configurable clipping/overflow, not always overflow-hidden
+//TODO: query max scroll offset
 void layla_screen_set_dimensions(i32 w, i32 h);
 void layla_cursor_set_position(i32 x, i32 y);
 void layla_scroll_update(i32 delta_y);

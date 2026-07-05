@@ -13,6 +13,7 @@ typedef struct {
 
 typedef i32 TempID;
 
+//TODO: maybe store a list of persistent id -> temp id for querying data by persistent id?
 typedef struct {
     TempID parent;
     Layla_PersistentID id;
@@ -69,6 +70,7 @@ typedef struct {
     i32 line_count;
 } TextMeasurement;
 
+//TODO: depending on macro-configuration, lists and arena should use heap/static lists
 typedef struct {
     List(Node) nodes;
     List(TempID) open_node_stack;
@@ -90,6 +92,9 @@ static inline TempID temp_id_from_child_index(i32 index);
 static inline Node *node_from_index(i32 index);
 static inline TempID node_push(Node node);
 static inline void hover_test(void);
+//TODO: maybe add a layout pass that can check for common errors
+//      it may be configured by some macro and not appear in production code
+//      that would also need an error reporting mechanism
 static inline void node_layout(Node *node);
 static inline void container_intrinsic_size(Node *node, Dimension dim);
 static inline void container_fill_size(Node *node, Dimension dim);
@@ -105,6 +110,9 @@ static inline void container_commands(Node *node);
 static inline void text_intrinsic_width(Node *node);
 static inline void text_wrap_text(Node *node);
 static inline void text_commands(Node *node);
+//TODO: tight coupling with codepoint code from psh_core
+//      works well if brenda is the backend, but what if something else is used?
+//      makes sense to measure text the way the renderer finds it easier to work with
 static inline TextMeasurement text_process(Node *node, i32 wrap_width, b32 emit_commands);
 
 static TempID node_hit_test(Node *node, Layla_Rectangle parent_clip, i32 x, i32 y);
