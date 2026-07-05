@@ -45,7 +45,6 @@ list_def(NodePtr)
 #define LAYLA_PERSISTENT_ID_NONE 0
 #define LAYLA_ROOT_ID 0
 
-//TODO: externally supplied scroll offsets?
 typedef struct {
     Layla_PersistentID id;
     i32 y;
@@ -128,7 +127,7 @@ static inline i32 align_cross(Layla_Alignment align, i32 parent_size, i32 parent
 static inline i32 align_along(Layla_Alignment align, i32 parent_size, i32 parent_padding, i32 children_size);
 static inline Layla_Alignment node_get_align_self(Node *node);
 static inline b32 node_is_scroll_y(Node *node);
-static inline ScrollState *scroll_state_from_id(Layla_PersistentID id);
+static inline ScrollState *scroll_state_get_by_id(Layla_PersistentID id);
 static inline void append_text_command(
     Layla_TextConfig config,
     isize line_start_byte,

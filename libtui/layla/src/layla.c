@@ -12,19 +12,6 @@ void layla_cursor_set_position(i32 x, i32 y) {
     state.cursor_y = y;
 }
 
-Layla_PersistentID layla_cursor_get_hovered_id(void) {
-    return state.hovered_persistent_id;
-}
-
-b32 layla_cursor_is_hovered(void) {
-    if (state.open_node_stack.count == 0) return false;
-
-    TempID current_id = list_last(&state.open_node_stack);
-    Layla_PersistentID persistent_id = node_from_temp_id(current_id)->id;
-    return persistent_id != LAYLA_PERSISTENT_ID_NONE &&
-           persistent_id == state.hovered_persistent_id;
-}
-
 void layla_begin(void) {
     // reset state
     state.nodes.count = 0;
@@ -103,6 +90,52 @@ void layla_close(void) {
         TempID parent_id = list_last(&state.open_node_stack);
         Node *parent = node_from_temp_id(parent_id);
         parent->children.count++;
+    }
+}
+
+Layla_PersistentID layla_cursor_get_hovered_id(void) {
+    return state.hovered_persistent_id;
+}
+
+b32 layla_cursor_is_hovered(void) {
+    if (state.open_node_stack.count == 0) return false;
+
+    TempID current_id = list_last(&state.open_node_stack);
+    Layla_PersistentID persistent_id = node_from_temp_id(current_id)->id;
+    return persistent_id != LAYLA_PERSISTENT_ID_NONE &&
+           persistent_id == state.hovered_persistent_id;
+}
+
+void layla_scroll_set_offset_by_id(Layla_PersistentID id, i32 offset_y) {
+    if (id == LAYLA_PERSISTENT_ID_NONE) return;
+    scroll_state_get_by_id(id)->y = offset_y;
+}
+
+void layla_scroll_update_by_id(Layla_PersistentID id, i32 delta_y) {
+    if (id == LAYLA_PERSISTENT_ID_NONE || delta_y == 0) return;
+    ScrollState *scroll = scroll_state_get_by_id(id);
+    i64 offset_y = (i64)scroll->y + (i64)delta_y;
+    scroll->y = (i32)CLAMP(offset_y, (i64)INT32_MIN, (i64)INT32_MAX);
+}
+
+i32 layla_scroll_get_offset_by_id(Layla_PersistentID id) {
+    if (id == LAYLA_PERSISTENT_ID_NONE) return 0;
+    return scroll_state_get_by_id(id)->y;
+}
+
+void layla_scroll_update(i32 delta_y) {
+    TempID current_id = state.hovered_temp_id;
+    if (delta_y == 0 || current_id == LAYLA_TEMP_ID_NONE) return;
+
+    for (;;) {
+        Node *current = node_from_temp_id(current_id);
+        if (node_is_scroll_y(current)) {
+            layla_scroll_update_by_id(current->id, delta_y);
+            return;
+        }
+
+        if (current_id == LAYLA_ROOT_ID) break;
+        current_id = current->parent;
     }
 }
 
@@ -305,7 +338,7 @@ static inline void container_positions(Node *node) {
     }
 
     if (node_is_scroll_y(node)) {
-        ScrollState *scroll = scroll_state_from_id(node->id);
+        ScrollState *scroll = scroll_state_get_by_id(node->id);
         i32 content_h = MAX(content_bottom + style.padding - node->y, 0);
         scroll->max_y = MAX(content_h - node->h, 0);
         scroll->y = CLAMP(scroll->y, 0, scroll->max_y);
@@ -319,51 +352,6 @@ static inline void container_positions(Node *node) {
     for (isize i = 0; i < children.count; ++i) {
         Node *child = node_from_index(children.offset + i);
         if (child->type == LAYLA_NODE_CONTAINER) container_positions(child);
-    }
-}
-
-static TempID node_hit_test(Node *node, Layla_Rectangle parent_clip, i32 x, i32 y) {
-    Layla_Rectangle node_rect = rect_from_node(node);
-    Layla_Rectangle clip = rect_intersect(parent_clip, node_rect);
-    if (!rect_contains_point(x, y, clip)) return LAYLA_TEMP_ID_NONE;
-
-    ChildrenIndices children = node->children;
-    for (isize i = children.count - 1; i >= 0; --i) {
-        Node *child = node_from_index(children.offset + i);
-        TempID hit = node_hit_test(child, clip, x, y);
-        if (hit != LAYLA_TEMP_ID_NONE) return hit;
-    }
-
-    return node->id != LAYLA_PERSISTENT_ID_NONE ? (TempID)(node - state.nodes.items) : LAYLA_TEMP_ID_NONE;
-}
-
-static inline void hover_test(void) {
-    Node *root = node_from_temp_id(LAYLA_ROOT_ID);
-    Layla_Rectangle root_clip = rect_from_node(root);
-    state.hovered_temp_id = node_hit_test(
-        root, root_clip,
-        state.cursor_x, state.cursor_y
-    );
-
-    if (state.hovered_temp_id == LAYLA_TEMP_ID_NONE) return;
-
-    state.hovered_persistent_id = node_from_temp_id(state.hovered_temp_id)->id;
-}
-
-void layla_scroll_update(i32 delta_y) {
-    TempID current_id = state.hovered_temp_id;
-    if (delta_y == 0 || current_id == LAYLA_TEMP_ID_NONE) return;
-
-    for (;;) {
-        Node *current = node_from_temp_id(current_id);
-        if (node_is_scroll_y(current)) {
-            ScrollState *scroll = scroll_state_from_id(current->id);
-            scroll->y = CLAMP(scroll->y + delta_y, 0, scroll->max_y);
-            return;
-        }
-
-        if (current_id == LAYLA_ROOT_ID) break;
-        current_id = current->parent;
     }
 }
 
@@ -534,6 +522,34 @@ static inline void append_text_command(
             .userdata = config.userdata,
         }})
     );
+}
+
+static inline void hover_test(void) {
+    Node *root = node_from_temp_id(LAYLA_ROOT_ID);
+    Layla_Rectangle root_clip = rect_from_node(root);
+    state.hovered_temp_id = node_hit_test(
+        root, root_clip,
+        state.cursor_x, state.cursor_y
+    );
+
+    if (state.hovered_temp_id == LAYLA_TEMP_ID_NONE) return;
+
+    state.hovered_persistent_id = node_from_temp_id(state.hovered_temp_id)->id;
+}
+
+static TempID node_hit_test(Node *node, Layla_Rectangle parent_clip, i32 x, i32 y) {
+    Layla_Rectangle node_rect = rect_from_node(node);
+    Layla_Rectangle clip = rect_intersect(parent_clip, node_rect);
+    if (!rect_contains_point(x, y, clip)) return LAYLA_TEMP_ID_NONE;
+
+    ChildrenIndices children = node->children;
+    for (isize i = children.count - 1; i >= 0; --i) {
+        Node *child = node_from_index(children.offset + i);
+        TempID hit = node_hit_test(child, clip, x, y);
+        if (hit != LAYLA_TEMP_ID_NONE) return hit;
+    }
+
+    return node->id != LAYLA_PERSISTENT_ID_NONE ? (TempID)(node - state.nodes.items) : LAYLA_TEMP_ID_NONE;
 }
 
 // Helper functions
@@ -791,7 +807,7 @@ static inline void space_distribute(i32 space, List(NodePtr) nodes, Dimension di
     }
 }
 
-static inline ScrollState *scroll_state_from_id(Layla_PersistentID id) {
+static inline ScrollState *scroll_state_get_by_id(Layla_PersistentID id) {
     for (isize i = 0; i < state.scroll_states.count; ++i) {
         ScrollState *scroll_state = &state.scroll_states.items[i];
         if (scroll_state->id == id) return scroll_state;
