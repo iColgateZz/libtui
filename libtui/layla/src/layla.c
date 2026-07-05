@@ -107,77 +107,41 @@ void layla_close(void) {
 }
 
 static inline void node_layout(Node *node) {
-    node_intrinsic_width(node);
-    node_fill_width(node);
-    node_wrap_text(node);
-    node_intrinsic_height(node);
-    node_fill_height(node);
-    node_positions(node);
-    node_commands(node);
+    container_intrinsic_width(node);
+    container_fill_width(node);
+    container_wrap_text(node);
+    container_intrinsic_height(node);
+    container_fill_height(node);
+    container_positions(node);
+    container_commands(node);
 }
 
-static inline void node_intrinsic_width(Node *node) {
-    switch (node->type) {
-        case LAYLA_NODE_TEXT: text_intrinsic_width(node); break;
-        case LAYLA_NODE_CONTAINER: container_intrinsic_width(node); break;
+static inline void container_intrinsic_width(Node *node) {
+    ChildrenIndices children = node->children;
+    for (isize i = 0; i < children.count; ++i) {
+        Node *child = node_from_index(children.offset + i);
+        if (child->type == LAYLA_NODE_TEXT) {
+            text_intrinsic_width(child);
+        } else {
+            container_intrinsic_width(child);
+        }
     }
+
+    container_intrinsic_size(node, DIM_X);
 }
 
-static inline void node_fill_width(Node *node) {
-    switch (node->type) {
-        case LAYLA_NODE_TEXT: text_fill_width(node); break;
-        case LAYLA_NODE_CONTAINER: container_fill_width(node); break;
+static inline void container_intrinsic_height(Node *node) {
+    ChildrenIndices children = node->children;
+    for (isize i = 0; i < children.count; ++i) {
+        Node *child = node_from_index(children.offset + i);
+        if (child->type == LAYLA_NODE_CONTAINER) container_intrinsic_height(child);
     }
-}
 
-static inline void node_wrap_text(Node *node) {
-    switch (node->type) {
-        case LAYLA_NODE_TEXT: text_wrap_text(node); break;
-        case LAYLA_NODE_CONTAINER: container_wrap_text(node); break;
-    }
+    container_intrinsic_size(node, DIM_Y);
 }
-
-static inline void node_intrinsic_height(Node *node) {
-    switch (node->type) {
-        case LAYLA_NODE_TEXT: text_intrinsic_height(node); break;
-        case LAYLA_NODE_CONTAINER: container_intrinsic_height(node); break;
-    }
-}
-
-static inline void node_fill_height(Node *node) {
-    switch (node->type) {
-        case LAYLA_NODE_TEXT: text_fill_height(node); break;
-        case LAYLA_NODE_CONTAINER: container_fill_height(node); break;
-    }
-}
-
-static inline void node_positions(Node *node) {
-    switch (node->type) {
-        case LAYLA_NODE_TEXT: text_positions(node); break;
-        case LAYLA_NODE_CONTAINER: container_positions(node); break;
-    }
-}
-
-static inline void node_commands(Node *node) {
-    switch (node->type) {
-        case LAYLA_NODE_TEXT: text_commands(node); break;
-        case LAYLA_NODE_CONTAINER: container_commands(node); break;
-    }
-}
-
-static inline void node_intrinsic_size(Node *node, Dimension dim) {
-    dim == DIM_X ? node_intrinsic_width(node) : node_intrinsic_height(node);
-}
-
-static inline void container_intrinsic_width(Node *node) { container_intrinsic_size(node, DIM_X); }
-static inline void container_intrinsic_height(Node *node) { container_intrinsic_size(node, DIM_Y); }
 
 static inline void container_intrinsic_size(Node *node, Dimension dim) {
     ChildrenIndices children = node->children;
-    for (isize i = 0; i < children.count; ++i) {
-        node_intrinsic_size(node_from_index(children.offset + i), dim);
-    }
-
     Layla_ContainerStyle style = node->as.container.config.style;
     Layla_SizeStyle size_style = get_size_style(style, dim);
     if (size_style.type == LAYLA_SIZE_FIXED) {
@@ -247,12 +211,25 @@ static inline void text_intrinsic_width(Node *node) {
     node->min_w = max_word_width;
 }
 
-static inline void node_fill_size(Node *node, Dimension dim) {
-    dim == DIM_X ? node_fill_width(node) : node_fill_height(node);
+static inline void container_fill_width(Node *node) {
+    container_fill_size(node, DIM_X);
+
+    ChildrenIndices children = node->children;
+    for (isize i = 0; i < children.count; ++i) {
+        Node *child = node_from_index(children.offset + i);
+        if (child->type == LAYLA_NODE_CONTAINER) container_fill_width(child);
+    }
 }
 
-static inline void container_fill_width(Node *node) { container_fill_size(node, DIM_X); }
-static inline void container_fill_height(Node *node) { container_fill_size(node, DIM_Y); }
+static inline void container_fill_height(Node *node) {
+    container_fill_size(node, DIM_Y);
+
+    ChildrenIndices children = node->children;
+    for (isize i = 0; i < children.count; ++i) {
+        Node *child = node_from_index(children.offset + i);
+        if (child->type == LAYLA_NODE_CONTAINER) container_fill_height(child);
+    }
+}
 
 static inline void container_fill_size(Node *node, Dimension dim) {
     Layla_ContainerStyle style = node->as.container.config.style;
@@ -309,16 +286,17 @@ static inline void container_fill_size(Node *node, Dimension dim) {
             }
         }
     }
-
-    for (isize i = 0; i < children.count; ++i) {
-        node_fill_size(node_from_index(children.offset + i), dim);
-    }
 }
 
 static inline void container_wrap_text(Node *node) {
     ChildrenIndices children = node->children;
     for (isize i = 0; i < children.count; ++i) {
-        node_wrap_text(node_from_index(children.offset + i));
+        Node *child = node_from_index(children.offset + i);
+        if (child->type == LAYLA_NODE_TEXT) {
+            text_wrap_text(child);
+        } else {
+            container_wrap_text(child);
+        }
     }
 }
 
@@ -396,7 +374,8 @@ static inline void container_positions(Node *node) {
     }
 
     for (isize i = 0; i < children.count; ++i) {
-        node_positions(node_from_index(children.offset + i));
+        Node *child = node_from_index(children.offset + i);
+        if (child->type == LAYLA_NODE_CONTAINER) container_positions(child);
     }
 }
 
@@ -405,17 +384,11 @@ static TempID node_hit_test(Node *node, Layla_Rect parent_clip, i32 x, i32 y) {
     Layla_Rect clip = rect_intersect(parent_clip, node_rect);
     if (!rect_contains_point(x, y, clip)) return LAYLA_TEMP_ID_NONE;
 
-    switch (node->type) {
-        case LAYLA_NODE_CONTAINER: {
-            ChildrenIndices children = node->children;
-            for (isize i = children.count - 1; i >= 0; --i) {
-                Node *child = node_from_index(children.offset + i);
-                TempID hit = node_hit_test(child, clip, x, y);
-                if (hit != LAYLA_TEMP_ID_NONE) return hit;
-            }
-            break;
-        }
-        case LAYLA_NODE_TEXT: break;
+    ChildrenIndices children = node->children;
+    for (isize i = children.count - 1; i >= 0; --i) {
+        Node *child = node_from_index(children.offset + i);
+        TempID hit = node_hit_test(child, clip, x, y);
+        if (hit != LAYLA_TEMP_ID_NONE) return hit;
     }
 
     return node->id != LAYLA_PERSISTENT_ID_NONE ? (TempID)(node - state.nodes.items) : LAYLA_TEMP_ID_NONE;
@@ -468,7 +441,11 @@ static inline void container_commands(Node *node) {
     ChildrenIndices children = node->children;
     for (isize i = 0; i < children.count; ++i) {
         Node *child = node_from_index(children.offset + i);
-        node_commands(child);
+        if (child->type == LAYLA_NODE_TEXT) {
+            text_commands(child);
+        } else {
+            container_commands(child);
+        }
     }
 
     list_append(&state.commands, ((Layla_Command) {

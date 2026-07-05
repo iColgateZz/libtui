@@ -77,8 +77,8 @@ typedef struct {
     //TODO: add per-size padding
     u8 padding;
     u8 spacing;
-    // TODO: u8 margin;
-    // BorderStyle border;
+    //TODO: u8 margin;
+    //TODO: BorderStyle border;
     Layla_Direction direction;
     Layla_Alignment align_children;
     Layla_Alignment align_self;

@@ -23,14 +23,7 @@ typedef struct {
     ChildrenIndices children;
     
     LAYLA_PACKED_ENUM {
-        //TODO: for custom nodes there may be 2 variants:
-        //      one that has a vtable with all pipeline methods,
-        //      one that only has a custom draw method that emits renderer commands.
-
-        // Maybe instead of adding a new type just emit a custom command that gives
-        // user enough context so that they can adapt it for the renderer?
-
-        // Just pass the userdata pointer transparently via a command.
+        //TODO: for custom nodes just pass the userdata pointer transparently via a command.
         LAYLA_NODE_CONTAINER,
         LAYLA_NODE_TEXT,
     } type;
@@ -95,29 +88,8 @@ static inline Node *node_from_index(i32 index);
 static inline TempID node_push(Node node);
 static inline void hover_test(void);
 static inline void node_layout(Node *node);
-static inline void node_intrinsic_size(Node *node, Dimension dim);
-static inline void node_intrinsic_width(Node *node);
 static inline void container_intrinsic_size(Node *node, Dimension dim);
-static inline void node_fill_width(Node *node);
-static inline void node_fill_size(Node *node, Dimension dim);
 static inline void container_fill_size(Node *node, Dimension dim);
-static inline void node_wrap_text(Node *node);
-static inline void node_intrinsic_height(Node *node);
-static inline void node_fill_height(Node *node);
-static inline void node_positions(Node *node);
-static inline void node_commands(Node *node);
-
-/*
-    fn                  | container | *generic  | text
-    ---------------------------------------------------
-    intrinsic_width     | yes       | yes       | yes
-    fill_width          | yes       | yes       | no
-    wrap_text           | yes       | no        | yes
-    intrinsic_height    | yes       | yes       | no
-    fill_height         | yes       | yes       | no
-    positions           | yes       | no        | yes
-    commands            | yes       | no        | yes
-*/
 
 static inline void container_intrinsic_width(Node *node);
 static inline void container_fill_width(Node *node);
@@ -130,10 +102,6 @@ static inline void container_commands(Node *node);
 static inline void text_intrinsic_width(Node *node);
 static inline void text_wrap_text(Node *node);
 static inline void text_commands(Node *node);
-static inline void text_fill_width(Node *node) { UNUSED(node); }
-static inline void text_intrinsic_height(Node *node) { UNUSED(node); }
-static inline void text_fill_height(Node *node) { UNUSED(node); }
-static inline void text_positions(Node *node) { UNUSED(node); }
 
 static TempID node_hit_test(Node *node, Layla_Rect parent_clip, i32 x, i32 y);
 static inline b32 rect_contains_point(i32 x, i32 y, Layla_Rect r);
