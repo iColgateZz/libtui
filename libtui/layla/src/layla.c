@@ -176,39 +176,9 @@ static inline void container_intrinsic_size(Node *node, Dimension dim) {
 }
 
 static inline void text_intrinsic_width(Node *node) {
-    i32 line_width = 0;
-    i32 max_line_width = 0;
-    i32 max_word_width = 0;
-    i32 current_word_width = 0;
-
-    Layla_TextSlice text = node->as.text.config.text;
-    byte *p = text.items;
-    byte *end = text.items + text.count;
-    while (p < end) {
-        CodePoint cp = utf8_next(&p, end);
-        if (cp_equal(cp, cp_from_byte('\n'))) {
-            max_line_width = MAX(max_line_width, line_width);
-            max_word_width = MAX(max_word_width, current_word_width);
-            line_width = 0;
-            current_word_width = 0;
-            continue;
-        }
-
-        line_width += cp.display_width;
-
-        if (cp_equal(cp, cp_from_byte(' '))) {
-            max_word_width = MAX(max_word_width, current_word_width);
-            current_word_width = 0;
-        } else {
-            current_word_width += cp.display_width;
-        }
-    }
-
-    max_line_width = MAX(max_line_width, line_width);
-    max_word_width = MAX(max_word_width, current_word_width);
-
-    node->w = max_line_width;
-    node->min_w = max_word_width;
+    TextMeasurement measurement = text_process(node, 0, false);
+    node->w = measurement.natural_width;
+    node->min_w = measurement.minimum_width;
 }
 
 static inline void container_fill_width(Node *node) {
@@ -301,35 +271,8 @@ static inline void container_wrap_text(Node *node) {
 }
 
 static inline void text_wrap_text(Node *node) {
-    Layla_TextSlice text = node->as.text.config.text;
-    if (text.count <= 0) {
-        node->h = node->min_h = 0;
-        return;
-    }
-
-    i32 max_width = MAX(node->w, 1);
-    i32 lines = 1;
-    i32 line_width = 0;
-
-    byte *p = text.items;
-    byte *end = text.items + text.count;
-    while (p < end) {
-        CodePoint cp = utf8_next(&p, end);
-        if (cp_equal(cp, cp_from_byte('\n'))) {
-            lines++;
-            line_width = 0;
-            continue;
-        }
-
-        if (line_width > 0 && line_width + cp.display_width > max_width) {
-            lines++;
-            line_width = 0;
-        }
-
-        line_width += cp.display_width;
-    }
-
-    node->h = node->min_h = lines;
+    TextMeasurement measurement = text_process(node, MAX(node->w, 1), false);
+    node->h = node->min_h = measurement.line_count;
 }
 
 static inline void container_positions(Node *node) {
@@ -453,17 +396,139 @@ static inline void container_commands(Node *node) {
     }));
 }
 
+static inline void text_commands(Node *node) {
+    text_process(node, MAX(node->w, 1), true);
+}
+
+static inline TextMeasurement text_process(Node *node, i32 wrap_width, b32 emit_commands) {
+    Layla_TextConfig config = node->as.text.config;
+    Layla_TextSlice source = config.text;
+    TextMeasurement measurement = {0};
+    if (source.count <= 0) return measurement;
+
+    switch (config.wrap_policy) {
+        case LAYLA_TEXT_WRAP_WORD: break;
+        default: UNREACHABLE("Unknown text wrapping policy");
+    }
+
+    isize cursor_byte = 0;
+    isize line_start_byte = 0;
+    isize line_end_byte = 0;
+    i32 line_width = 0;
+    i32 unwrapped_line_width = 0;
+    i32 pending_space_width = 0;
+    b32 line_has_word = false;
+
+    byte *source_end = source.items + source.count;
+    while (cursor_byte < source.count) {
+        if (source.items[cursor_byte] == '\n') {
+            line_width += pending_space_width;
+            pending_space_width = 0;
+            line_end_byte = cursor_byte;
+            measurement.natural_width = MAX(measurement.natural_width, unwrapped_line_width);
+
+            if (emit_commands) {
+                append_text_command(
+                    node, config.style, source,
+                    line_start_byte, line_end_byte,
+                    line_width, node->y + measurement.line_count
+                );
+            }
+
+            measurement.line_count++;
+            cursor_byte++;
+            line_start_byte = cursor_byte;
+            line_end_byte = cursor_byte;
+            line_width = 0;
+            unwrapped_line_width = 0;
+            line_has_word = false;
+            continue;
+        }
+
+        if (source.items[cursor_byte] == ' ') {
+            isize spaces_start_byte = cursor_byte;
+            while (cursor_byte < source.count && source.items[cursor_byte] == ' ') cursor_byte++;
+
+            i32 spaces_width = cursor_byte - spaces_start_byte;
+            pending_space_width += spaces_width;
+            unwrapped_line_width += spaces_width;
+            continue;
+        }
+
+        isize word_start_byte = cursor_byte;
+        i32 word_width = 0;
+        while (cursor_byte < source.count &&
+               source.items[cursor_byte] != ' ' &&
+               source.items[cursor_byte] != '\n') {
+            byte *decode_cursor = source.items + cursor_byte;
+            CodePoint codepoint = utf8_next(&decode_cursor, source_end);
+            cursor_byte = decode_cursor - source.items;
+            word_width += codepoint.display_width;
+        }
+
+        unwrapped_line_width += word_width;
+        measurement.minimum_width = MAX(measurement.minimum_width, word_width);
+
+        i32 width_with_word = line_width + pending_space_width + word_width;
+        b32 word_overflows_line = wrap_width > 0 && line_has_word && width_with_word > wrap_width;
+        if (word_overflows_line) {
+            if (emit_commands) {
+                append_text_command(
+                    node, config.style, source,
+                    line_start_byte, line_end_byte,
+                    line_width, node->y + measurement.line_count
+                );
+            }
+
+            measurement.line_count++;
+            line_start_byte = word_start_byte;
+            line_width = word_width;
+        } else {
+            line_width = width_with_word;
+        }
+
+        line_end_byte = cursor_byte;
+        pending_space_width = 0;
+        line_has_word = true;
+    }
+
+    measurement.natural_width = MAX(measurement.natural_width, unwrapped_line_width);
+    line_width += pending_space_width;
+    line_end_byte = source.count;
+
+    if (emit_commands) {
+        append_text_command(
+            node, config.style, source,
+            line_start_byte, line_end_byte,
+            line_width, node->y + measurement.line_count
+        );
+    }
+    measurement.line_count++;
+
+    return measurement;
+}
+
 static inline void append_text_command(
     Node *node,
     Layla_TextStyle style,
     Layla_TextSlice source,
     isize line_start_byte,
     isize line_end_byte,
+    i32 line_width,
     i32 line_y
 ) {
+    i32 remaining_width = MAX(node->w - line_width, 0);
+    i32 line_x = node->x;
+    switch (node->as.text.config.alignment) {
+        case LAYLA_ALIGN_START: break;
+        case LAYLA_ALIGN_CENTER: line_x += remaining_width / 2; break;
+        case LAYLA_ALIGN_END: line_x += remaining_width; break;
+        default: UNREACHABLE("Unknown text alignment");
+    }
+
     list_append(&state.commands,
         ((Layla_Command) {.type = LAYLA_CMD_TEXT, .as.text = {
-            .x = node->x,
+            .x = line_x,
             .y = line_y,
             .text_slice = {
                 .items = source.items + line_start_byte,
@@ -471,60 +536,6 @@ static inline void append_text_command(
             },
             .style = style,
         }})
-    );
-}
-
-static inline void text_commands(Node *node) {
-    Layla_TextConfig config = node->as.text.config;
-    Layla_TextSlice source = config.text;
-    if (source.count <= 0) return;
-
-    i32 available_line_width = MAX(node->w, 1);
-    isize line_start_byte = 0;
-    i32 line_cell_width = 0;
-    i32 line_y = node->y;
-
-    isize next_byte = 0;
-    byte *source_end = source.items + source.count;
-    while (next_byte < source.count) {
-        isize codepoint_start_byte = next_byte;
-        byte *decode_cursor = source.items + next_byte;
-        CodePoint codepoint = utf8_next(&decode_cursor, source_end);
-        next_byte = decode_cursor - source.items;
-
-        if (cp_equal(codepoint, cp_from_byte('\n'))) {
-            append_text_command(
-                node, config.style, source,
-                line_start_byte, codepoint_start_byte, line_y
-            );
-
-            line_start_byte = next_byte;
-            line_cell_width = 0;
-            line_y++;
-            continue;
-        }
-
-        b32 codepoint_overflows_line =
-            line_cell_width > 0 &&
-            line_cell_width + codepoint.display_width > available_line_width;
-
-        if (codepoint_overflows_line) {
-            append_text_command(
-                node, config.style, source,
-                line_start_byte, codepoint_start_byte, line_y
-            );
-
-            line_start_byte = codepoint_start_byte;
-            line_cell_width = 0;
-            line_y++;
-        }
-
-        line_cell_width += codepoint.display_width;
-    }
-
-    append_text_command(
-        node, config.style, source,
-        line_start_byte, source.count, line_y
     );
 }
 

@@ -66,6 +66,12 @@ typedef struct {
 } SizeRange;
 
 typedef struct {
+    i32 natural_width;
+    i32 minimum_width;
+    i32 line_count;
+} TextMeasurement;
+
+typedef struct {
     List(Node) nodes;
     List(TempID) open_node_stack;
     List(TempID) temporary_child_stack;
@@ -101,6 +107,7 @@ static inline void container_commands(Node *node);
 static inline void text_intrinsic_width(Node *node);
 static inline void text_wrap_text(Node *node);
 static inline void text_commands(Node *node);
+static inline TextMeasurement text_process(Node *node, i32 wrap_width, b32 emit_commands);
 
 static TempID node_hit_test(Node *node, Layla_Rectangle parent_clip, i32 x, i32 y);
 static inline b32 rect_contains_point(i32 x, i32 y, Layla_Rectangle r);
@@ -129,6 +136,7 @@ static inline void append_text_command(
     Layla_TextSlice source,
     isize line_start_byte,
     isize line_end_byte,
+    i32 line_width,
     i32 line_y
 );
 

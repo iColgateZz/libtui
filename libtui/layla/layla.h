@@ -28,17 +28,17 @@ typedef struct {
 } Layla_SizeStyle;
 
 #define LAYLA_FIXED(fixed_value) ((Layla_SizeStyle) {          \
-    .type = LAYLA_SIZE_FIXED,                                 \
+    .type = LAYLA_SIZE_FIXED,                                  \
     .as.fixed = {.value = (fixed_value)},                      \
 })
 
 #define LAYLA_FIT(min_value, max_value) ((Layla_SizeStyle) {   \
-    .type = LAYLA_SIZE_FIT,                                   \
+    .type = LAYLA_SIZE_FIT,                                    \
     .as.fit = {.min = (min_value), .max = (max_value)},        \
 })
 
 #define LAYLA_FILL(min_value, max_value) ((Layla_SizeStyle) {  \
-    .type = LAYLA_SIZE_FILL,                                  \
+    .type = LAYLA_SIZE_FILL,                                   \
     .as.fill = {.min = (min_value), .max = (max_value)},       \
 })
 
@@ -99,13 +99,15 @@ typedef struct {
     isize count;
 } Layla_TextSlice;
 
-//TODO: text measurement results should probably be cached.
-//TODO: create one internal line-breaking pass reused for height calculation and command emission
-//TODO: maybe add different text wrapping policies?
-//TODO: maybe add text alignment? can this be done by placing it in a container?
+typedef LAYLA_PACKED_ENUM {
+    LAYLA_TEXT_WRAP_WORD,
+} Layla_TextWrapPolicy;
+
 typedef struct {
     Layla_TextSlice text;
     Layla_TextStyle style;
+    Layla_Alignment alignment;
+    Layla_TextWrapPolicy wrap_policy;
 } Layla_TextConfig;
 
 #define LAYLA_TEXT_SLICE(s) ((Layla_TextSlice) {.items = (byte *)(s), .count = sizeof(s) - 1})
