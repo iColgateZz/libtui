@@ -1,45 +1,45 @@
 #include "layla_internal.h"
 
-static Layout__State layout__state = {0};
+static State state = {0};
 
 void layla_screen_set_dimensions(i32 w, i32 h) {
-    layout__state.width = w;
-    layout__state.height = h;
+    state.width = w;
+    state.height = h;
 }
 
 void layla_cursor_set_position(i32 x, i32 y) {
-    layout__state.cursor_x = x;
-    layout__state.cursor_y = y;
+    state.cursor_x = x;
+    state.cursor_y = y;
 }
 
 Layla_PersistentID layla_cursor_get_hovered_id(void) {
-    return layout__state.hovered_persistent_id;
+    return state.hovered_persistent_id;
 }
 
 b32 layla_cursor_is_hovered(void) {
-    if (layout__state.open_node_stack.count == 0) return false;
+    if (state.open_node_stack.count == 0) return false;
 
-    Layout__TempID current_id = list_last(&layout__state.open_node_stack);
-    Layla_PersistentID persistent_id = layout__node_from_temp_id(current_id)->id;
+    TempID current_id = list_last(&state.open_node_stack);
+    Layla_PersistentID persistent_id = node_from_temp_id(current_id)->id;
     return persistent_id != LAYOUT_PERSISTENT_ID_NONE &&
-           persistent_id == layout__state.hovered_persistent_id;
+           persistent_id == state.hovered_persistent_id;
 }
 
 void layla_begin(void) {
     // reset state
-    layout__state.nodes.count = 0;
-    layout__state.open_node_stack.count = 0;
-    layout__state.temporary_child_stack.count = 0;
-    layout__state.frame_children.count = 0;
-    layout__state.commands.count = 0;
-    layout__state.hovered_temp_id = LAYOUT_TEMP_ID_NONE;
+    state.nodes.count = 0;
+    state.open_node_stack.count = 0;
+    state.temporary_child_stack.count = 0;
+    state.frame_children.count = 0;
+    state.commands.count = 0;
+    state.hovered_temp_id = LAYOUT_TEMP_ID_NONE;
 
     // open implicit root element
     layla_container_open(LAYOUT_PERSISTENT_ID_NONE, (Layla_ContainerConfig) {
         .style = {
             .size = {
-                .w = LAYLA_FIXED(layout__state.width),
-                .h = LAYLA_FIXED(layout__state.height),
+                .w = LAYLA_FIXED(state.width),
+                .h = LAYLA_FIXED(state.height),
             },
             .direction = LAYLA_DIR_COL,
             .scroll = LAYLA_SCROLL_Y,
@@ -51,167 +51,167 @@ Layla_CommandSlice layla_end(void) {
     // close implicit root element
     layla_close();
 
-    Layout__Node *root = layout__node_from_temp_id(LAYOUT_ROOT_ID);
-    layout__node_layout(root);
-    layout__hover_test();
+    Node *root = node_from_temp_id(LAYOUT_ROOT_ID);
+    node_layout(root);
+    hover_test();
 
     return (Layla_CommandSlice) {
-        .items = layout__state.commands.items,
-        .count = layout__state.commands.count,
+        .items = state.commands.items,
+        .count = state.commands.count,
     };
 }
 
 void layla_text_open(Layla_PersistentID id, Layla_TextConfig conf) {
-    Layout__Node node = {
+    Node node = {
         .id = id,
         .type = LAYOUT_NODE_TEXT,
         .as.text.config = conf,
     };
-    Layout__TempID temp_id = layout__node_push(node);
-    list_append(&layout__state.open_node_stack, temp_id);
+    TempID temp_id = node_push(node);
+    list_append(&state.open_node_stack, temp_id);
 }
 
 void layla_container_open(Layla_PersistentID id, Layla_ContainerConfig conf) {
-    Layout__Node node = {
+    Node node = {
         .id = id,
         .type = LAYOUT_NODE_CONTAINER,
         .as.container.config = conf,
     };
-    Layout__TempID temp_id = layout__node_push(node);
-    list_append(&layout__state.open_node_stack, temp_id);
+    TempID temp_id = node_push(node);
+    list_append(&state.open_node_stack, temp_id);
 }
 
 void layla_close(void) {
-    Layout__TempID closed_id = list_pop(&layout__state.open_node_stack);
-    Layout__Node *closed = layout__node_from_temp_id(closed_id);
-    isize start = layout__state.temporary_child_stack.count - closed->children.count;
-    isize end = layout__state.temporary_child_stack.count;
-    closed->children.offset = layout__state.frame_children.count;
+    TempID closed_id = list_pop(&state.open_node_stack);
+    Node *closed = node_from_temp_id(closed_id);
+    isize start = state.temporary_child_stack.count - closed->children.count;
+    isize end = state.temporary_child_stack.count;
+    closed->children.offset = state.frame_children.count;
     // Take last IDs from the temp child stack
     // and attach them to contiguous child list
-    layout__state.temporary_child_stack.count = start;
+    state.temporary_child_stack.count = start;
     for (isize i = start; i < end; ++i) {
-        Layout__TempID child_id = layout__state.temporary_child_stack.items[i];
-        list_append(&layout__state.frame_children, child_id);
+        TempID child_id = state.temporary_child_stack.items[i];
+        list_append(&state.frame_children, child_id);
         // Attach parent to child
-        Layout__Node *child = layout__node_from_temp_id(child_id);
+        Node *child = node_from_temp_id(child_id);
         child->parent = closed_id;
     }
 
-    list_append(&layout__state.temporary_child_stack, closed_id);
+    list_append(&state.temporary_child_stack, closed_id);
     if (closed_id > LAYOUT_ROOT_ID) {
-        Layout__TempID parent_id = list_last(&layout__state.open_node_stack);
-        Layout__Node *parent = layout__node_from_temp_id(parent_id);
+        TempID parent_id = list_last(&state.open_node_stack);
+        Node *parent = node_from_temp_id(parent_id);
         parent->children.count++;
     }
 }
 
-static inline void layout__node_layout(Layout__Node *node) {
-    layout__node_intrinsic_width(node);
-    layout__node_fill_width(node);
-    layout__node_wrap_text(node);
-    layout__node_intrinsic_height(node);
-    layout__node_fill_height(node);
-    layout__node_positions(node);
-    layout__node_commands(node);
+static inline void node_layout(Node *node) {
+    node_intrinsic_width(node);
+    node_fill_width(node);
+    node_wrap_text(node);
+    node_intrinsic_height(node);
+    node_fill_height(node);
+    node_positions(node);
+    node_commands(node);
 }
 
-static inline void layout__node_intrinsic_width(Layout__Node *node) {
+static inline void node_intrinsic_width(Node *node) {
     switch (node->type) {
-        case LAYOUT_NODE_TEXT: layout__text_intrinsic_width(node); break;
-        case LAYOUT_NODE_CONTAINER: layout__container_intrinsic_width(node); break;
+        case LAYOUT_NODE_TEXT: text_intrinsic_width(node); break;
+        case LAYOUT_NODE_CONTAINER: container_intrinsic_width(node); break;
     }
 }
 
-static inline void layout__node_fill_width(Layout__Node *node) {
+static inline void node_fill_width(Node *node) {
     switch (node->type) {
-        case LAYOUT_NODE_TEXT: layout__text_fill_width(node); break;
-        case LAYOUT_NODE_CONTAINER: layout__container_fill_width(node); break;
+        case LAYOUT_NODE_TEXT: text_fill_width(node); break;
+        case LAYOUT_NODE_CONTAINER: container_fill_width(node); break;
     }
 }
 
-static inline void layout__node_wrap_text(Layout__Node *node) {
+static inline void node_wrap_text(Node *node) {
     switch (node->type) {
-        case LAYOUT_NODE_TEXT: layout__text_wrap_text(node); break;
-        case LAYOUT_NODE_CONTAINER: layout__container_wrap_text(node); break;
+        case LAYOUT_NODE_TEXT: text_wrap_text(node); break;
+        case LAYOUT_NODE_CONTAINER: container_wrap_text(node); break;
     }
 }
 
-static inline void layout__node_intrinsic_height(Layout__Node *node) {
+static inline void node_intrinsic_height(Node *node) {
     switch (node->type) {
-        case LAYOUT_NODE_TEXT: layout__text_intrinsic_height(node); break;
-        case LAYOUT_NODE_CONTAINER: layout__container_intrinsic_height(node); break;
+        case LAYOUT_NODE_TEXT: text_intrinsic_height(node); break;
+        case LAYOUT_NODE_CONTAINER: container_intrinsic_height(node); break;
     }
 }
 
-static inline void layout__node_fill_height(Layout__Node *node) {
+static inline void node_fill_height(Node *node) {
     switch (node->type) {
-        case LAYOUT_NODE_TEXT: layout__text_fill_height(node); break;
-        case LAYOUT_NODE_CONTAINER: layout__container_fill_height(node); break;
+        case LAYOUT_NODE_TEXT: text_fill_height(node); break;
+        case LAYOUT_NODE_CONTAINER: container_fill_height(node); break;
     }
 }
 
-static inline void layout__node_positions(Layout__Node *node) {
+static inline void node_positions(Node *node) {
     switch (node->type) {
-        case LAYOUT_NODE_TEXT: layout__text_positions(node); break;
-        case LAYOUT_NODE_CONTAINER: layout__container_positions(node); break;
+        case LAYOUT_NODE_TEXT: text_positions(node); break;
+        case LAYOUT_NODE_CONTAINER: container_positions(node); break;
     }
 }
 
-static inline void layout__node_commands(Layout__Node *node) {
+static inline void node_commands(Node *node) {
     switch (node->type) {
-        case LAYOUT_NODE_TEXT: layout__text_commands(node); break;
-        case LAYOUT_NODE_CONTAINER: layout__container_commands(node); break;
+        case LAYOUT_NODE_TEXT: text_commands(node); break;
+        case LAYOUT_NODE_CONTAINER: container_commands(node); break;
     }
 }
 
-static inline void layout__node_intrinsic_size(Layout__Node *node, Layout__Dimension dim) {
-    dim == DIM_X ? layout__node_intrinsic_width(node) : layout__node_intrinsic_height(node);
+static inline void node_intrinsic_size(Node *node, Dimension dim) {
+    dim == DIM_X ? node_intrinsic_width(node) : node_intrinsic_height(node);
 }
 
-static inline void layout__container_intrinsic_width(Layout__Node *node) { layout__container_intrinsic_size(node, DIM_X); }
-static inline void layout__container_intrinsic_height(Layout__Node *node) { layout__container_intrinsic_size(node, DIM_Y); }
+static inline void container_intrinsic_width(Node *node) { container_intrinsic_size(node, DIM_X); }
+static inline void container_intrinsic_height(Node *node) { container_intrinsic_size(node, DIM_Y); }
 
-static inline void layout__container_intrinsic_size(Layout__Node *node, Layout__Dimension dim) {
-    Layout__ChildrenIndices children = node->children;
+static inline void container_intrinsic_size(Node *node, Dimension dim) {
+    ChildrenIndices children = node->children;
     for (isize i = 0; i < children.count; ++i) {
-        layout__node_intrinsic_size(layout__node_from_index(children.offset + i), dim);
+        node_intrinsic_size(node_from_index(children.offset + i), dim);
     }
 
     Layla_ContainerStyle style = node->as.container.config.style;
-    Layla_SizeStyle size_style = layout__get_size_style(style, dim);
+    Layla_SizeStyle size_style = get_size_style(style, dim);
     if (size_style.type == LAYLA_SIZE_FIXED) {
-        *layout__node_get_size(node, dim) = *layout__node_get_min_size(node, dim) = size_style.as.fixed.value;
+        *node_get_size(node, dim) = *node_get_min_size(node, dim) = size_style.as.fixed.value;
         return;
     }
 
     i32 resolved_size =     0;
     i32 resolved_min_size = 0;
 
-    if (dim == layout__direction_get_main_dimension(style.direction)) {
-        resolved_size =     2 * style.padding + layout__get_children_spacing(children, style.spacing);
-        resolved_min_size = 2 * style.padding + layout__get_children_spacing(children, style.spacing);
+    if (dim == direction_get_main_dimension(style.direction)) {
+        resolved_size =     2 * style.padding + get_children_spacing(children, style.spacing);
+        resolved_min_size = 2 * style.padding + get_children_spacing(children, style.spacing);
         for (isize i = 0; i < children.count; ++i) {
-            Layout__Node *child = layout__node_from_index(children.offset + i);
-            resolved_size += *layout__node_get_size(child, dim);
-            resolved_min_size += *layout__node_get_min_size(child, dim);
+            Node *child = node_from_index(children.offset + i);
+            resolved_size += *node_get_size(child, dim);
+            resolved_min_size += *node_get_min_size(child, dim);
         }
     } else {
         for (isize i = 0; i < children.count; ++i) {
-            Layout__Node *child = layout__node_from_index(children.offset + i);
-            resolved_size = MAX(resolved_size, *layout__node_get_size(child, dim));
-            resolved_min_size = MAX(resolved_min_size, *layout__node_get_min_size(child, dim));
+            Node *child = node_from_index(children.offset + i);
+            resolved_size = MAX(resolved_size, *node_get_size(child, dim));
+            resolved_min_size = MAX(resolved_min_size, *node_get_min_size(child, dim));
         }
         resolved_size +=     2 * style.padding;
         resolved_min_size += 2 * style.padding;
     }
 
-    Layout__SizeRange range = layout__get_size_range(size_style);
-    *layout__node_get_size(node, dim) = CLAMP(resolved_size, range.min, range.max);
-    *layout__node_get_min_size(node, dim) = CLAMP(resolved_min_size, range.min, range.max);
+    SizeRange range = get_size_range(size_style);
+    *node_get_size(node, dim) = CLAMP(resolved_size, range.min, range.max);
+    *node_get_min_size(node, dim) = CLAMP(resolved_min_size, range.min, range.max);
 }
 
-static inline void layout__text_intrinsic_width(Layout__Node *node) {
+static inline void text_intrinsic_width(Node *node) {
     i32 line_width = 0;
     i32 max_line_width = 0;
     i32 max_word_width = 0;
@@ -247,62 +247,62 @@ static inline void layout__text_intrinsic_width(Layout__Node *node) {
     node->min_w = max_word_width;
 }
 
-static inline void layout__node_fill_size(Layout__Node *node, Layout__Dimension dim) {
-    dim == DIM_X ? layout__node_fill_width(node) : layout__node_fill_height(node);
+static inline void node_fill_size(Node *node, Dimension dim) {
+    dim == DIM_X ? node_fill_width(node) : node_fill_height(node);
 }
 
-static inline void layout__container_fill_width(Layout__Node *node) { layout__container_fill_size(node, DIM_X); }
-static inline void layout__container_fill_height(Layout__Node *node) { layout__container_fill_size(node, DIM_Y); }
+static inline void container_fill_width(Node *node) { container_fill_size(node, DIM_X); }
+static inline void container_fill_height(Node *node) { container_fill_size(node, DIM_Y); }
 
-static inline void layout__container_fill_size(Layout__Node *node, Layout__Dimension dim) {
+static inline void container_fill_size(Node *node, Dimension dim) {
     Layla_ContainerStyle style = node->as.container.config.style;
-    Layout__ChildrenIndices children = node->children;
+    ChildrenIndices children = node->children;
 
-    if (dim == layout__direction_get_main_dimension(style.direction)) {
+    if (dim == direction_get_main_dimension(style.direction)) {
         i32 children_size = 0;
         for (isize i = 0; i < children.count; ++i) {
-            children_size += *layout__node_get_size(layout__node_from_index(children.offset + i), dim);
+            children_size += *node_get_size(node_from_index(children.offset + i), dim);
         }
 
-        i32 remaining_size = *layout__node_get_size(node, dim) - children_size - 2 * style.padding
-                             - layout__get_children_spacing(children, style.spacing);
+        i32 remaining_size = *node_get_size(node, dim) - children_size - 2 * style.padding
+                             - get_children_spacing(children, style.spacing);
 
         i32 fill_count = 0;
         for (isize i = 0; i < children.count; ++i) {
-            fill_count += layout__node_is_fill(layout__node_from_index(children.offset + i), dim);
+            fill_count += node_is_fill(node_from_index(children.offset + i), dim);
         }
 
         if (fill_count > 0) {
-            Scratch scratch = scratch_begin(&layout__state.tmp);
-            List(Layout__NodePtr) fill_list = {
-                .items = arena_push(scratch.arena, Layout__Node *, fill_count),
+            Scratch scratch = scratch_begin(&state.tmp);
+            List(NodePtr) fill_list = {
+                .items = arena_push(scratch.arena, Node *, fill_count),
                 .capacity = fill_count,
             };
 
             for (isize i = 0; i < children.count; ++i) {
-                Layout__Node *child = layout__node_from_index(children.offset + i);
-                if (layout__node_is_fill(child, dim)) list_append(&fill_list, child);
+                Node *child = node_from_index(children.offset + i);
+                if (node_is_fill(child, dim)) list_append(&fill_list, child);
             }
 
-            layout__space_distribute(remaining_size, fill_list, dim);
+            space_distribute(remaining_size, fill_list, dim);
             scratch_end(scratch);
         }
     } else {
-        i32 content_size = *layout__node_get_size(node, dim) - 2 * style.padding;
+        i32 content_size = *node_get_size(node, dim) - 2 * style.padding;
         for (isize i = 0; i < children.count; ++i) {
-            Layout__Node *child = layout__node_from_index(children.offset + i);
+            Node *child = node_from_index(children.offset + i);
             switch (child->type) {
                 case LAYOUT_NODE_TEXT: {
                     if (dim == DIM_X) {
-                        *layout__node_get_size(child, dim) = MAX(content_size, *layout__node_get_min_size(child, dim));
+                        *node_get_size(child, dim) = MAX(content_size, *node_get_min_size(child, dim));
                     }
                     break;
                 }
                 case LAYOUT_NODE_CONTAINER: {
-                    Layla_SizeStyle size_style = layout__get_size_style(child->as.container.config.style, dim);
+                    Layla_SizeStyle size_style = get_size_style(child->as.container.config.style, dim);
                     if (size_style.type == LAYLA_SIZE_FILL) {
-                        Layout__SizeRange range = layout__get_size_range(size_style);
-                        *layout__node_get_size(child, dim) = CLAMP(content_size, MAX(range.min, *layout__node_get_min_size(child, dim)), range.max);
+                        SizeRange range = get_size_range(size_style);
+                        *node_get_size(child, dim) = CLAMP(content_size, MAX(range.min, *node_get_min_size(child, dim)), range.max);
                     }
                     break;
                 }
@@ -311,18 +311,18 @@ static inline void layout__container_fill_size(Layout__Node *node, Layout__Dimen
     }
 
     for (isize i = 0; i < children.count; ++i) {
-        layout__node_fill_size(layout__node_from_index(children.offset + i), dim);
+        node_fill_size(node_from_index(children.offset + i), dim);
     }
 }
 
-static inline void layout__container_wrap_text(Layout__Node *node) {
-    Layout__ChildrenIndices children = node->children;
+static inline void container_wrap_text(Node *node) {
+    ChildrenIndices children = node->children;
     for (isize i = 0; i < children.count; ++i) {
-        layout__node_wrap_text(layout__node_from_index(children.offset + i));
+        node_wrap_text(node_from_index(children.offset + i));
     }
 }
 
-static inline void layout__text_wrap_text(Layout__Node *node) {
+static inline void text_wrap_text(Node *node) {
     Layla_TextSlice text = node->as.text.config.text;
     if (text.count <= 0) {
         node->h = node->min_h = 0;
@@ -354,63 +354,63 @@ static inline void layout__text_wrap_text(Layout__Node *node) {
     node->h = node->min_h = lines;
 }
 
-static inline void layout__container_positions(Layout__Node *node) {
+static inline void container_positions(Node *node) {
     Layla_ContainerStyle style = node->as.container.config.style;
-    Layout__ChildrenIndices children = node->children;
-    Layout__Dimension main_dim = layout__direction_get_main_dimension(style.direction);
-    Layout__Dimension cross_dim = layout__dimension_get_other(main_dim);
-    i32 children_main_size = layout__get_children_spacing(children, style.spacing);
+    ChildrenIndices children = node->children;
+    Dimension main_dim = direction_get_main_dimension(style.direction);
+    Dimension cross_dim = dimension_get_other(main_dim);
+    i32 children_main_size = get_children_spacing(children, style.spacing);
     i32 content_bottom = node->y + style.padding;
 
     for (isize i = 0; i < children.count; ++i) {
-        children_main_size += *layout__node_get_size(layout__node_from_index(children.offset + i), main_dim);
+        children_main_size += *node_get_size(node_from_index(children.offset + i), main_dim);
     }
 
-    i32 cursor = *layout__node_get_pos(node, main_dim) + style.padding
-                 + layout__align_along(style.align_children, *layout__node_get_size(node, main_dim), style.padding, children_main_size);
+    i32 cursor = *node_get_pos(node, main_dim) + style.padding
+                 + align_along(style.align_children, *node_get_size(node, main_dim), style.padding, children_main_size);
 
     for (isize i = 0; i < children.count; ++i) {
-        Layout__Node *child = layout__node_from_index(children.offset + i);
-        *layout__node_get_pos(child, main_dim) = cursor;
-        *layout__node_get_pos(child, cross_dim) = *layout__node_get_pos(node, cross_dim) + layout__align_cross(
-            layout__node_get_align_self(child),
-            *layout__node_get_size(node, cross_dim),
+        Node *child = node_from_index(children.offset + i);
+        *node_get_pos(child, main_dim) = cursor;
+        *node_get_pos(child, cross_dim) = *node_get_pos(node, cross_dim) + align_cross(
+            node_get_align_self(child),
+            *node_get_size(node, cross_dim),
             style.padding,
-            *layout__node_get_size(child, cross_dim)
+            *node_get_size(child, cross_dim)
         );
 
         content_bottom = MAX(content_bottom, child->y + child->h);
-        cursor += *layout__node_get_size(child, main_dim) + style.spacing;
+        cursor += *node_get_size(child, main_dim) + style.spacing;
     }
 
-    if (layout__node_is_scroll_y(node)) {
-        Layout__ScrollState *scroll = layout__scroll_state_from_id(node->id);
+    if (node_is_scroll_y(node)) {
+        ScrollState *scroll = scroll_state_from_id(node->id);
         i32 content_h = MAX(content_bottom + style.padding - node->y, 0);
         scroll->max_y = MAX(content_h - node->h, 0);
         scroll->y = CLAMP(scroll->y, 0, scroll->max_y);
 
         for (isize i = 0; i < children.count; ++i) {
-            Layout__Node *child = layout__node_from_index(children.offset + i);
+            Node *child = node_from_index(children.offset + i);
             child->y -= scroll->y;
         }
     }
 
     for (isize i = 0; i < children.count; ++i) {
-        layout__node_positions(layout__node_from_index(children.offset + i));
+        node_positions(node_from_index(children.offset + i));
     }
 }
 
-static Layout__TempID layout__node_hit_test(Layout__Node *node, Layla_Rect parent_clip, i32 x, i32 y) {
-    Layla_Rect node_rect = layout__rect_from_node(node);
-    Layla_Rect clip = layout__rect_intersect(parent_clip, node_rect);
-    if (!layout__rect_contains_point(x, y, clip)) return LAYOUT_TEMP_ID_NONE;
+static TempID node_hit_test(Node *node, Layla_Rect parent_clip, i32 x, i32 y) {
+    Layla_Rect node_rect = rect_from_node(node);
+    Layla_Rect clip = rect_intersect(parent_clip, node_rect);
+    if (!rect_contains_point(x, y, clip)) return LAYOUT_TEMP_ID_NONE;
 
     switch (node->type) {
         case LAYOUT_NODE_CONTAINER: {
-            Layout__ChildrenIndices children = node->children;
+            ChildrenIndices children = node->children;
             for (isize i = children.count - 1; i >= 0; --i) {
-                Layout__Node *child = layout__node_from_index(children.offset + i);
-                Layout__TempID hit = layout__node_hit_test(child, clip, x, y);
+                Node *child = node_from_index(children.offset + i);
+                TempID hit = node_hit_test(child, clip, x, y);
                 if (hit != LAYOUT_TEMP_ID_NONE) return hit;
             }
             break;
@@ -418,30 +418,30 @@ static Layout__TempID layout__node_hit_test(Layout__Node *node, Layla_Rect paren
         case LAYOUT_NODE_TEXT: break;
     }
 
-    return node->id != LAYOUT_PERSISTENT_ID_NONE ? (Layout__TempID)(node - layout__state.nodes.items) : LAYOUT_TEMP_ID_NONE;
+    return node->id != LAYOUT_PERSISTENT_ID_NONE ? (TempID)(node - state.nodes.items) : LAYOUT_TEMP_ID_NONE;
 }
 
-static inline void layout__hover_test(void) {
-    Layout__Node *root = layout__node_from_temp_id(LAYOUT_ROOT_ID);
-    Layla_Rect root_clip = layout__rect_from_node(root);
-    layout__state.hovered_temp_id = layout__node_hit_test(
+static inline void hover_test(void) {
+    Node *root = node_from_temp_id(LAYOUT_ROOT_ID);
+    Layla_Rect root_clip = rect_from_node(root);
+    state.hovered_temp_id = node_hit_test(
         root, root_clip,
-        layout__state.cursor_x, layout__state.cursor_y
+        state.cursor_x, state.cursor_y
     );
 
-    if (layout__state.hovered_temp_id == LAYOUT_TEMP_ID_NONE) return;
+    if (state.hovered_temp_id == LAYOUT_TEMP_ID_NONE) return;
 
-    layout__state.hovered_persistent_id = layout__node_from_temp_id(layout__state.hovered_temp_id)->id;
+    state.hovered_persistent_id = node_from_temp_id(state.hovered_temp_id)->id;
 }
 
 void layla_scroll_update(i32 delta_y) {
-    Layout__TempID current_id = layout__state.hovered_temp_id;
+    TempID current_id = state.hovered_temp_id;
     if (delta_y == 0 || current_id == LAYOUT_TEMP_ID_NONE) return;
 
     for (;;) {
-        Layout__Node *current = layout__node_from_temp_id(current_id);
-        if (layout__node_is_scroll_y(current)) {
-            Layout__ScrollState *scroll = layout__scroll_state_from_id(current->id);
+        Node *current = node_from_temp_id(current_id);
+        if (node_is_scroll_y(current)) {
+            ScrollState *scroll = scroll_state_from_id(current->id);
             scroll->y = CLAMP(scroll->y + delta_y, 0, scroll->max_y);
             return;
         }
@@ -451,40 +451,40 @@ void layla_scroll_update(i32 delta_y) {
     }
 }
 
-static inline void layout__container_commands(Layout__Node *node) {
-    list_append(&layout__state.commands, 
+static inline void container_commands(Node *node) {
+    list_append(&state.commands,
         ((Layla_Command) {.type = LAYLA_CMD_CLIP_START, .as.clip_start = {
             .x = node->x, .y = node->y, .w = node->w, .h = node->h
         }})
     );
 
-    list_append(&layout__state.commands,
+    list_append(&state.commands,
         ((Layla_Command) {.type = LAYLA_CMD_RECTANGLE, .as.rectangle = {
             .x = node->x, .y = node->y, .w = node->w, .h = node->h,
             .color = node->as.container.config.style.color
         }})
     );
 
-    Layout__ChildrenIndices children = node->children;
+    ChildrenIndices children = node->children;
     for (isize i = 0; i < children.count; ++i) {
-        Layout__Node *child = layout__node_from_index(children.offset + i);
-        layout__node_commands(child);
+        Node *child = node_from_index(children.offset + i);
+        node_commands(child);
     }
 
-    list_append(&layout__state.commands, ((Layla_Command) {
+    list_append(&state.commands, ((Layla_Command) {
         .type = LAYLA_CMD_CLIP_END,
     }));
 }
 
-static inline void layout__append_text_command(
-    Layout__Node *node,
+static inline void append_text_command(
+    Node *node,
     Layla_TextStyle style,
     Layla_TextSlice source,
     isize line_start_byte,
     isize line_end_byte,
     i32 line_y
 ) {
-    list_append(&layout__state.commands,
+    list_append(&state.commands,
         ((Layla_Command) {.type = LAYLA_CMD_TEXT, .as.text = {
             .x = node->x,
             .y = line_y,
@@ -497,7 +497,7 @@ static inline void layout__append_text_command(
     );
 }
 
-static inline void layout__text_commands(Layout__Node *node) {
+static inline void text_commands(Node *node) {
     Layla_TextConfig config = node->as.text.config;
     Layla_TextSlice source = config.text;
     if (source.count <= 0) return;
@@ -516,7 +516,7 @@ static inline void layout__text_commands(Layout__Node *node) {
         next_byte = decode_cursor - source.items;
 
         if (cp_equal(codepoint, cp_from_byte('\n'))) {
-            layout__append_text_command(
+            append_text_command(
                 node, config.style, source,
                 line_start_byte, codepoint_start_byte, line_y
             );
@@ -532,7 +532,7 @@ static inline void layout__text_commands(Layout__Node *node) {
             line_cell_width + codepoint.display_width > available_line_width;
 
         if (codepoint_overflows_line) {
-            layout__append_text_command(
+            append_text_command(
                 node, config.style, source,
                 line_start_byte, codepoint_start_byte, line_y
             );
@@ -545,7 +545,7 @@ static inline void layout__text_commands(Layout__Node *node) {
         line_cell_width += codepoint.display_width;
     }
 
-    layout__append_text_command(
+    append_text_command(
         node, config.style, source,
         line_start_byte, source.count, line_y
     );
@@ -553,32 +553,32 @@ static inline void layout__text_commands(Layout__Node *node) {
 
 // Helper functions
 
-static inline Layout__Node *layout__node_from_temp_id(Layout__TempID id) {
-    assert(0 <= id && id < layout__state.nodes.count);
-    return &layout__state.nodes.items[id];
+static inline Node *node_from_temp_id(TempID id) {
+    assert(0 <= id && id < state.nodes.count);
+    return &state.nodes.items[id];
 }
 
-static inline Layout__TempID layout__temp_id_from_child_index(i32 index) {
-    assert(0 <= index && index < layout__state.frame_children.count);
-    return layout__state.frame_children.items[index];
+static inline TempID temp_id_from_child_index(i32 index) {
+    assert(0 <= index && index < state.frame_children.count);
+    return state.frame_children.items[index];
 }
 
-static inline Layout__Node *layout__node_from_index(i32 index) {
-    return layout__node_from_temp_id(layout__temp_id_from_child_index(index));
+static inline Node *node_from_index(i32 index) {
+    return node_from_temp_id(temp_id_from_child_index(index));
 }
 
-static inline Layout__TempID layout__node_push(Layout__Node node) {
-    Layout__TempID id = layout__state.nodes.count;
-    list_append(&layout__state.nodes, node);
+static inline TempID node_push(Node node) {
+    TempID id = state.nodes.count;
+    list_append(&state.nodes, node);
     return id;
 }
 
-static inline b32 layout__rect_contains_point(i32 x, i32 y, Layla_Rect r) {
+static inline b32 rect_contains_point(i32 x, i32 y, Layla_Rect r) {
     return r.x <= x && x < r.x + r.w
         && r.y <= y && y < r.y + r.h;
 }
 
-static inline Layla_Rect layout__rect_intersect(Layla_Rect a, Layla_Rect b) {
+static inline Layla_Rect rect_intersect(Layla_Rect a, Layla_Rect b) {
     i32 x1 = MAX(a.x, b.x);
     i32 y1 = MAX(a.y, b.y);
     i32 x2 = MIN(a.x + a.w, b.x + b.w);
@@ -591,11 +591,11 @@ static inline Layla_Rect layout__rect_intersect(Layla_Rect a, Layla_Rect b) {
     return (Layla_Rect) {x1, y1, x2 - x1, y2 - y1};
 }
 
-static inline Layla_Rect layout__rect_from_node(Layout__Node *node) {
+static inline Layla_Rect rect_from_node(Node *node) {
     return (Layla_Rect) {.x = node->x, .y = node->y, .w = node->w, .h = node->h};
 }
 
-static inline Layla_Alignment layout__node_get_align_self(Layout__Node *node) {
+static inline Layla_Alignment node_get_align_self(Node *node) {
     switch (node->type) {
         case LAYOUT_NODE_CONTAINER: return node->as.container.config.style.align_self;
         case LAYOUT_NODE_TEXT: return LAYLA_ALIGN_START;
@@ -603,7 +603,7 @@ static inline Layla_Alignment layout__node_get_align_self(Layout__Node *node) {
     UNREACHABLE("It must always match against alignment");
 }
 
-static inline i32 layout__align_cross(Layla_Alignment align, i32 parent_size, i32 parent_padding, i32 child_size) {
+static inline i32 align_cross(Layla_Alignment align, i32 parent_size, i32 parent_padding, i32 child_size) {
     i32 parent_inner = parent_size - 2 * parent_padding;
     switch (align) {
         case LAYLA_ALIGN_START:  return parent_padding;
@@ -614,7 +614,7 @@ static inline i32 layout__align_cross(Layla_Alignment align, i32 parent_size, i3
     UNREACHABLE("It must always match against alignment");
 }
 
-static inline i32 layout__align_along(Layla_Alignment align, i32 parent_size, i32 parent_padding, i32 children_size) {
+static inline i32 align_along(Layla_Alignment align, i32 parent_size, i32 parent_padding, i32 children_size) {
     i32 parent_inner = parent_size - 2 * parent_padding;
     i32 remaining = MAX(parent_inner - children_size, 0);
     switch (align) {
@@ -626,11 +626,11 @@ static inline i32 layout__align_along(Layla_Alignment align, i32 parent_size, i3
     UNREACHABLE("It must always match against alignment");
 }
 
-static inline Layout__Dimension layout__dimension_get_other(Layout__Dimension dim) {
+static inline Dimension dimension_get_other(Dimension dim) {
     return dim == DIM_X ? DIM_Y : DIM_X;
 }
 
-static inline Layout__Dimension layout__direction_get_main_dimension(Layla_Direction direction) {
+static inline Dimension direction_get_main_dimension(Layla_Direction direction) {
     switch (direction) {
         case LAYLA_DIR_ROW: return DIM_X;
         case LAYLA_DIR_COL: return DIM_Y;
@@ -638,79 +638,79 @@ static inline Layout__Dimension layout__direction_get_main_dimension(Layla_Direc
     UNREACHABLE("Unknown direction");
 }
 
-static inline i32 *layout__node_get_pos(Layout__Node *node, Layout__Dimension dim) {
+static inline i32 *node_get_pos(Node *node, Dimension dim) {
     return dim == DIM_X ? &node->x : &node->y;
 }
 
-static inline i32 *layout__node_get_size(Layout__Node *node, Layout__Dimension dim) {
+static inline i32 *node_get_size(Node *node, Dimension dim) {
     return dim == DIM_X ? &node->w : &node->h;
 }
 
-static inline i32 *layout__node_get_min_size(Layout__Node *node, Layout__Dimension dim) {
+static inline i32 *node_get_min_size(Node *node, Dimension dim) {
     return dim == DIM_X ? &node->min_w : &node->min_h;
 }
 
-static inline Layla_SizeStyle layout__get_size_style(Layla_ContainerStyle style, Layout__Dimension dim) {
+static inline Layla_SizeStyle get_size_style(Layla_ContainerStyle style, Dimension dim) {
     return dim == DIM_X ? style.size.w : style.size.h;
 }
 
-static inline Layout__SizeRange layout__get_size_range(Layla_SizeStyle size) {
+static inline SizeRange get_size_range(Layla_SizeStyle size) {
     switch (size.type) {
-        case LAYLA_SIZE_FIXED: return (Layout__SizeRange) {size.as.fixed.value, size.as.fixed.value};
-        case LAYLA_SIZE_FIT:   return (Layout__SizeRange) {size.as.fit.min, size.as.fit.max};
-        case LAYLA_SIZE_FILL:  return (Layout__SizeRange) {size.as.fill.min, size.as.fill.max};
+        case LAYLA_SIZE_FIXED: return (SizeRange) {size.as.fixed.value, size.as.fixed.value};
+        case LAYLA_SIZE_FIT:   return (SizeRange) {size.as.fit.min, size.as.fit.max};
+        case LAYLA_SIZE_FILL:  return (SizeRange) {size.as.fill.min, size.as.fill.max};
     }
     UNREACHABLE("Unknown size type");
 }
 
-static inline i32 layout__get_children_spacing(Layout__ChildrenIndices children, i32 spacing) {
+static inline i32 get_children_spacing(ChildrenIndices children, i32 spacing) {
     return MAX(children.count - 1, 0) * spacing;
 }
 
-static inline b32 layout__node_is_fill(Layout__Node *node, Layout__Dimension dim) {
+static inline b32 node_is_fill(Node *node, Dimension dim) {
     switch (node->type) {
         case LAYOUT_NODE_TEXT: return dim == DIM_X;
         case LAYOUT_NODE_CONTAINER:
-            return layout__get_size_style(node->as.container.config.style, dim).type == LAYLA_SIZE_FILL;
+            return get_size_style(node->as.container.config.style, dim).type == LAYLA_SIZE_FILL;
     }
     return false;
 }
 
-static inline i32 layout__node_get_fill_max(Layout__Node *node, Layout__Dimension dim) {
+static inline i32 node_get_fill_max(Node *node, Dimension dim) {
     switch (node->type) {
-        case LAYOUT_NODE_TEXT: return *layout__node_get_size(node, dim);
+        case LAYOUT_NODE_TEXT: return *node_get_size(node, dim);
         case LAYOUT_NODE_CONTAINER: {
-            Layla_SizeStyle size = layout__get_size_style(node->as.container.config.style, dim);
+            Layla_SizeStyle size = get_size_style(node->as.container.config.style, dim);
             assert(size.type == LAYLA_SIZE_FILL && "function is only for fill size");
-            return layout__get_size_range(size).max;
+            return get_size_range(size).max;
         }
     }
     return false;
 }
 
-static inline i32 layout__node_get_fill_min(Layout__Node *node, Layout__Dimension dim) {
+static inline i32 node_get_fill_min(Node *node, Dimension dim) {
     switch (node->type) {
-        case LAYOUT_NODE_TEXT: return *layout__node_get_min_size(node, dim);
+        case LAYOUT_NODE_TEXT: return *node_get_min_size(node, dim);
         case LAYOUT_NODE_CONTAINER: {
-            Layla_SizeStyle size = layout__get_size_style(node->as.container.config.style, dim);
+            Layla_SizeStyle size = get_size_style(node->as.container.config.style, dim);
             assert(size.type == LAYLA_SIZE_FILL && "function is only for fill size");
-            return MAX(layout__get_size_range(size).min, *layout__node_get_min_size(node, dim));
+            return MAX(get_size_range(size).min, *node_get_min_size(node, dim));
         }
     }
     return false;
 }
 
-static inline void layout__space_distribute(i32 space, List(Layout__NodePtr) nodes, Layout__Dimension dim) {
+static inline void space_distribute(i32 space, List(NodePtr) nodes, Dimension dim) {
     while (space > 0) {
         i32 smallest = INT32_MAX;
         i32 next_smallest = INT32_MAX;
         i32 smallest_count = 0;
 
         for (isize i = 0; i < nodes.count; ++i) {
-            Layout__Node *current = nodes.items[i];
-            i32 current_size = *layout__node_get_size(current, dim);
+            Node *current = nodes.items[i];
+            i32 current_size = *node_get_size(current, dim);
 
-            if (current_size >= layout__node_get_fill_max(current, dim)) continue;
+            if (current_size >= node_get_fill_max(current, dim)) continue;
 
             if (current_size < smallest) {
                 smallest_count = 1;
@@ -727,10 +727,10 @@ static inline void layout__space_distribute(i32 space, List(Layout__NodePtr) nod
 
         i32 target_growth = next_smallest - smallest;
         for (isize i = 0; i < nodes.count; ++i) {
-            Layout__Node *current = nodes.items[i];
-            i32 current_size = *layout__node_get_size(current, dim);
-            if (current_size != smallest || current_size >= layout__node_get_fill_max(current, dim)) continue;
-            target_growth = MIN(target_growth, layout__node_get_fill_max(current, dim) - current_size);
+            Node *current = nodes.items[i];
+            i32 current_size = *node_get_size(current, dim);
+            if (current_size != smallest || current_size >= node_get_fill_max(current, dim)) continue;
+            target_growth = MIN(target_growth, node_get_fill_max(current, dim) - current_size);
         }
 
         if (target_growth == 0) target_growth = 1;
@@ -741,9 +741,9 @@ static inline void layout__space_distribute(i32 space, List(Layout__NodePtr) nod
         i32 extra = space_for_distribution % smallest_count;
 
         for (isize i = 0; i < nodes.count; ++i) {
-            Layout__Node *current = nodes.items[i];
-            i32 *current_size = layout__node_get_size(current, dim);
-            if (*current_size != smallest || *current_size >= layout__node_get_fill_max(current, dim)) continue;
+            Node *current = nodes.items[i];
+            i32 *current_size = node_get_size(current, dim);
+            if (*current_size != smallest || *current_size >= node_get_fill_max(current, dim)) continue;
 
             i32 add = each + (extra > 0);
             extra -= extra > 0;
@@ -759,10 +759,10 @@ static inline void layout__space_distribute(i32 space, List(Layout__NodePtr) nod
         i32 largest_count = 0;
 
         for (isize i = 0; i < nodes.count; ++i) {
-            Layout__Node *current = nodes.items[i];
-            i32 current_size = *layout__node_get_size(current, dim);
+            Node *current = nodes.items[i];
+            i32 current_size = *node_get_size(current, dim);
 
-            if (current_size <= layout__node_get_fill_min(current, dim)) continue;
+            if (current_size <= node_get_fill_min(current, dim)) continue;
 
             if (current_size > largest) {
                 largest_count = 1;
@@ -779,10 +779,10 @@ static inline void layout__space_distribute(i32 space, List(Layout__NodePtr) nod
 
         i32 target_shrink = largest - next_largest;
         for (isize i = 0; i < nodes.count; ++i) {
-            Layout__Node *current = nodes.items[i];
-            i32 current_size = *layout__node_get_size(current, dim);
-            if (current_size != largest || current_size <= layout__node_get_fill_min(current, dim)) continue;
-            target_shrink = MIN(target_shrink, current_size - layout__node_get_fill_min(current, dim));
+            Node *current = nodes.items[i];
+            i32 current_size = *node_get_size(current, dim);
+            if (current_size != largest || current_size <= node_get_fill_min(current, dim)) continue;
+            target_shrink = MIN(target_shrink, current_size - node_get_fill_min(current, dim));
         }
 
         if (target_shrink == 0) target_shrink = 1;
@@ -793,9 +793,9 @@ static inline void layout__space_distribute(i32 space, List(Layout__NodePtr) nod
         i32 extra = space_for_distribution % largest_count;
 
         for (isize i = 0; i < nodes.count; ++i) {
-            Layout__Node *current = nodes.items[i];
-            i32 *current_size = layout__node_get_size(current, dim);
-            if (*current_size != largest || *current_size <= layout__node_get_fill_min(current, dim)) continue;
+            Node *current = nodes.items[i];
+            i32 *current_size = node_get_size(current, dim);
+            if (*current_size != largest || *current_size <= node_get_fill_min(current, dim)) continue;
 
             i32 sub = each + (extra > 0);
             extra -= extra > 0;
@@ -806,17 +806,17 @@ static inline void layout__space_distribute(i32 space, List(Layout__NodePtr) nod
     }
 }
 
-static inline Layout__ScrollState *layout__scroll_state_from_id(Layla_PersistentID id) {
-    for (isize i = 0; i < layout__state.scroll_states.count; ++i) {
-        Layout__ScrollState *state = &layout__state.scroll_states.items[i];
-        if (state->id == id) return state;
+static inline ScrollState *scroll_state_from_id(Layla_PersistentID id) {
+    for (isize i = 0; i < state.scroll_states.count; ++i) {
+        ScrollState *scroll_state = &state.scroll_states.items[i];
+        if (scroll_state->id == id) return scroll_state;
     }
 
-    list_append(&layout__state.scroll_states, ((Layout__ScrollState) {.id = id}));
-    return &list_last(&layout__state.scroll_states);
+    list_append(&state.scroll_states, ((ScrollState) {.id = id}));
+    return &list_last(&state.scroll_states);
 }
 
-static inline b32 layout__node_is_scroll_y(Layout__Node *node) {
+static inline b32 node_is_scroll_y(Node *node) {
     if (node->id == LAYOUT_PERSISTENT_ID_NONE) return false;
 
     switch (node->type) {
