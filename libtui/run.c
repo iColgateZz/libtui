@@ -13,24 +13,24 @@ static psh_ternary object_needs_rebuild(byte *object, byte *source) {
         if (errno == ENOENT) return true;
 
         psh_logger(PSH_ERROR, "could not get info about object %s: %s", object, strerror(errno));
-        return err;
+        return psh_err;
     }
 
     Psh_Unix_Pipe pipe = {0};
-    if (!psh_pipe_open(&pipe)) return err;
+    if (!psh_pipe_open(&pipe)) return psh_err;
 
     Psh_Cmd cmd = {0};
     psh_cmd_append(&cmd, PSH_CC, PSH_CC_MORE_FLAGS, "-MM", source);
     if (!psh_cmd_run(&cmd, .fdout = pipe.write_fd)) {
         psh_list_free(cmd);
-        return err;
+        return psh_err;
     }
     psh_list_free(cmd);
 
     Psh_Fd_Reader reader = {.fd = pipe.read_fd};
     if (!psh_fd_read(&reader)) {
         psh_list_free(reader.store);
-        return err;
+        return psh_err;
     }
 
     Sources dependencies = psh__tokenize_deps(reader.store.count, reader.store.items);
@@ -113,7 +113,7 @@ i32 main(i32 argc, byte *argv[]) {
         if (!make_object_path(source, object, PATH_CAPACITY)) return 1;
 
         psh_ternary needs_rebuild = object_needs_rebuild(object, source);
-        if (needs_rebuild == err) return 1;
+        if (needs_rebuild == psh_err) return 1;
         if (!needs_rebuild) continue;
 
         if (!make_object_directory(object)) return 1;
