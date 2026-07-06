@@ -115,7 +115,7 @@ static inline void text_commands(Node *node);
 static inline TextMeasurement text_process(Node *node, i32 wrap_width, b32 emit_commands);
 static inline i32 text_slice_measure(Layla_TextSlice text);
 
-static TempID node_hit_test(Node *node, Layla_Rectangle parent_clip, i32 x, i32 y);
+static inline TempID node_hit_test(Node *node, Layla_Rectangle parent_clip, i32 x, i32 y);
 static inline b32 rect_contains_point(i32 x, i32 y, Layla_Rectangle r);
 static inline Layla_Rectangle rect_intersect(Layla_Rectangle a, Layla_Rectangle b);
 static inline Layla_Rectangle rect_from_node(Node *node);

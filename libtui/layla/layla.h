@@ -96,6 +96,8 @@ typedef struct {
     isize count;
 } Layla_TextSlice;
 
+#define LAYLA_TEXT_SLICE(s) ((Layla_TextSlice) {.items = (byte *)(s), .count = sizeof(s) - 1})
+
 typedef LAYLA_PACKED_ENUM {
     LAYLA_TEXT_WRAP_WORD,
 } Layla_TextWrapPolicy;
@@ -111,12 +113,6 @@ typedef struct {
     Layla_TextStyle style;
     void *userdata;
 } Layla_TextConfig;
-
-// Return the width of the borrowed UTF-8 span in layout units.
-// The function must handle empty spans and return a non-negative value.
-typedef i32 (*Layla_TextMeasureFunction)(Layla_TextSlice text, void *userdata);
-
-#define LAYLA_TEXT_SLICE(s) ((Layla_TextSlice) {.items = (byte *)(s), .count = sizeof(s) - 1})
 
 typedef struct {
     LAYLA_PACKED_ENUM {
@@ -157,31 +153,43 @@ typedef i32 Layla_PersistentID;
 
 //TODO: configurable clipping/overflow, not always overflow-hidden
 //TODO: query max scroll offset
-void layla_text_set_measure_function(Layla_TextMeasureFunction function, void *userdata);
-void layla_screen_set_dimensions(i32 w, i32 h);
-void layla_cursor_set_position(i32 x, i32 y);
-void layla_scroll_update(i32 delta_y);
-void layla_scroll_set_offset_by_id(Layla_PersistentID id, i32 offset_y);
-void layla_scroll_update_by_id(Layla_PersistentID id, i32 delta_y);
-i32 layla_scroll_get_offset_by_id(Layla_PersistentID id);
-b32 layla_cursor_is_hovered(void);
-Layla_PersistentID layla_cursor_get_hovered_id(void);
-void layla_begin(void);
-Layla_CommandSlice layla_end(void);
-void layla_text_open(Layla_PersistentID id, Layla_TextConfig conf);
-void layla_container_open(Layla_PersistentID id, Layla_ContainerConfig conf);
-void layla_close(void);
 
-#define Layla_Container(id, ...)                            \
-    for (u8 _latch = (layla_container_open(                 \
-            id,                                             \
-            (Layla_ContainerConfig) {                       \
-                .style.size.w = LAYLA_FIT(0, INT32_MAX),    \
-                .style.size.h = LAYLA_FIT(0, INT32_MAX),    \
-                __VA_ARGS__                                 \
-        }), 0); _latch < 1; _latch = 1, layla_close())
+// Return the width of the borrowed UTF-8 span in layout units.
+// The function must handle empty spans and return a non-negative value.
+typedef i32 (*Layla_TextMeasureFunction)(Layla_TextSlice text, void *userdata);
 
-#define Layla_Text(id, ...)              \
-    for (u8 _latch = (layla_text_open(id, (Layla_TextConfig) {__VA_ARGS__}), 0); _latch < 1; _latch = 1, layla_close())
+void layla_state_set_text_measure_function(Layla_TextMeasureFunction function, void *userdata);
+void layla_state_set_screen_dimensions(i32 w, i32 h);
+void layla_state_set_cursor_position(i32 x, i32 y);
+
+void layla_state_update_scroll_offset_on_hovered_element(i32 delta_y);
+void layla_state_set_scroll_offset_by_id(Layla_PersistentID id, i32 offset_y);
+void layla_state_update_scroll_offset_by_id(Layla_PersistentID id, i32 delta_y);
+i32 layla_state_get_scroll_offset_by_id(Layla_PersistentID id);
+
+b32 layla_state_is_element_hovered(void);
+Layla_PersistentID layla_state_get_hovered_element_id(void);
+
+void layla_layout_begin(void);
+Layla_CommandSlice layla_layout_end(void);
+
+void layla_text_element_open(Layla_PersistentID id, Layla_TextConfig conf);
+void layla_container_element_open(Layla_PersistentID id, Layla_ContainerConfig conf);
+void layla_element_close(void);
+
+#define Layla_Container(id, ...)                                \
+    for (u8 _latch = (layla_container_element_open(             \
+            id,                                                 \
+            (Layla_ContainerConfig) {                           \
+                .style.size.w = LAYLA_FIT(0, INT32_MAX),        \
+                .style.size.h = LAYLA_FIT(0, INT32_MAX),        \
+                __VA_ARGS__                                     \
+        }), 0); _latch < 1; _latch = 1, layla_element_close())
+
+#define Layla_Text(id, ...)                                     \
+    for (u8 _latch = (layla_text_element_open(                  \
+            id,                                                 \
+            (Layla_TextConfig) {__VA_ARGS__}                    \
+        ), 0); _latch < 1; _latch = 1, layla_element_close())
 
 #endif

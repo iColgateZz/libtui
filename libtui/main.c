@@ -23,17 +23,17 @@ static i32 text_measure(Layla_TextSlice text, void *userdata) {
 void update_layout_input(Event event) {
     if (!event_is_mouse(event)) return;
 
-    layla_cursor_set_position(event.as.mouse.x, event.as.mouse.y);
+    layla_state_set_cursor_position(event.as.mouse.x, event.as.mouse.y);
 
     if (event_is(event, EScrollUp)) {
-        layla_scroll_update(-1);
+        layla_state_update_scroll_offset_on_hovered_element(-1);
     } else if (event_is(event, EScrollDown)) {
-        layla_scroll_update(1);
+        layla_state_update_scroll_offset_on_hovered_element(1);
     }
 }
 
 i32 main(void) {
-    layla_text_set_measure_function(text_measure, NULL);
+    layla_state_set_text_measure_function(text_measure, NULL);
     init_terminal();
     set_fps(60);
 
@@ -51,8 +51,8 @@ i32 main(void) {
         {
             u32 w = get_terminal_width();
             u32 h = get_terminal_height();
-            layla_screen_set_dimensions(w, h);
-            layla_begin();
+            layla_state_set_screen_dimensions(w, h);
+            layla_layout_begin();
 
             Layla_Container(1, .style = {
                 .color = {196, 240, 120},
@@ -92,7 +92,7 @@ i32 main(void) {
                 });
             }
 
-            Layla_CommandSlice cmds = layla_end();
+            Layla_CommandSlice cmds = layla_layout_end();
 
             for (isize i = 0; i < cmds.count; ++i) {
                 Layla_Command cmd = cmds.items[i];
