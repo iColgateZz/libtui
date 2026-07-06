@@ -82,6 +82,8 @@ typedef struct {
     i32 cursor_x, cursor_y;
     TempID hovered_temp_id;
     Layla_PersistentID hovered_persistent_id;
+    Layla_TextMeasureFunction text_measure_function;
+    void *text_measure_userdata;
     Arena tmp;
 } State;
 
@@ -110,10 +112,8 @@ static inline void container_commands(Node *node);
 static inline void text_intrinsic_width(Node *node);
 static inline void text_wrap_text(Node *node);
 static inline void text_commands(Node *node);
-//TODO: tight coupling with codepoint code from psh_core
-//      works well if brenda is the backend, but what if something else is used?
-//      makes sense to measure text the way the renderer finds it easier to work with
 static inline TextMeasurement text_process(Node *node, i32 wrap_width, b32 emit_commands);
+static inline i32 text_slice_measure(Layla_TextSlice text, Layla_TextConfig *config);
 
 static TempID node_hit_test(Node *node, Layla_Rectangle parent_clip, i32 x, i32 y);
 static inline b32 rect_contains_point(i32 x, i32 y, Layla_Rectangle r);

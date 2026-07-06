@@ -6,6 +6,21 @@
 #define LIBTUI_RENDERER_IMPL
     #include "renderer.h"
 
+static i32 text_measure(Layla_TextSlice text, Layla_TextConfig *config, void *userdata) {
+    UNUSED(config);
+    UNUSED(userdata);
+
+    i32 width = 0;
+    byte *cursor = text.items;
+    byte *end = text.items + text.count;
+    while (cursor < end) {
+        CodePoint codepoint = utf8_next(&cursor, end);
+        width += codepoint.display_width;
+    }
+
+    return width;
+}
+
 void update_layout_input(Event event) {
     if (!event_is_mouse(event)) return;
 
@@ -19,6 +34,7 @@ void update_layout_input(Event event) {
 }
 
 i32 main(void) {
+    layla_text_set_measure_function(text_measure, NULL);
     init_terminal();
     set_fps(60);
 
@@ -51,7 +67,7 @@ i32 main(void) {
                 });
 
                 Layla_Container(3, .style = {
-                    .size = {.w = LAYLA_FILL(0, INT32_MAX), .h = LAYLA_FIXED(1)},
+                    .size = {.w = LAYLA_FILL(0, INT32_MAX), .h = LAYLA_FIT(0, INT32_MAX)},
                     .color = {233, 255, 57},
                     .align_self = LAYLA_ALIGN_CENTER,
                     .direction = LAYLA_DIR_COL,
