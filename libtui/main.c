@@ -6,8 +6,7 @@
 #define LIBTUI_RENDERER_IMPL
     #include "renderer.h"
 
-static i32 text_measure(Layla_TextSlice text, Layla_TextConfig *config, void *userdata) {
-    UNUSED(config);
+static i32 text_measure(Layla_TextSlice text, void *userdata) {
     UNUSED(userdata);
 
     i32 width = 0;

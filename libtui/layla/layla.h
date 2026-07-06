@@ -114,11 +114,7 @@ typedef struct {
 
 // Return the width of the borrowed UTF-8 span in layout units.
 // The function must handle empty spans and return a non-negative value.
-typedef i32 (*Layla_TextMeasureFunction)(
-    Layla_TextSlice text,
-    Layla_TextConfig *config,
-    void *userdata
-);
+typedef i32 (*Layla_TextMeasureFunction)(Layla_TextSlice text, void *userdata);
 
 #define LAYLA_TEXT_SLICE(s) ((Layla_TextSlice) {.items = (byte *)(s), .count = sizeof(s) - 1})
 
