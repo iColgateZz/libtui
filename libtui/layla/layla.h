@@ -3,8 +3,17 @@
 
 #include "psh_core.h"
 
-//TODO: make cross-platform/cross-compiler
-#define LAYLA_PACKED_ENUM enum __attribute__((__packed__))
+#if defined(__has_attribute)
+    #define LAYLA_HAS_ATTRIBUTE(attribute) __has_attribute(attribute)
+#else
+    #define LAYLA_HAS_ATTRIBUTE(attribute) 0
+#endif
+
+#if LAYLA_HAS_ATTRIBUTE(packed) || defined(__GNUC__) || defined(__clang__)
+    #define LAYLA_PACKED_ENUM enum __attribute__((__packed__))
+#else
+    #define LAYLA_PACKED_ENUM enum
+#endif
 
 //TODO: percentage sizing?
 typedef struct {
