@@ -128,6 +128,11 @@ i32 layla_state_get_scroll_offset_by_id(Layla_PersistentID id) {
     return scroll_state_get_by_id(id)->y;
 }
 
+i32 layla_state_get_max_scroll_offset_by_id(Layla_PersistentID id) {
+    if (id == LAYLA_PERSISTENT_ID_NONE) return 0;
+    return scroll_state_get_by_id(id)->max_y;
+}
+
 void layla_state_update_scroll_offset_on_hovered_element(i32 delta_y) {
     TempID current_id = state.hovered_temp_id;
     if (delta_y == 0 || current_id == LAYLA_TEMP_ID_NONE) return;
@@ -830,6 +835,7 @@ static inline void space_distribute(i32 space, List(NodePtr) nodes, Dimension di
     }
 }
 
+//TODO: improve performance
 static inline ScrollState *scroll_state_get_by_id(Layla_PersistentID id) {
     for (isize i = 0; i < state.scroll_states.count; ++i) {
         ScrollState *scroll_state = &state.scroll_states.items[i];

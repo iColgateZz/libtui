@@ -161,7 +161,6 @@ typedef struct {
 typedef i32 Layla_PersistentID;
 
 //TODO: configurable clipping/overflow, not always overflow-hidden
-//TODO: query max scroll offset
 
 // Return the width of the borrowed UTF-8 span in layout units.
 // The function must handle empty spans and return a non-negative value.
@@ -175,6 +174,7 @@ void layla_state_update_scroll_offset_on_hovered_element(i32 delta_y);
 void layla_state_set_scroll_offset_by_id(Layla_PersistentID id, i32 offset_y);
 void layla_state_update_scroll_offset_by_id(Layla_PersistentID id, i32 delta_y);
 i32 layla_state_get_scroll_offset_by_id(Layla_PersistentID id);
+i32 layla_state_get_max_scroll_offset_by_id(Layla_PersistentID id);
 
 b32 layla_state_is_element_hovered(void);
 Layla_PersistentID layla_state_get_hovered_element_id(void);
