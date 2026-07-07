@@ -12,6 +12,8 @@ typedef struct {
 } ChildrenIndices;
 
 typedef i32 TempID;
+#define LAYLA_TEMP_ID_NONE (-1)
+#define LAYLA_ROOT_TEMP_ID 0
 
 //TODO: maybe store a list of persistent id -> temp id for querying data by persistent id?
 typedef struct {
@@ -41,10 +43,6 @@ list_def(Node)
 list_def(TempID)
 typedef Node* NodePtr;
 list_def(NodePtr)
-
-#define LAYLA_TEMP_ID_NONE ((TempID)-1)
-#define LAYLA_PERSISTENT_ID_NONE 0
-#define LAYLA_ROOT_ID 0
 
 typedef struct {
     Layla_PersistentID id;

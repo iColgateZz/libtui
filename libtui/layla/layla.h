@@ -83,7 +83,7 @@ typedef LAYLA_PACKED_ENUM {
     LAYLA_ALIGN_END,
 } Layla_Alignment;
 
-typedef enum {
+typedef LAYLA_PACKED_ENUM {
     LAYLA_SCROLL_NONE,
     LAYLA_SCROLL_Y,
 } Layla_Scroll;
@@ -164,6 +164,7 @@ typedef struct {
 } Layla_CommandSlice;
 
 typedef i32 Layla_PersistentID;
+#define LAYLA_PERSISTENT_ID_NONE 0
 
 //TODO: configurable clipping/overflow, not always overflow-hidden
 

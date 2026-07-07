@@ -43,7 +43,7 @@ Layla_CommandSlice layla_layout_end(void) {
     // close implicit root element
     layla_element_close();
 
-    Node *root = node_from_temp_id(LAYLA_ROOT_ID);
+    Node *root = node_from_temp_id(LAYLA_ROOT_TEMP_ID);
     node_layout(root);
     hover_test();
 
@@ -91,7 +91,7 @@ void layla_element_close(void) {
     }
 
     list_append(&state.temporary_child_stack, closed_id);
-    if (closed_id > LAYLA_ROOT_ID) {
+    if (closed_id > LAYLA_ROOT_TEMP_ID) {
         TempID parent_id = list_last(&state.open_node_stack);
         Node *parent = node_from_temp_id(parent_id);
         parent->children.count++;
@@ -144,7 +144,7 @@ void layla_state_update_scroll_offset_on_hovered_element(i32 delta_y) {
             return;
         }
 
-        if (current_id == LAYLA_ROOT_ID) break;
+        if (current_id == LAYLA_ROOT_TEMP_ID) break;
         current_id = current->parent;
     }
 }
@@ -560,7 +560,7 @@ static inline void append_text_command(
 }
 
 static inline void hover_test(void) {
-    Node *root = node_from_temp_id(LAYLA_ROOT_ID);
+    Node *root = node_from_temp_id(LAYLA_ROOT_TEMP_ID);
     Layla_Rectangle root_clip = rect_from_node(root);
     state.hovered_temp_id = node_hit_test(
         root, root_clip,
