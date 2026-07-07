@@ -142,6 +142,7 @@ typedef struct {
         LAYLA_CMD_TEXT,
         LAYLA_CMD_CLIP_START,
         LAYLA_CMD_CLIP_END,
+        //TODO: Custom container should be offset into the custom-user-zone
         // LAYLA_CMD_BORDER, // pass concrete codepoints to draw
     } type;
     union {
