@@ -187,6 +187,8 @@ static inline void container_intrinsic_size(Node *node, Dimension dim) {
     ChildrenIndices children = node->children;
     Layla_ContainerStyle style = node->as.container.config.style;
     Layla_SizeStyle size_style = get_size_style(style, dim);
+    PaddingSides padding = padding_sides_from_dimension(style.padding, dim);
+    i32 total_padding = padding.start + padding.end;
     if (size_style.type == LAYLA_SIZE_FIXED) {
         *node_get_size(node, dim) = *node_get_min_size(node, dim) = size_style.as.fixed.value;
         return;
@@ -196,8 +198,8 @@ static inline void container_intrinsic_size(Node *node, Dimension dim) {
     i32 resolved_min_size = 0;
 
     if (dim == direction_get_main_dimension(style.direction)) {
-        resolved_size =     2 * style.padding + get_children_spacing(children, style.spacing);
-        resolved_min_size = 2 * style.padding + get_children_spacing(children, style.spacing);
+        resolved_size =     total_padding + get_children_spacing(children, style.spacing);
+        resolved_min_size = total_padding + get_children_spacing(children, style.spacing);
         for (isize i = 0; i < children.count; ++i) {
             Node *child = node_from_index(children.offset + i);
             resolved_size += *node_get_size(child, dim);
@@ -209,8 +211,8 @@ static inline void container_intrinsic_size(Node *node, Dimension dim) {
             resolved_size = MAX(resolved_size, *node_get_size(child, dim));
             resolved_min_size = MAX(resolved_min_size, *node_get_min_size(child, dim));
         }
-        resolved_size +=     2 * style.padding;
-        resolved_min_size += 2 * style.padding;
+        resolved_size +=     total_padding;
+        resolved_min_size += total_padding;
     }
 
     SizeRange range = get_size_range(size_style);
@@ -247,6 +249,8 @@ static inline void container_fill_height(Node *node) {
 static inline void container_fill_size(Node *node, Dimension dim) {
     Layla_ContainerStyle style = node->as.container.config.style;
     ChildrenIndices children = node->children;
+    PaddingSides padding = padding_sides_from_dimension(style.padding, dim);
+    i32 total_padding = padding.start + padding.end;
 
     if (dim == direction_get_main_dimension(style.direction)) {
         i32 children_size = 0;
@@ -254,7 +258,7 @@ static inline void container_fill_size(Node *node, Dimension dim) {
             children_size += *node_get_size(node_from_index(children.offset + i), dim);
         }
 
-        i32 remaining_size = *node_get_size(node, dim) - children_size - 2 * style.padding
+        i32 remaining_size = *node_get_size(node, dim) - children_size - total_padding
                              - get_children_spacing(children, style.spacing);
 
         i32 fill_count = 0;
@@ -278,7 +282,7 @@ static inline void container_fill_size(Node *node, Dimension dim) {
             scratch_end(scratch);
         }
     } else {
-        i32 content_size = *node_get_size(node, dim) - 2 * style.padding;
+        i32 content_size = *node_get_size(node, dim) - total_padding;
         for (isize i = 0; i < children.count; ++i) {
             Node *child = node_from_index(children.offset + i);
             switch (child->type) {
@@ -323,23 +327,26 @@ static inline void container_positions(Node *node) {
     ChildrenIndices children = node->children;
     Dimension main_dim = direction_get_main_dimension(style.direction);
     Dimension cross_dim = dimension_get_other(main_dim);
+    PaddingSides main_padding = padding_sides_from_dimension(style.padding, main_dim);
+    PaddingSides cross_padding = padding_sides_from_dimension(style.padding, cross_dim);
+    PaddingSides vertical_padding = padding_sides_from_dimension(style.padding, DIM_Y);
     i32 children_main_size = get_children_spacing(children, style.spacing);
-    i32 content_bottom = node->y + style.padding;
+    i32 content_bottom = node->y + vertical_padding.start;
 
     for (isize i = 0; i < children.count; ++i) {
         children_main_size += *node_get_size(node_from_index(children.offset + i), main_dim);
     }
 
-    i32 cursor = *node_get_pos(node, main_dim) + style.padding
-                 + align_along(style.align_children, *node_get_size(node, main_dim), style.padding, children_main_size);
+    i32 cursor = *node_get_pos(node, main_dim)
+                 + align_offset(style.align_children, *node_get_size(node, main_dim), main_padding, children_main_size);
 
     for (isize i = 0; i < children.count; ++i) {
         Node *child = node_from_index(children.offset + i);
         *node_get_pos(child, main_dim) = cursor;
-        *node_get_pos(child, cross_dim) = *node_get_pos(node, cross_dim) + align_cross(
+        *node_get_pos(child, cross_dim) = *node_get_pos(node, cross_dim) + align_offset(
             node_get_align_self(child),
             *node_get_size(node, cross_dim),
-            style.padding,
+            cross_padding,
             *node_get_size(child, cross_dim)
         );
 
@@ -349,7 +356,7 @@ static inline void container_positions(Node *node) {
 
     if (node_is_scroll_y(node)) {
         ScrollState *scroll = scroll_state_get_by_id(node->id);
-        i32 content_h = MAX(content_bottom + style.padding - node->y, 0);
+        i32 content_h = MAX(content_bottom + vertical_padding.end - node->y, 0);
         scroll->max_y = MAX(content_h - node->h, 0);
         scroll->y = CLAMP(scroll->y, 0, scroll->max_y);
 
@@ -433,7 +440,7 @@ static inline TextMeasurement text_process(Node *node, i32 wrap_width, b32 emit_
             line_width = text_slice_measure(line);
 
             if (emit_commands) {
-                i32 line_x = node->x + align_along(style.alignment, node->w, 0, line_width);
+                i32 line_x = node->x + align_offset(style.alignment, node->w, ((PaddingSides) {0}), line_width);
                 append_text_command(
                     config,
                     line_start_byte, cursor_byte,
@@ -478,7 +485,7 @@ static inline TextMeasurement text_process(Node *node, i32 wrap_width, b32 emit_
         b32 word_overflows_line = wrap_width > 0 && line_has_word && width_with_word > wrap_width;
         if (word_overflows_line) {
             if (emit_commands) {
-                i32 line_x = node->x + align_along(style.alignment, node->w, 0, line_width);
+                i32 line_x = node->x + align_offset(style.alignment, node->w, ((PaddingSides) {0}), line_width);
                 append_text_command(
                     config,
                     line_start_byte, line_end_byte,
@@ -510,7 +517,7 @@ static inline TextMeasurement text_process(Node *node, i32 wrap_width, b32 emit_
     line_width = text_slice_measure(line);
 
     if (emit_commands) {
-        i32 line_x = node->x + align_along(style.alignment, node->w, 0, line_width);
+        i32 line_x = node->x + align_offset(style.alignment, node->w, ((PaddingSides) {0}), line_width);
         append_text_command(
             config,
             line_start_byte, source.count,
@@ -632,24 +639,13 @@ static inline Layla_Alignment node_get_align_self(Node *node) {
     UNREACHABLE("It must always match against alignment");
 }
 
-static inline i32 align_cross(Layla_Alignment align, i32 parent_size, i32 parent_padding, i32 child_size) {
-    i32 parent_inner = parent_size - 2 * parent_padding;
+static inline i32 align_offset(Layla_Alignment align, i32 parent_size, PaddingSides padding, i32 child_size) {
+    i32 parent_inner = parent_size - padding.start - padding.end;
+    i32 remaining = MAX(parent_inner - child_size, 0);
     switch (align) {
-        case LAYLA_ALIGN_START:  return parent_padding;
-        case LAYLA_ALIGN_CENTER: return parent_padding + (parent_inner - child_size) / 2;
-        case LAYLA_ALIGN_END:    return parent_padding + parent_inner - child_size;
-    }
-
-    UNREACHABLE("It must always match against alignment");
-}
-
-static inline i32 align_along(Layla_Alignment align, i32 parent_size, i32 parent_padding, i32 children_size) {
-    i32 parent_inner = parent_size - 2 * parent_padding;
-    i32 remaining = MAX(parent_inner - children_size, 0);
-    switch (align) {
-        case LAYLA_ALIGN_START:  return 0;
-        case LAYLA_ALIGN_CENTER: return remaining / 2;
-        case LAYLA_ALIGN_END:    return remaining;
+        case LAYLA_ALIGN_START:  return padding.start;
+        case LAYLA_ALIGN_CENTER: return padding.start + remaining / 2;
+        case LAYLA_ALIGN_END:    return padding.start + remaining;
     }
 
     UNREACHABLE("It must always match against alignment");
@@ -690,6 +686,14 @@ static inline SizeRange get_size_range(Layla_SizeStyle size) {
         case LAYLA_SIZE_FILL:  return (SizeRange) {size.as.fill.min, size.as.fill.max};
     }
     UNREACHABLE("Unknown size type");
+}
+
+static inline PaddingSides padding_sides_from_dimension(Layla_Padding padding, Dimension dim) {
+    if (dim == DIM_X) {
+        return (PaddingSides) {.start = padding.left, .end = padding.right};
+    }
+
+    return (PaddingSides) {.start = padding.top, .end = padding.bottom};
 }
 
 static inline i32 get_children_spacing(ChildrenIndices children, i32 spacing) {

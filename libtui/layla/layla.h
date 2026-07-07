@@ -65,6 +65,13 @@ typedef struct {
     i32 x, y, w, h;
 } Layla_Rectangle;
 
+typedef struct {
+    u8 left;
+    u8 right;
+    u8 top;
+    u8 bottom;
+} Layla_Padding;
+
 typedef LAYLA_PACKED_ENUM {
     LAYLA_DIR_ROW,
     LAYLA_DIR_COL,
@@ -84,10 +91,8 @@ typedef enum {
 typedef struct {
     Layla_Sizing size;
     Layla_Color color;
-    //TODO: add per-size padding
-    u8 padding;
+    Layla_Padding padding;
     u8 spacing;
-    //TODO: u8 margin;
     //TODO: BorderStyle border;
     Layla_Direction direction;
     Layla_Alignment align_children;

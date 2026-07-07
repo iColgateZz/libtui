@@ -65,6 +65,11 @@ typedef struct {
 } SizeRange;
 
 typedef struct {
+    i32 start;
+    i32 end;
+} PaddingSides;
+
+typedef struct {
     i32 natural_width;
     i32 minimum_width;
     i32 line_count;
@@ -126,13 +131,13 @@ static inline i32 *node_get_size(Node *node, Dimension dim);
 static inline i32 *node_get_min_size(Node *node, Dimension dim);
 static inline Layla_SizeStyle get_size_style(Layla_ContainerStyle style, Dimension dim);
 static inline SizeRange get_size_range(Layla_SizeStyle size);
+static inline PaddingSides padding_sides_from_dimension(Layla_Padding padding, Dimension dim);
 static inline i32 get_children_spacing(ChildrenIndices children, i32 spacing);
 static inline b32 node_is_fill(Node *node, Dimension dim);
 static inline i32 node_get_fill_max(Node *node, Dimension dim);
 static inline i32 node_get_fill_min(Node *node, Dimension dim);
 static inline void space_distribute(i32 space, List(NodePtr) nodes, Dimension dim);
-static inline i32 align_cross(Layla_Alignment align, i32 parent_size, i32 parent_padding, i32 child_size);
-static inline i32 align_along(Layla_Alignment align, i32 parent_size, i32 parent_padding, i32 children_size);
+static inline i32 align_offset(Layla_Alignment align, i32 parent_size, PaddingSides padding, i32 child_size);
 static inline Layla_Alignment node_get_align_self(Node *node);
 static inline b32 node_is_scroll_y(Node *node);
 static inline ScrollState *scroll_state_get_by_id(Layla_PersistentID id);
