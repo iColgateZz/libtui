@@ -6,6 +6,7 @@
 6. https://github.com/vlang/gui/blob/main/docs/LAYOUT_ALGORITHM.md
 7. https://docs.flutter.dev/ui/layout/constraints
 8. https://ghostty.org/docs/vt/concepts/sequences
+9. https://github.com/nicbarker/clay
 
 When adding to an existing repo:
     git submodule add <url>
