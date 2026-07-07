@@ -7,6 +7,8 @@
 #define ctrl(x) cp_from_byte((x) & 0x1F)
 
 //TODO: rename file to terminal.h and add term_ prefix to functions
+//TODO: maybe add internal state for drawing? E.g. set_drawing_color(Red) ->
+//      everything that is drawn is red until the state is unset?
 
 typedef struct {
     u8 r, g, b;
