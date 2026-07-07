@@ -42,14 +42,22 @@ typedef struct {
     .as.fixed = {.value = (fixed_value)},                      \
 })
 
-#define LAYLA_FIT(min_value, max_value) ((Layla_SizeStyle) {   \
-    .type = LAYLA_SIZE_FIT,                                    \
-    .as.fit = {.min = (min_value), .max = (max_value)},        \
+#define LAYLA_FIT(...) ((Layla_SizeStyle) { \
+    .type = LAYLA_SIZE_FIT,                 \
+    .as.fit = {                             \
+        .min = 0,                           \
+        .max = INT32_MAX,                   \
+        __VA_ARGS__                         \
+    },                                      \
 })
 
-#define LAYLA_FILL(min_value, max_value) ((Layla_SizeStyle) {  \
-    .type = LAYLA_SIZE_FILL,                                   \
-    .as.fill = {.min = (min_value), .max = (max_value)},       \
+#define LAYLA_FILL(...) ((Layla_SizeStyle) {    \
+    .type = LAYLA_SIZE_FILL,                    \
+    .as.fill = {                                \
+        .min = 0,                               \
+        .max = INT32_MAX,                       \
+        __VA_ARGS__                             \
+    },                                          \
 })
 
 typedef struct {
@@ -196,8 +204,8 @@ void layla_element_close(void);
     for (u8 _latch = (layla_container_element_open(             \
             id,                                                 \
             (Layla_ContainerConfig) {                           \
-                .style.size.w = LAYLA_FIT(0, INT32_MAX),        \
-                .style.size.h = LAYLA_FIT(0, INT32_MAX),        \
+                .style.size.w = LAYLA_FIT(),                    \
+                .style.size.h = LAYLA_FIT(),                    \
                 __VA_ARGS__                                     \
         }), 0); _latch < 1; _latch = 1, layla_element_close())
 
