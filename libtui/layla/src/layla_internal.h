@@ -114,7 +114,6 @@ static inline void container_commands(Node *node);
 
 static inline void text_intrinsic_width(Node *node);
 static inline void text_wrap_text(Node *node);
-static inline void text_commands(Node *node);
 static inline TextMeasurement text_process(Node *node, i32 wrap_width, b32 emit_commands);
 static inline i32 text_slice_measure(Layla_TextSlice text);
 

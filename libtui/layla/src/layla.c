@@ -391,7 +391,7 @@ static inline void container_commands(Node *node) {
     for (isize i = 0; i < children.count; ++i) {
         Node *child = node_from_index(children.offset + i);
         if (child->type == LAYLA_NODE_TEXT) {
-            text_commands(child);
+            text_process(node, MAX(node->w, 1), true);
         } else {
             container_commands(child);
         }
@@ -400,10 +400,6 @@ static inline void container_commands(Node *node) {
     list_append(&state.commands, ((Layla_Command) {
         .type = LAYLA_CMD_CLIP_END,
     }));
-}
-
-static inline void text_commands(Node *node) {
-    text_process(node, MAX(node->w, 1), true);
 }
 
 static inline TextMeasurement text_process(Node *node, i32 wrap_width, b32 emit_commands) {

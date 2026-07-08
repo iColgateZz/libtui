@@ -137,6 +137,7 @@ typedef struct {
 } Layla_TextConfig;
 
 typedef struct {
+    //TODO: maybe return element ID?
     LAYLA_PACKED_ENUM {
         LAYLA_CMD_RECTANGLE,
         LAYLA_CMD_TEXT,
