@@ -15,6 +15,21 @@
     #define LAYLA_PACKED_ENUM enum
 #endif
 
+#ifdef LAYLA_STATIC_STORAGE
+    #ifndef LAYLA_MAX_NODES
+        #define LAYLA_MAX_NODES 1024
+    #endif
+    #ifndef LAYLA_MAX_COMMANDS
+        #define LAYLA_MAX_COMMANDS 1024
+    #endif
+    #ifndef LAYLA_MAX_SCROLL_STATES
+        #define LAYLA_MAX_SCROLL_STATES 1024
+    #endif
+    #ifndef LAYLA_TEMP_STORAGE_SIZE
+        #define LAYLA_TEMP_STORAGE_SIZE (64 * 1024)
+    #endif
+#endif
+
 //TODO: percentage sizing?
 typedef struct {
     LAYLA_PACKED_ENUM {

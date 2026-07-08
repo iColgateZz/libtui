@@ -1,6 +1,44 @@
 #include "layla_internal.h"
 
+#ifdef LAYLA_STATIC_STORAGE
+static Node NODES[LAYLA_MAX_NODES];
+static TempID OPEN_NODE_STACK[LAYLA_MAX_NODES];
+static TempID TEMP_CHILD_STACK[LAYLA_MAX_NODES];
+static TempID FRAME_CHILDREN[LAYLA_MAX_NODES];
+static Layla_Command COMMANDS[LAYLA_MAX_COMMANDS];
+static ScrollState SCROLL_STATES[LAYLA_MAX_SCROLL_STATES];
+static union { // try different alignments
+    void *pointer;
+    long double maximum_alignment;
+    byte bytes[LAYLA_TEMP_STORAGE_SIZE];
+} TMP_STORE;
+
+static State state = {
+    .nodes = { .items = NODES, .capacity = LAYLA_MAX_NODES },
+    .open_node_stack = { .items = OPEN_NODE_STACK, .capacity = LAYLA_MAX_NODES },
+    .temporary_child_stack = { .items = TEMP_CHILD_STACK, .capacity = LAYLA_MAX_NODES },
+    .frame_children = { .items = FRAME_CHILDREN, .capacity = LAYLA_MAX_NODES },
+    .commands = { .items = COMMANDS, .capacity = LAYLA_MAX_COMMANDS },
+    .scroll_states = { .items = SCROLL_STATES, .capacity = LAYLA_MAX_SCROLL_STATES },
+    .tmp = {
+        .base_ptr = TMP_STORE.bytes,
+        .reserved_size = LAYLA_TEMP_STORAGE_SIZE,
+        .committed_size = LAYLA_TEMP_STORAGE_SIZE,
+        .page_size = LAYLA_TEMP_STORAGE_SIZE,
+    },
+};
+
+#define layla_list_append(list, item) do {          \
+        assert((list)->count < (list)->capacity);   \
+        (list)->items[(list)->count++] = (item);    \
+    } while (0)
+#else //!LAYLA_STATIC_STORAGE
 static State state = {0};
+#define layla_list_append list_append
+#endif //LAYLA_STATIC_STORAGE
+
+#define layla_list_pop  list_pop
+#define layla_list_last list_last
 
 void layla_state_set_text_measure_function(Layla_TextMeasureFunction function, void *userdata) {
     state.text_measure_function = function;
@@ -60,7 +98,7 @@ void layla_text_element_open(Layla_PersistentID id, Layla_TextConfig conf) {
         .as.text.config = conf,
     };
     TempID temp_id = node_push(node);
-    list_append(&state.open_node_stack, temp_id);
+    layla_list_append(&state.open_node_stack, temp_id);
 }
 
 void layla_container_element_open(Layla_PersistentID id, Layla_ContainerConfig conf) {
@@ -70,11 +108,11 @@ void layla_container_element_open(Layla_PersistentID id, Layla_ContainerConfig c
         .as.container.config = conf,
     };
     TempID temp_id = node_push(node);
-    list_append(&state.open_node_stack, temp_id);
+    layla_list_append(&state.open_node_stack, temp_id);
 }
 
 void layla_element_close(void) {
-    TempID closed_id = list_pop(&state.open_node_stack);
+    TempID closed_id = layla_list_pop(&state.open_node_stack);
     Node *closed = node_from_temp_id(closed_id);
     isize start = state.temporary_child_stack.count - closed->children.count;
     isize end = state.temporary_child_stack.count;
@@ -84,15 +122,15 @@ void layla_element_close(void) {
     state.temporary_child_stack.count = start;
     for (isize i = start; i < end; ++i) {
         TempID child_id = state.temporary_child_stack.items[i];
-        list_append(&state.frame_children, child_id);
+        layla_list_append(&state.frame_children, child_id);
         // Attach parent to child
         Node *child = node_from_temp_id(child_id);
         child->parent = closed_id;
     }
 
-    list_append(&state.temporary_child_stack, closed_id);
+    layla_list_append(&state.temporary_child_stack, closed_id);
     if (closed_id > LAYLA_ROOT_TEMP_ID) {
-        TempID parent_id = list_last(&state.open_node_stack);
+        TempID parent_id = layla_list_last(&state.open_node_stack);
         Node *parent = node_from_temp_id(parent_id);
         parent->children.count++;
     }
@@ -105,7 +143,7 @@ Layla_PersistentID layla_state_get_hovered_element_id(void) {
 b32 layla_state_is_element_hovered(void) {
     if (state.open_node_stack.count == 0) return false;
 
-    TempID current_id = list_last(&state.open_node_stack);
+    TempID current_id = layla_list_last(&state.open_node_stack);
     Layla_PersistentID persistent_id = node_from_temp_id(current_id)->id;
     return persistent_id != LAYLA_PERSISTENT_ID_NONE &&
            persistent_id == state.hovered_persistent_id;
@@ -268,14 +306,16 @@ static inline void container_fill_size(Node *node, Dimension dim) {
 
         if (fill_count > 0) {
             Scratch scratch = scratch_begin(&state.tmp);
+            Node **fill_items = arena_push(scratch.arena, Node *, fill_count);
+            assert(fill_items != NULL && "TODO: handle later");
             List(NodePtr) fill_list = {
-                .items = arena_push(scratch.arena, Node *, fill_count),
+                .items = fill_items,
                 .capacity = fill_count,
             };
 
             for (isize i = 0; i < children.count; ++i) {
                 Node *child = node_from_index(children.offset + i);
-                if (node_is_fill(child, dim)) list_append(&fill_list, child);
+                if (node_is_fill(child, dim)) layla_list_append(&fill_list, child);
             }
 
             space_distribute(remaining_size, fill_list, dim);
@@ -373,13 +413,13 @@ static inline void container_positions(Node *node) {
 }
 
 static inline void container_commands(Node *node) {
-    list_append(&state.commands,
+    layla_list_append(&state.commands,
         ((Layla_Command) {.type = LAYLA_CMD_CLIP_START, .as.clip_start = {
             .x = node->x, .y = node->y, .w = node->w, .h = node->h
         }})
     );
 
-    list_append(&state.commands,
+    layla_list_append(&state.commands,
         ((Layla_Command) {.type = LAYLA_CMD_RECTANGLE, .as.rectangle = {
             .x = node->x, .y = node->y, .w = node->w, .h = node->h,
             .color = node->as.container.config.style.color,
@@ -391,13 +431,13 @@ static inline void container_commands(Node *node) {
     for (isize i = 0; i < children.count; ++i) {
         Node *child = node_from_index(children.offset + i);
         if (child->type == LAYLA_NODE_TEXT) {
-            text_process(node, MAX(node->w, 1), true);
+            text_process(child, MAX(child->w, 1), true);
         } else {
             container_commands(child);
         }
     }
 
-    list_append(&state.commands, ((Layla_Command) {
+    layla_list_append(&state.commands, ((Layla_Command) {
         .type = LAYLA_CMD_CLIP_END,
     }));
 }
@@ -541,7 +581,7 @@ static inline void append_text_command(
 ) {
     Layla_TextSlice source = config.text;
     Layla_TextStyle style = config.style;
-    list_append(&state.commands,
+    layla_list_append(&state.commands,
         ((Layla_Command) {.type = LAYLA_CMD_TEXT, .as.text = {
             .x = line_x,
             .y = line_y,
@@ -601,7 +641,7 @@ static inline Node *node_from_index(i32 index) {
 
 static inline TempID node_push(Node node) {
     TempID id = state.nodes.count;
-    list_append(&state.nodes, node);
+    layla_list_append(&state.nodes, node);
     return id;
 }
 
@@ -842,8 +882,8 @@ static inline ScrollState *scroll_state_get_by_id(Layla_PersistentID id) {
         if (scroll_state->id == id) return scroll_state;
     }
 
-    list_append(&state.scroll_states, ((ScrollState) {.id = id}));
-    return &list_last(&state.scroll_states);
+    layla_list_append(&state.scroll_states, ((ScrollState) {.id = id}));
+    return &layla_list_last(&state.scroll_states);
 }
 
 static inline b32 node_is_scroll_y(Node *node) {
