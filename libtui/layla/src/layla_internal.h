@@ -15,7 +15,6 @@ typedef i32 TempID;
 #define LAYLA_TEMP_ID_NONE (-1)
 #define LAYLA_ROOT_TEMP_ID 0
 
-//TODO: maybe store a list of persistent id -> temp id for querying data by persistent id?
 typedef struct {
     TempID parent;
     Layla_PersistentID id;
@@ -73,7 +72,6 @@ typedef struct {
     i32 line_count;
 } TextMeasurement;
 
-//TODO: depending on macro-configuration, lists and arena should use heap/static lists
 typedef struct {
     List(Node) nodes;
     List(TempID) open_node_stack;

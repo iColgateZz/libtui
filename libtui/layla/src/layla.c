@@ -677,7 +677,7 @@ static inline Layla_Alignment node_get_align_self(Node *node) {
 
 static inline i32 align_offset(Layla_Alignment align, i32 parent_size, PaddingSides padding, i32 child_size) {
     i32 parent_inner = parent_size - padding.start - padding.end;
-    i32 remaining = MAX(parent_inner - child_size, 0);
+    i32 remaining = parent_inner - child_size;
     switch (align) {
         case LAYLA_ALIGN_START:  return padding.start;
         case LAYLA_ALIGN_CENTER: return padding.start + remaining / 2;
