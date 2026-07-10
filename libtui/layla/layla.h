@@ -30,17 +30,20 @@
     #endif
 #endif
 
-//TODO: percentage sizing?
 typedef struct {
     LAYLA_PACKED_ENUM {
         LAYLA_SIZE_FIT,
         LAYLA_SIZE_FILL,
         LAYLA_SIZE_FIXED,
+        LAYLA_SIZE_PERCENT,
     } type;
     union {
         struct {
             i32 value;
         } fixed;
+        struct {
+            f32 value;
+        } percent;
         struct {
             i32 min;
             i32 max;
@@ -55,6 +58,11 @@ typedef struct {
 #define LAYLA_FIXED(fixed_value) ((Layla_SizeStyle) {          \
     .type = LAYLA_SIZE_FIXED,                                  \
     .as.fixed = {.value = (fixed_value)},                      \
+})
+
+#define LAYLA_PERCENT(percent_value) ((Layla_SizeStyle) {   \
+    .type = LAYLA_SIZE_PERCENT,                             \
+    .as.percent = {.value = (percent_value)},               \
 })
 
 #define LAYLA_FIT(...) ((Layla_SizeStyle) { \
