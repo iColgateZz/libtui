@@ -73,6 +73,7 @@ i32 main(void) {
                     .direction = LAYLA_DIR_COL,
                     .padding = {.left = 1, .right = 1, .top = 5, .bottom = 1},
                     .scroll = LAYLA_SCROLL_Y,
+                    .border = {.width = 5},
                 }) {
                     Layla_Text(4, .text = LAYLA_TEXT_SLICE("LibTUI text wraps inside containers. LibTUI text wraps inside containers."),
                         .style = {
@@ -125,6 +126,35 @@ i32 main(void) {
                             put_cp(x, text.y, cp);
                             merge_effect(x, text.y, effect);
                             x += cp.display_width;
+                        }
+
+                        break;
+                    }
+
+                    case LAYLA_CMD_BORDER: {
+                        Layla_CommandBorder border = cmd.as.border;
+                        Rectangle rectangle = *(Rectangle *)&border;
+                        Effect effect = {
+                            .fg = *(RGB *)&border.color,
+                            .flags = EFFECT_FG,
+                        };
+
+                        if (border.userdata == NULL) {
+                            i32 x0 = rectangle.x;
+                            i32 y0 = rectangle.y;
+                            i32 x1 = rectangle.x + rectangle.w - 1;
+                            i32 y1 = rectangle.y + rectangle.h - 1;
+
+                            draw_box(rectangle);
+
+                            for (i32 x = x0; x <= x1; ++x) {
+                                merge_effect(x, y0, effect);
+                                merge_effect(x, y1, effect);
+                            }
+                            for (i32 y = y0; y <= y1; ++y) {
+                                merge_effect(x0, y, effect);
+                                merge_effect(x1, y, effect);
+                            }
                         }
 
                         break;

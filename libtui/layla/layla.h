@@ -103,6 +103,12 @@ typedef struct {
     u8 bottom;
 } Layla_Padding;
 
+typedef struct {
+    u8 width;
+    Layla_Color color;
+    void *userdata;
+} Layla_BorderStyle;
+
 typedef LAYLA_PACKED_ENUM {
     LAYLA_DIR_ROW,
     LAYLA_DIR_COL,
@@ -123,8 +129,8 @@ typedef struct {
     Layla_Sizing size;
     Layla_Color color;
     Layla_Padding padding;
+    Layla_BorderStyle border;
     u8 spacing;
-    //TODO: BorderStyle border;
     Layla_Direction direction;
     Layla_Alignment align_children;
     Layla_Alignment align_self;
@@ -166,8 +172,8 @@ typedef struct {
         LAYLA_CMD_TEXT,
         LAYLA_CMD_CLIP_START,
         LAYLA_CMD_CLIP_END,
+        LAYLA_CMD_BORDER,
         //TODO: Custom container should be offset into the custom-user-zone
-        // LAYLA_CMD_BORDER, // pass concrete codepoints to draw
     } type;
     union {
         struct Layla_CommandRectangle {
@@ -184,12 +190,18 @@ typedef struct {
         struct Layla_CommandClipStart {
             i32 x, y, w, h;
         } clip_start;
+        struct Layla_CommandBorder {
+            i32 x, y, w, h;
+            Layla_Color color;
+            void *userdata;
+        } border;
     } as;
 } Layla_Command;
 
 typedef struct Layla_CommandRectangle Layla_CommandRectangle;
 typedef struct Layla_CommandText Layla_CommandText;
 typedef struct Layla_CommandClipStart Layla_CommandClipStart;
+typedef struct Layla_CommandBorder Layla_CommandBorder;
 
 typedef struct {
     Layla_Command *items;

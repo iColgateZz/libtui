@@ -225,7 +225,7 @@ static inline void container_intrinsic_size(Node *node, Dimension dim) {
     ChildrenIndices children = node->children;
     Layla_ContainerStyle style = node->as.container.config.style;
     Layla_SizeStyle size_style = get_size_style(style, dim);
-    PaddingSides padding = padding_sides_from_dimension(style.padding, dim);
+    PaddingSides padding = padding_sides_from_container_style(style, dim);
     i32 total_padding = padding.start + padding.end;
     if (size_style.type == LAYLA_SIZE_FIXED) {
         *node_get_size(node, dim) = *node_get_min_size(node, dim) = size_style.as.fixed.value;
@@ -287,7 +287,7 @@ static inline void container_fill_height(Node *node) {
 static inline void container_fill_size(Node *node, Dimension dim) {
     Layla_ContainerStyle style = node->as.container.config.style;
     ChildrenIndices children = node->children;
-    PaddingSides padding = padding_sides_from_dimension(style.padding, dim);
+    PaddingSides padding = padding_sides_from_container_style(style, dim);
     i32 total_padding = padding.start + padding.end;
 
     if (dim == direction_get_main_dimension(style.direction)) {
@@ -378,9 +378,9 @@ static inline void container_positions(Node *node) {
     ChildrenIndices children = node->children;
     Dimension main_dim = direction_get_main_dimension(style.direction);
     Dimension cross_dim = dimension_get_other(main_dim);
-    PaddingSides main_padding = padding_sides_from_dimension(style.padding, main_dim);
-    PaddingSides cross_padding = padding_sides_from_dimension(style.padding, cross_dim);
-    PaddingSides vertical_padding = padding_sides_from_dimension(style.padding, DIM_Y);
+    PaddingSides main_padding = padding_sides_from_container_style(style, main_dim);
+    PaddingSides cross_padding = padding_sides_from_container_style(style, cross_dim);
+    PaddingSides vertical_padding = padding_sides_from_container_style(style, DIM_Y);
     i32 children_main_size = get_children_spacing(children, style.spacing);
     i32 content_bottom = node->y + vertical_padding.start;
 
@@ -446,6 +446,25 @@ static inline void container_commands(Node *node) {
         } else {
             container_commands(child);
         }
+    }
+
+    Layla_BorderStyle border = node->as.container.config.style.border;
+    for (i32 i = 0; i < border.width; ++i) {
+        i32 w = node->w - 2 * i;
+        i32 h = node->h - 2 * i;
+        if (w < 2 || h < 2) continue;
+
+        layla_list_append(&state.commands, ((Layla_Command) {
+            .type = LAYLA_CMD_BORDER,
+            .as.border = {
+                .x = node->x + i,
+                .y = node->y + i,
+                .w = w,
+                .h = h,
+                .color = border.color,
+                .userdata = border.userdata,
+            },
+        }));
     }
 
     layla_list_append(&state.commands, ((Layla_Command) {
@@ -736,12 +755,20 @@ static inline SizeRange get_size_range(Layla_SizeStyle size) {
     UNREACHABLE("Unknown size type");
 }
 
-static inline PaddingSides padding_sides_from_dimension(Layla_Padding padding, Dimension dim) {
+static inline PaddingSides padding_sides_from_container_style(Layla_ContainerStyle style, Dimension dim) {
+    Layla_Padding padding = style.padding;
+    i32 border_width = style.border.width;
     if (dim == DIM_X) {
-        return (PaddingSides) {.start = padding.left, .end = padding.right};
+        return (PaddingSides) {
+            .start = padding.left + border_width,
+            .end = padding.right + border_width,
+        };
     }
 
-    return (PaddingSides) {.start = padding.top, .end = padding.bottom};
+    return (PaddingSides) {
+        .start = padding.top + border_width,
+        .end = padding.bottom + border_width,
+    };
 }
 
 static inline i32 get_children_spacing(ChildrenIndices children, i32 spacing) {
