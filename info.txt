@@ -7,6 +7,7 @@
 7. https://docs.flutter.dev/ui/layout/constraints
 8. https://ghostty.org/docs/vt/concepts/sequences
 9. https://github.com/nicbarker/clay
+10. https://en.wikipedia.org/wiki/Box-drawing_characters
 
 When adding to an existing repo:
     git submodule add <url>
