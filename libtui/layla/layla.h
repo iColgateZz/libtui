@@ -125,6 +125,11 @@ typedef LAYLA_PACKED_ENUM {
     LAYLA_SCROLL_Y,
 } Layla_Scroll;
 
+typedef LAYLA_PACKED_ENUM {
+    LAYLA_OVERFLOW_HIDDEN,
+    LAYLA_OVERFLOW_VISIBLE,
+} Layla_Overflow;
+
 typedef struct {
     Layla_Sizing size;
     Layla_Color color;
@@ -135,6 +140,7 @@ typedef struct {
     Layla_Alignment align_children;
     Layla_Alignment align_self;
     Layla_Scroll scroll;
+    Layla_Overflow overflow;
 } Layla_ContainerStyle;
 
 typedef struct {
@@ -210,8 +216,6 @@ typedef struct {
     Layla_Command *items;
     isize count;
 } Layla_CommandSlice;
-
-//TODO: configurable clipping/overflow, not always overflow-hidden
 
 // Return the width of the borrowed UTF-8 span in layout units.
 // The function must handle empty spans and return a non-negative value.

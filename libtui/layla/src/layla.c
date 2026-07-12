@@ -424,16 +424,21 @@ static inline void container_positions(Node *node) {
 }
 
 static inline void container_commands(Node *node) {
-    layla_list_append(&state.commands,
-        ((Layla_Command) {.type = LAYLA_CMD_CLIP_START, .id = node->id, .as.clip_start = {
-            .x = node->x, .y = node->y, .w = node->w, .h = node->h
-        }})
-    );
+    Layla_ContainerStyle style = node->as.container.config.style;
+    b32 overflow_hidden = style.overflow == LAYLA_OVERFLOW_HIDDEN;
+
+    if (overflow_hidden) {
+        layla_list_append(&state.commands,
+            ((Layla_Command) {.type = LAYLA_CMD_CLIP_START, .id = node->id, .as.clip_start = {
+                .x = node->x, .y = node->y, .w = node->w, .h = node->h
+            }})
+        );
+    }
 
     layla_list_append(&state.commands,
         ((Layla_Command) {.type = LAYLA_CMD_RECTANGLE, .id = node->id, .as.rectangle = {
             .x = node->x, .y = node->y, .w = node->w, .h = node->h,
-            .color = node->as.container.config.style.color,
+            .color = style.color,
             .userdata = node->as.container.config.userdata,
         }})
     );
@@ -448,7 +453,7 @@ static inline void container_commands(Node *node) {
         }
     }
 
-    Layla_BorderStyle border = node->as.container.config.style.border;
+    Layla_BorderStyle border = style.border;
     for (i32 i = 0; i < border.width; ++i) {
         i32 w = node->w - 2 * i;
         i32 h = node->h - 2 * i;
@@ -468,9 +473,11 @@ static inline void container_commands(Node *node) {
         }));
     }
 
-    layla_list_append(&state.commands, ((Layla_Command) {
-        .type = LAYLA_CMD_CLIP_END, .id = node->id,
-    }));
+    if (overflow_hidden) {
+        layla_list_append(&state.commands, ((Layla_Command) {
+            .type = LAYLA_CMD_CLIP_END, .id = node->id,
+        }));
+    }
 }
 
 static inline TextMeasurement text_process(Node *node, i32 wrap_width, b32 emit_commands) {
@@ -632,9 +639,9 @@ static inline void append_text_command(
 
 static inline void hover_test(void) {
     Node *root = node_from_temp_id(LAYLA_ROOT_TEMP_ID);
-    Layla_Rectangle root_clip = rect_from_node(root);
+    state.hovered_persistent_id = LAYLA_PERSISTENT_ID_NONE;
     state.hovered_temp_id = node_hit_test(
-        root, root_clip,
+        root, rect_from_node(root),
         state.cursor_x, state.cursor_y
     );
 
@@ -645,13 +652,17 @@ static inline void hover_test(void) {
 
 static inline TempID node_hit_test(Node *node, Layla_Rectangle parent_clip, i32 x, i32 y) {
     Layla_Rectangle node_rect = rect_from_node(node);
-    Layla_Rectangle clip = rect_intersect(parent_clip, node_rect);
-    if (!rect_contains_point(x, y, clip)) return LAYLA_TEMP_ID_NONE;
+    Layla_Rectangle node_clip = rect_intersect(parent_clip, node_rect);
+    if (!rect_contains_point(x, y, node_clip)) return LAYLA_TEMP_ID_NONE;
 
+    b32 overflow_visible = node->type == LAYLA_NODE_CONTAINER
+        && node->as.container.config.style.overflow == LAYLA_OVERFLOW_VISIBLE;
+
+    Layla_Rectangle child_clip = overflow_visible ? parent_clip : node_clip;
     ChildrenIndices children = node->children;
     for (isize i = children.count - 1; i >= 0; --i) {
         Node *child = node_from_index(children.offset + i);
-        TempID hit = node_hit_test(child, clip, x, y);
+        TempID hit = node_hit_test(child, child_clip, x, y);
         if (hit != LAYLA_TEMP_ID_NONE) return hit;
     }
 
