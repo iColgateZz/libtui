@@ -425,13 +425,13 @@ static inline void container_positions(Node *node) {
 
 static inline void container_commands(Node *node) {
     layla_list_append(&state.commands,
-        ((Layla_Command) {.type = LAYLA_CMD_CLIP_START, .as.clip_start = {
+        ((Layla_Command) {.type = LAYLA_CMD_CLIP_START, .id = node->id, .as.clip_start = {
             .x = node->x, .y = node->y, .w = node->w, .h = node->h
         }})
     );
 
     layla_list_append(&state.commands,
-        ((Layla_Command) {.type = LAYLA_CMD_RECTANGLE, .as.rectangle = {
+        ((Layla_Command) {.type = LAYLA_CMD_RECTANGLE, .id = node->id, .as.rectangle = {
             .x = node->x, .y = node->y, .w = node->w, .h = node->h,
             .color = node->as.container.config.style.color,
             .userdata = node->as.container.config.userdata,
@@ -456,6 +456,7 @@ static inline void container_commands(Node *node) {
 
         layla_list_append(&state.commands, ((Layla_Command) {
             .type = LAYLA_CMD_BORDER,
+            .id = node->id,
             .as.border = {
                 .x = node->x + i,
                 .y = node->y + i,
@@ -468,7 +469,7 @@ static inline void container_commands(Node *node) {
     }
 
     layla_list_append(&state.commands, ((Layla_Command) {
-        .type = LAYLA_CMD_CLIP_END,
+        .type = LAYLA_CMD_CLIP_END, .id = node->id,
     }));
 }
 
@@ -508,6 +509,7 @@ static inline TextMeasurement text_process(Node *node, i32 wrap_width, b32 emit_
             if (emit_commands) {
                 i32 line_x = node->x + align_offset(style.alignment, node->w, ((PaddingSides) {0}), line_width);
                 append_text_command(
+                    node->id,
                     config,
                     line_start_byte, cursor_byte,
                     line_x, node->y + measurement.line_count
@@ -553,6 +555,7 @@ static inline TextMeasurement text_process(Node *node, i32 wrap_width, b32 emit_
             if (emit_commands) {
                 i32 line_x = node->x + align_offset(style.alignment, node->w, ((PaddingSides) {0}), line_width);
                 append_text_command(
+                    node->id,
                     config,
                     line_start_byte, line_end_byte,
                     line_x, node->y + measurement.line_count
@@ -585,6 +588,7 @@ static inline TextMeasurement text_process(Node *node, i32 wrap_width, b32 emit_
     if (emit_commands) {
         i32 line_x = node->x + align_offset(style.alignment, node->w, ((PaddingSides) {0}), line_width);
         append_text_command(
+            node->id,
             config,
             line_start_byte, source.count,
             line_x, node->y + measurement.line_count
@@ -603,6 +607,7 @@ static inline i32 text_slice_measure(Layla_TextSlice text) {
 }
 
 static inline void append_text_command(
+    Layla_PersistentID id,
     Layla_TextConfig config,
     isize line_start_byte,
     isize line_end_byte,
@@ -612,7 +617,7 @@ static inline void append_text_command(
     Layla_TextSlice source = config.text;
     Layla_TextStyle style = config.style;
     layla_list_append(&state.commands,
-        ((Layla_Command) {.type = LAYLA_CMD_TEXT, .as.text = {
+        ((Layla_Command) {.type = LAYLA_CMD_TEXT, .id = id, .as.text = {
             .x = line_x,
             .y = line_y,
             .slice = {

@@ -165,8 +165,10 @@ typedef struct {
     void *userdata;
 } Layla_TextConfig;
 
+typedef i32 Layla_PersistentID;
+#define LAYLA_PERSISTENT_ID_NONE 0
+
 typedef struct {
-    //TODO: maybe return element ID?
     LAYLA_PACKED_ENUM {
         LAYLA_CMD_RECTANGLE,
         LAYLA_CMD_TEXT,
@@ -175,6 +177,7 @@ typedef struct {
         LAYLA_CMD_BORDER,
         //TODO: Custom container should be offset into the custom-user-zone
     } type;
+    Layla_PersistentID id;
     union {
         struct Layla_CommandRectangle {
             i32 x, y, w, h;
@@ -207,9 +210,6 @@ typedef struct {
     Layla_Command *items;
     isize count;
 } Layla_CommandSlice;
-
-typedef i32 Layla_PersistentID;
-#define LAYLA_PERSISTENT_ID_NONE 0
 
 //TODO: configurable clipping/overflow, not always overflow-hidden
 
