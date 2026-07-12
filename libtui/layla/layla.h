@@ -129,7 +129,6 @@ typedef struct {
     Layla_Sizing size;
     Layla_Color color;
     Layla_Padding padding;
-    //TODO: look for better box-drawing symbols?
     Layla_BorderStyle border;
     u8 spacing;
     Layla_Direction direction;

@@ -981,15 +981,15 @@ void draw_box(Rectangle r) {
     i32 x1 = r.x + r.w - 1;
     i32 y1 = r.y + r.h - 1;
 
-    put_cp(x0, y0, cp("┌"));
-    put_cp(x1, y0, cp("┐"));
-    put_cp(x0, y1, cp("└"));
-    put_cp(x1, y1, cp("┘"));
+    put_cp(x0, y0, cp("🭽"));
+    put_cp(x1, y0, cp("🭾"));
+    put_cp(x0, y1, cp("🭼"));
+    put_cp(x1, y1, cp("🭿"));
 
-    draw_line(x0 + 1, y0, x1 - 1, y0, cp("─"));
-    draw_line(x0 + 1, y1, x1 - 1, y1, cp("─"));
-    draw_line(x0, y0 + 1, x0, y1 - 1, cp("│"));
-    draw_line(x1, y0 + 1, x1, y1 - 1, cp("│"));
+    draw_line(x0 + 1, y0, x1 - 1, y0, cp("▔"));
+    draw_line(x0 + 1, y1, x1 - 1, y1, cp("▁"));
+    draw_line(x0, y0 + 1, x0, y1 - 1, cp("▏"));
+    draw_line(x1, y0 + 1, x1, y1 - 1, cp("▕"));
 }
 
 void fill_box(Rectangle r, Effect e) {

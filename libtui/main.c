@@ -73,7 +73,7 @@ i32 main(void) {
                     .direction = LAYLA_DIR_COL,
                     .padding = {.left = 1, .right = 1, .top = 5, .bottom = 1},
                     .scroll = LAYLA_SCROLL_Y,
-                    .border = {.width = 5},
+                    .border = {.width = 1},
                 }) {
                     Layla_Text(4, .text = LAYLA_TEXT_SLICE("LibTUI text wraps inside containers. LibTUI text wraps inside containers."),
                         .style = {
