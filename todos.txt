@@ -1,0 +1,18 @@
+TODO: Fix overflow-visible hit testing so children can be hovered outside the parent rect.
+TODO: Add floating or overlay containers for popups, dropdowns, modals, tooltips, and fixed panels.
+TODO: Add z-ordering for floating or overlay roots.
+TODO: Add transparent layout-only containers that do not emit rectangle commands.
+TODO: Add a way to represent no background color for containers.
+TODO: Add a custom command or custom element path with rectangle, id, and userdata.
+TODO: Add recoverable error handling instead of relying mostly on asserts.
+TODO: Add multiple Layla contexts.
+TODO: Add min and max constraints to percentage sizing.
+TODO: Add horizontal scrolling.
+TODO: Add cross-axis child alignment for containers.
+TODO: Add other text policies.
+TODO: Make text break behavior less hardcoded than ASCII space and newline.
+TODO: Add API to query an element rectangle by persistent ID.
+TODO: Add per-side border widths.
+TODO: Add optional command culling for elements outside the screen or clip.
+TODO: Add text-line culling for large scrollable text.
+TODO: Decide whether Layla public API should keep depending directly on psh_core types.
