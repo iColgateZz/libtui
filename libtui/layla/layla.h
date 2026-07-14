@@ -92,6 +92,18 @@ typedef struct {
     u8 r, g, b;
 } Layla_Color;
 
+#define LAYLA_RGB(r, g, b) ((Layla_Color) {(r), (g), (b)})
+
+typedef struct {
+    Layla_Color color;
+    b32 is_set;
+} Layla_Background;
+
+#define LAYLA_BACKGROUND(r, g, b) ((Layla_Background) { \
+    .color = LAYLA_RGB((r), (g), (b)),                  \
+    .is_set = true,                                     \
+})
+
 typedef struct {
     i32 x, y, w, h;
 } Layla_Rectangle;
@@ -132,7 +144,7 @@ typedef LAYLA_PACKED_ENUM {
 
 typedef struct {
     Layla_Sizing size;
-    Layla_Color color;
+    Layla_Background background;
     Layla_Padding padding;
     Layla_BorderStyle border;
     u8 spacing;

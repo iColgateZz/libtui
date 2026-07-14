@@ -55,20 +55,20 @@ i32 main(void) {
             layla_layout_begin();
 
             Layla_Container(1, .style = {
-                .color = {196, 240, 120},
+                .background = LAYLA_BACKGROUND(196, 240, 120),
                 .direction = LAYLA_DIR_ROW,
                 .size = {.w = LAYLA_FIXED(w), .h = LAYLA_FIXED(h)},
             }) {
                 Layla_Container(2, .style = {
                     .size = {.w = LAYLA_FILL(.max = 10), .h = LAYLA_PERCENT(0.5)},
                     // .size = {.w = LAYLA_PERCENT(0.4), .h = LAYLA_PERCENT(0.5)},
-                    .color = {255, 133, 182},
+                    .background = LAYLA_BACKGROUND(255, 133, 182),
                     .align_self = LAYLA_ALIGN_CENTER,
                 });
 
                 Layla_Container(3, .style = {
                     .size = {.w = LAYLA_PERCENT(.8), .h = LAYLA_FIT()},
-                    .color = {233, 255, 57},
+                    .background = LAYLA_BACKGROUND(233, 255, 57),
                     .align_self = LAYLA_ALIGN_CENTER,
                     .direction = LAYLA_DIR_COL,
                     .padding = {.left = 1, .right = 1, .top = 5, .bottom = 1},
@@ -83,13 +83,13 @@ i32 main(void) {
                     );
                     Layla_Container(5, .style = {
                         .size = {.w = LAYLA_FILL(), .h = LAYLA_FIXED(5)},
-                        .color = {10, 9, 254},
+                        .background = LAYLA_BACKGROUND(10, 9, 254),
                     });
                 }
 
                 Layla_Container(6, .style = {
                     .size = {.w = LAYLA_FILL(), .h = LAYLA_FIXED(5)},
-                    .color = {195, 255, 57},
+                    .background = LAYLA_BACKGROUND(195, 255, 57),
                     .align_self = LAYLA_ALIGN_CENTER,
                 });
             }

@@ -435,13 +435,15 @@ static inline void container_commands(Node *node) {
         );
     }
 
-    layla_list_append(&state.commands,
-        ((Layla_Command) {.type = LAYLA_CMD_RECTANGLE, .id = node->id, .as.rectangle = {
-            .x = node->x, .y = node->y, .w = node->w, .h = node->h,
-            .color = style.color,
-            .userdata = node->as.container.config.userdata,
-        }})
-    );
+    if (style.background.is_set) {
+        layla_list_append(&state.commands,
+            ((Layla_Command) {.type = LAYLA_CMD_RECTANGLE, .id = node->id, .as.rectangle = {
+                .x = node->x, .y = node->y, .w = node->w, .h = node->h,
+                .color = style.background.color,
+                .userdata = node->as.container.config.userdata,
+            }})
+        );
+    }
 
     ChildrenIndices children = node->children;
     for (isize i = 0; i < children.count; ++i) {
