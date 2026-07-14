@@ -160,6 +160,10 @@ i32 main(void) {
                         break;
                     }
 
+                    case LAYLA_CMD_CUSTOM: {
+                        break;
+                    }
+
                     case LAYLA_CMD_CLIP_START: {
                         Layla_CommandClipStart clip_start = cmd.as.clip_start;
                         clip_push_rect(*(Rectangle *)&clip_start);

@@ -62,14 +62,14 @@ typedef struct {
     .as.fixed = {.value = (fixed_value)},                      \
 })
 
-#define LAYLA_PERCENT(percent, ...) ((Layla_SizeStyle) {    \
-    .type = LAYLA_SIZE_PERCENT,                             \
-    .as.percent = {                                         \
-        .value = (percent),                                 \
-        .min = 0,                                           \
-        .max = INT32_MAX,                                   \
-        __VA_ARGS__,                                        \
-    },                                                      \
+#define LAYLA_PERCENT(percent_value, ...) ((Layla_SizeStyle) {  \
+    .type = LAYLA_SIZE_PERCENT,                                 \
+    .as.percent = {                                             \
+        .value = (percent_value),                               \
+        .min = 0,                                               \
+        .max = INT32_MAX,                                       \
+        __VA_ARGS__                                             \
+    },                                                          \
 })
 
 #define LAYLA_FIT(...) ((Layla_SizeStyle) { \
@@ -164,7 +164,7 @@ typedef struct {
 
 typedef struct {
     Layla_ContainerStyle style;
-    void *userdata;
+    void *custom;
 } Layla_ContainerConfig;
 
 typedef struct {
@@ -200,14 +200,13 @@ typedef struct {
         LAYLA_CMD_CLIP_START,
         LAYLA_CMD_CLIP_END,
         LAYLA_CMD_BORDER,
-        //TODO: Custom container should be offset into the custom-user-zone
+        LAYLA_CMD_CUSTOM,
     } type;
     Layla_PersistentID id;
     union {
         struct Layla_CommandRectangle {
             i32 x, y, w, h;
             Layla_Color color;
-            void *userdata;
         } rectangle;
         struct Layla_CommandText {
             i32 x, y;
@@ -223,6 +222,10 @@ typedef struct {
             Layla_Color color;
             void *userdata;
         } border;
+        struct Layla_CommandCustom {
+            i32 x, y, w, h;
+            void *userdata;
+        } custom;
     } as;
 } Layla_Command;
 
@@ -230,6 +233,7 @@ typedef struct Layla_CommandRectangle Layla_CommandRectangle;
 typedef struct Layla_CommandText Layla_CommandText;
 typedef struct Layla_CommandClipStart Layla_CommandClipStart;
 typedef struct Layla_CommandBorder Layla_CommandBorder;
+typedef struct Layla_CommandCustom Layla_CommandCustom;
 
 typedef struct {
     Layla_Command *items;

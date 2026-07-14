@@ -1,6 +1,5 @@
 TODO: Add floating or overlay containers for popups, dropdowns, modals, tooltips, and fixed panels.
 TODO: Add z-ordering for floating or overlay roots.
-TODO: Add a custom command or custom element path with rectangle, id, and userdata.
 TODO: Add recoverable error handling instead of relying mostly on asserts.
 TODO: Add multiple Layla contexts.
 

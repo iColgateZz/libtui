@@ -425,7 +425,8 @@ static inline void container_positions(Node *node) {
 }
 
 static inline void container_commands(Node *node) {
-    Layla_ContainerStyle style = node->as.container.config.style;
+    Layla_ContainerConfig config = node->as.container.config;
+    Layla_ContainerStyle style = config.style;
     b32 overflow_hidden = style.overflow == LAYLA_OVERFLOW_HIDDEN;
 
     if (overflow_hidden) {
@@ -441,9 +442,28 @@ static inline void container_commands(Node *node) {
             ((Layla_Command) {.type = LAYLA_CMD_RECTANGLE, .id = node->id, .as.rectangle = {
                 .x = node->x, .y = node->y, .w = node->w, .h = node->h,
                 .color = style.background.color,
-                .userdata = node->as.container.config.userdata,
             }})
         );
+    }
+
+    if (config.custom != NULL) {
+        PaddingSides horizontal_padding = padding_sides_from_container_style(style, DIM_X);
+        PaddingSides vertical_padding = padding_sides_from_container_style(style, DIM_Y);
+        i32 custom_w = node->w - horizontal_padding.start - horizontal_padding.end;
+        i32 custom_h = node->h - vertical_padding.start - vertical_padding.end;
+        if (custom_w > 0 && custom_h > 0) {
+            layla_list_append(&state.commands, ((Layla_Command) {
+                .type = LAYLA_CMD_CUSTOM,
+                .id = node->id,
+                .as.custom = {
+                    .x = node->x + horizontal_padding.start,
+                    .y = node->y + vertical_padding.start,
+                    .w = custom_w,
+                    .h = custom_h,
+                    .userdata = config.custom,
+                },
+            }));
+        }
     }
 
     ChildrenIndices children = node->children;
