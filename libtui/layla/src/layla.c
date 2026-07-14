@@ -296,7 +296,8 @@ static inline void container_fill_size(Node *node, Dimension dim) {
         for (isize i = 0; i < children.count; ++i) {
             Node *child = node_from_index(children.offset + i);
             if (node_is_percentage(child, dim)) {
-                *node_get_size(child, dim) = size_from_percentage(node_get_percentage(child, dim), available_size);
+                Layla_SizeStyle size_style = get_size_style(child->as.container.config.style, dim);
+                *node_get_size(child, dim) = size_from_percentage(size_style, available_size);
             }
         }
 
@@ -344,7 +345,7 @@ static inline void container_fill_size(Node *node, Dimension dim) {
                 case LAYLA_NODE_CONTAINER: {
                     Layla_SizeStyle size_style = get_size_style(child->as.container.config.style, dim);
                     if (size_style.type == LAYLA_SIZE_PERCENT) {
-                        *node_get_size(child, dim) = size_from_percentage(size_style.as.percent.value, available_size);
+                        *node_get_size(child, dim) = size_from_percentage(size_style, available_size);
                     } else if (size_style.type == LAYLA_SIZE_FILL) {
                         SizeRange range = get_size_range(size_style);
                         *node_get_size(child, dim) = CLAMP(content_size, MAX(range.min, *node_get_min_size(child, dim)), range.max);
@@ -772,7 +773,7 @@ static inline Layla_SizeStyle get_size_style(Layla_ContainerStyle style, Dimensi
 static inline SizeRange get_size_range(Layla_SizeStyle size) {
     switch (size.type) {
         case LAYLA_SIZE_FIXED: return (SizeRange) {size.as.fixed.value, size.as.fixed.value};
-        case LAYLA_SIZE_PERCENT: return (SizeRange) {0, INT32_MAX};
+        case LAYLA_SIZE_PERCENT: return (SizeRange) {size.as.percent.min, size.as.percent.max};
         case LAYLA_SIZE_FIT:   return (SizeRange) {size.as.fit.min, size.as.fit.max};
         case LAYLA_SIZE_FILL:  return (SizeRange) {size.as.fill.min, size.as.fill.max};
     }
@@ -817,14 +818,11 @@ static inline b32 node_is_percentage(Node *node, Dimension dim) {
     return false;
 }
 
-static inline f32 node_get_percentage(Node *node, Dimension dim) {
-    Layla_SizeStyle size = get_size_style(node->as.container.config.style, dim);
+static inline i32 size_from_percentage(Layla_SizeStyle size, i32 available_size) {
     assert(size.type == LAYLA_SIZE_PERCENT && "function is only for percentage size");
-    return size.as.percent.value;
-}
-
-static inline i32 size_from_percentage(f32 percentage, i32 available_size) {
-    return MAX(available_size, 0) * percentage;
+    SizeRange range = get_size_range(size);
+    i32 resolved = MAX(available_size, 0) * size.as.percent.value;
+    return CLAMP(resolved, range.min, range.max);
 }
 
 static inline i32 node_get_fill_max(Node *node, Dimension dim) {

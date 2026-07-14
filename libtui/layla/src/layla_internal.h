@@ -130,8 +130,7 @@ static inline PaddingSides padding_sides_from_container_style(Layla_ContainerSty
 static inline i32 get_children_spacing(ChildrenIndices children, i32 spacing);
 static inline b32 node_is_fill(Node *node, Dimension dim);
 static inline b32 node_is_percentage(Node *node, Dimension dim);
-static inline f32 node_get_percentage(Node *node, Dimension dim);
-static inline i32 size_from_percentage(f32 percentage, i32 available_size);
+static inline i32 size_from_percentage(Layla_SizeStyle size, i32 available_size);
 static inline i32 node_get_fill_max(Node *node, Dimension dim);
 static inline i32 node_get_fill_min(Node *node, Dimension dim);
 static inline void space_distribute(i32 space, List(NodePtr) nodes, Dimension dim);

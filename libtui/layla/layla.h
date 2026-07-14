@@ -43,6 +43,8 @@ typedef struct {
         } fixed;
         struct {
             f32 value;
+            i32 min;
+            i32 max;
         } percent;
         struct {
             i32 min;
@@ -60,9 +62,14 @@ typedef struct {
     .as.fixed = {.value = (fixed_value)},                      \
 })
 
-#define LAYLA_PERCENT(percent_value) ((Layla_SizeStyle) {   \
+#define LAYLA_PERCENT(percent, ...) ((Layla_SizeStyle) {    \
     .type = LAYLA_SIZE_PERCENT,                             \
-    .as.percent = {.value = (percent_value)},               \
+    .as.percent = {                                         \
+        .value = (percent),                                 \
+        .min = 0,                                           \
+        .max = INT32_MAX,                                   \
+        __VA_ARGS__,                                        \
+    },                                                      \
 })
 
 #define LAYLA_FIT(...) ((Layla_SizeStyle) { \

@@ -3,7 +3,6 @@ TODO: Add z-ordering for floating or overlay roots.
 TODO: Add a custom command or custom element path with rectangle, id, and userdata.
 TODO: Add recoverable error handling instead of relying mostly on asserts.
 TODO: Add multiple Layla contexts.
-TODO: Add min and max constraints to percentage sizing.
 
 TODO: Add horizontal scrolling.
 TODO: Add cross-axis child alignment for containers.
