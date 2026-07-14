@@ -653,20 +653,26 @@ static inline void hover_test(void) {
 }
 
 static inline TempID node_hit_test(Node *node, Layla_Rectangle parent_clip, i32 x, i32 y) {
+    if (!rect_contains_point(x, y, parent_clip)) return LAYLA_TEMP_ID_NONE;
+
     Layla_Rectangle node_rect = rect_from_node(node);
     Layla_Rectangle node_clip = rect_intersect(parent_clip, node_rect);
-    if (!rect_contains_point(x, y, node_clip)) return LAYLA_TEMP_ID_NONE;
+    b32 node_contains = rect_contains_point(x, y, node_clip);
 
-    b32 overflow_visible = node->type == LAYLA_NODE_CONTAINER
-        && node->as.container.config.style.overflow == LAYLA_OVERFLOW_VISIBLE;
+    b32 overflow_hidden = node->type == LAYLA_NODE_CONTAINER
+        && node->as.container.config.style.overflow == LAYLA_OVERFLOW_HIDDEN;
 
-    Layla_Rectangle child_clip = overflow_visible ? parent_clip : node_clip;
+    if (overflow_hidden && !node_contains) return LAYLA_TEMP_ID_NONE;
+
+    Layla_Rectangle child_clip = overflow_hidden ? node_clip : parent_clip;
     ChildrenIndices children = node->children;
     for (isize i = children.count - 1; i >= 0; --i) {
         Node *child = node_from_index(children.offset + i);
         TempID hit = node_hit_test(child, child_clip, x, y);
         if (hit != LAYLA_TEMP_ID_NONE) return hit;
     }
+
+    if (!node_contains) return LAYLA_TEMP_ID_NONE;
 
     return node->id != LAYLA_PERSISTENT_ID_NONE ? (TempID)(node - state.nodes.items) : LAYLA_TEMP_ID_NONE;
 }
