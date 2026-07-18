@@ -6,6 +6,7 @@ static TempID OPEN_NODE_STACK[LAYLA_MAX_NODES];
 static TempID TEMP_CHILD_STACK[LAYLA_MAX_NODES];
 static TempID FRAME_CHILDREN[LAYLA_MAX_NODES];
 static Layla_Command COMMANDS[LAYLA_MAX_COMMANDS];
+static Layla_Error ERRORS[LAYLA_MAX_ERRORS];
 static ScrollState SCROLL_STATES[LAYLA_MAX_SCROLL_STATES];
 static union { // try different alignments
     void *pointer;
@@ -19,6 +20,7 @@ static State state = {
     .temporary_child_stack = { .items = TEMP_CHILD_STACK, .capacity = LAYLA_MAX_NODES },
     .frame_children = { .items = FRAME_CHILDREN, .capacity = LAYLA_MAX_NODES },
     .commands = { .items = COMMANDS, .capacity = LAYLA_MAX_COMMANDS },
+    .errors = { .items = ERRORS, .capacity = LAYLA_MAX_ERRORS },
     .scroll_states = { .items = SCROLL_STATES, .capacity = LAYLA_MAX_SCROLL_STATES },
     .tmp = {
         .base_ptr = TMP_STORE.bytes,
@@ -39,6 +41,32 @@ static State state = {0};
 
 #define layla_list_pop  list_pop
 #define layla_list_last list_last
+
+static inline void error_emit(Layla_ErrorType type, Layla_PersistentID id, byte const *message) {
+    Layla_Error error = {
+        .type = type,
+        .id = id,
+        .message = message,
+    };
+
+    layla_list_append(&state.errors, error);
+
+    if (state.error_handler != NULL) {
+        state.error_handler(error, state.error_handler_userdata);
+    }
+}
+
+void layla_state_set_error_handler(Layla_ErrorHandler handler, void *userdata) {
+    state.error_handler = handler;
+    state.error_handler_userdata = userdata;
+}
+
+Layla_ErrorSlice layla_state_get_errors(void) {
+    return (Layla_ErrorSlice) {
+        .items = state.errors.items,
+        .count = state.errors.count,
+    };
+}
 
 void layla_state_set_text_measure_function(Layla_TextMeasureFunction function, void *userdata) {
     state.text_measure_function = function;
@@ -63,6 +91,15 @@ void layla_layout_begin(void) {
     state.frame_children.count = 0;
     state.commands.count = 0;
     state.hovered_temp_id = LAYLA_TEMP_ID_NONE;
+    state.errors.count = 0;
+
+    if (state.width <= 0 || state.height <= 0) {
+        error_emit(
+            LAYLA_ERROR_SCREEN_DIMENSIONS_NOT_SET,
+            LAYLA_PERSISTENT_ID_NONE,
+            "Layla screen dimensions must be set to positive values before layout"
+        );
+    }
 
     // open implicit root element
     layla_container_element_open(LAYLA_PERSISTENT_ID_NONE, (Layla_ContainerConfig) {
@@ -316,7 +353,7 @@ static inline void container_fill_size(Node *node, Dimension dim) {
         if (fill_count > 0) {
             Scratch scratch = scratch_begin(&state.tmp);
             Node **fill_items = arena_push(scratch.arena, Node *, fill_count);
-            assert(fill_items != NULL && "TODO: handle later");
+            assert(fill_items != NULL && "Layla temporary storage capacity was exceeded");
             List(NodePtr) fill_list = {
                 .items = fill_items,
                 .capacity = fill_count,
@@ -510,6 +547,15 @@ static inline TextMeasurement text_process(Node *node, i32 wrap_width, b32 emit_
     TextMeasurement measurement = {0};
     if (source.count <= 0) return measurement;
 
+    if (state.text_measure_function == NULL) {
+        error_emit(
+            LAYLA_ERROR_TEXT_MEASURE_FUNCTION_NOT_SET,
+            node->id,
+            "Layla text measure function must be set before laying out text"
+        );
+        return measurement;
+    }
+
     switch (style.wrap_policy) {
         case LAYLA_TEXT_WRAP_WORD: break;
         default: UNREACHABLE("Unknown text wrapping policy");
@@ -528,13 +574,13 @@ static inline TextMeasurement text_process(Node *node, i32 wrap_width, b32 emit_
                 .items = source.items + explicit_line_start_byte,
                 .count = cursor_byte - explicit_line_start_byte,
             };
-            measurement.natural_width = MAX(measurement.natural_width, text_slice_measure(explicit_line));
+            measurement.natural_width = MAX(measurement.natural_width, text_slice_measure(node->id, explicit_line));
 
             Layla_TextSlice line = {
                 .items = source.items + line_start_byte,
                 .count = cursor_byte - line_start_byte,
             };
-            line_width = text_slice_measure(line);
+            line_width = text_slice_measure(node->id, line);
 
             if (emit_commands) {
                 i32 line_x = node->x + align_offset(style.alignment, node->w, ((PaddingSides) {0}), line_width);
@@ -572,14 +618,14 @@ static inline TextMeasurement text_process(Node *node, i32 wrap_width, b32 emit_
             .items = source.items + word_start_byte,
             .count = cursor_byte - word_start_byte,
         };
-        i32 word_width = text_slice_measure(word);
+        i32 word_width = text_slice_measure(node->id, word);
         measurement.minimum_width = MAX(measurement.minimum_width, word_width);
 
         Layla_TextSlice line_with_word = {
             .items = source.items + line_start_byte,
             .count = cursor_byte - line_start_byte,
         };
-        i32 width_with_word = text_slice_measure(line_with_word);
+        i32 width_with_word = text_slice_measure(node->id, line_with_word);
         b32 word_overflows_line = wrap_width > 0 && line_has_word && width_with_word > wrap_width;
         if (word_overflows_line) {
             if (emit_commands) {
@@ -607,13 +653,13 @@ static inline TextMeasurement text_process(Node *node, i32 wrap_width, b32 emit_
         .items = source.items + explicit_line_start_byte,
         .count = source.count - explicit_line_start_byte,
     };
-    measurement.natural_width = MAX(measurement.natural_width, text_slice_measure(explicit_line));
+    measurement.natural_width = MAX(measurement.natural_width, text_slice_measure(node->id, explicit_line));
 
     Layla_TextSlice line = {
         .items = source.items + line_start_byte,
         .count = source.count - line_start_byte,
     };
-    line_width = text_slice_measure(line);
+    line_width = text_slice_measure(node->id, line);
 
     if (emit_commands) {
         i32 line_x = node->x + align_offset(style.alignment, node->w, ((PaddingSides) {0}), line_width);
@@ -629,10 +675,15 @@ static inline TextMeasurement text_process(Node *node, i32 wrap_width, b32 emit_
     return measurement;
 }
 
-static inline i32 text_slice_measure(Layla_TextSlice text) {
-    assert(state.text_measure_function != NULL && "Layla text measure function is not set");
+static inline i32 text_slice_measure(Layla_PersistentID id, Layla_TextSlice text) {
     i32 width = state.text_measure_function(text, state.text_measure_userdata);
-    assert(width >= 0 && "Layla text measure function returned a negative width");
+    if (width < 0) {
+        error_emit(
+            LAYLA_ERROR_TEXT_MEASURE_RETURNED_NEGATIVE_WIDTH,
+            id, "Layla text measure function returned a negative width"
+        );
+        return 0;
+    }
     return width;
 }
 

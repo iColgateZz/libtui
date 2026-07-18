@@ -25,6 +25,9 @@
     #ifndef LAYLA_MAX_SCROLL_STATES
         #define LAYLA_MAX_SCROLL_STATES 1024
     #endif
+    #ifndef LAYLA_MAX_ERRORS
+        #define LAYLA_MAX_ERRORS 128
+    #endif
     #ifndef LAYLA_TEMP_STORAGE_SIZE
         #define LAYLA_TEMP_STORAGE_SIZE (64 * 1024)
     #endif
@@ -193,6 +196,25 @@ typedef struct {
 typedef i32 Layla_PersistentID;
 #define LAYLA_PERSISTENT_ID_NONE 0
 
+typedef LAYLA_PACKED_ENUM {
+    LAYLA_ERROR_SCREEN_DIMENSIONS_NOT_SET,
+    LAYLA_ERROR_TEXT_MEASURE_FUNCTION_NOT_SET,
+    LAYLA_ERROR_TEXT_MEASURE_RETURNED_NEGATIVE_WIDTH,
+} Layla_ErrorType;
+
+typedef struct {
+    Layla_ErrorType type;
+    Layla_PersistentID id;
+    byte const *message;
+} Layla_Error;
+
+typedef struct {
+    Layla_Error *items;
+    isize count;
+} Layla_ErrorSlice;
+
+typedef void (*Layla_ErrorHandler)(Layla_Error error, void *userdata);
+
 typedef struct {
     LAYLA_PACKED_ENUM {
         LAYLA_CMD_RECTANGLE,
@@ -243,6 +265,9 @@ typedef struct {
 // Return the width of the borrowed UTF-8 span in layout units.
 // The function must handle empty spans and return a non-negative value.
 typedef i32 (*Layla_TextMeasureFunction)(Layla_TextSlice text, void *userdata);
+
+void layla_state_set_error_handler(Layla_ErrorHandler handler, void *userdata);
+Layla_ErrorSlice layla_state_get_errors(void);
 
 void layla_state_set_text_measure_function(Layla_TextMeasureFunction function, void *userdata);
 void layla_state_set_screen_dimensions(i32 w, i32 h);

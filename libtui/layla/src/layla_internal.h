@@ -38,6 +38,7 @@ typedef struct {
 } Node;
 
 list_def(Layla_Command)
+list_def(Layla_Error)
 list_def(Node)
 list_def(TempID)
 typedef Node* NodePtr;
@@ -78,6 +79,7 @@ typedef struct {
     List(TempID) temporary_child_stack;
     List(TempID) frame_children;
     List(Layla_Command) commands;
+    List(Layla_Error) errors;
     List(ScrollState) scroll_states;
     i32 width, height;
     i32 cursor_x, cursor_y;
@@ -85,11 +87,14 @@ typedef struct {
     Layla_PersistentID hovered_persistent_id;
     Layla_TextMeasureFunction text_measure_function;
     void *text_measure_userdata;
+    Layla_ErrorHandler error_handler;
+    void *error_handler_userdata;
     Arena tmp;
 } State;
 
 // Functions
 
+static inline void error_emit(Layla_ErrorType type, Layla_PersistentID id, byte const *message);
 static inline Node *node_from_temp_id(TempID id);
 static inline TempID temp_id_from_child_index(i32 index);
 static inline Node *node_from_index(i32 index);
@@ -113,7 +118,7 @@ static inline void container_commands(Node *node);
 static inline void text_intrinsic_width(Node *node);
 static inline void text_wrap_text(Node *node);
 static inline TextMeasurement text_process(Node *node, i32 wrap_width, b32 emit_commands);
-static inline i32 text_slice_measure(Layla_TextSlice text);
+static inline i32 text_slice_measure(Layla_PersistentID id, Layla_TextSlice text);
 
 static inline TempID node_hit_test(Node *node, Layla_Rectangle parent_clip, i32 x, i32 y);
 static inline b32 rect_contains_point(i32 x, i32 y, Layla_Rectangle r);
