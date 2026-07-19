@@ -1,5 +1,3 @@
-TODO: Add floating or overlay containers for popups, dropdowns, modals, tooltips, and fixed panels.
-TODO: Add z-ordering for floating or overlay roots.
 TODO: Add multiple Layla contexts. Shared workspace VS fully isolated contexts?
     One detail depends on what a context represents:
         If it represents a page on one terminal, dimensions, cursor position, and handlers should probably remain global.

@@ -78,6 +78,7 @@ typedef struct {
     List(TempID) open_node_stack;
     List(TempID) temporary_child_stack;
     List(TempID) frame_children;
+    List(TempID) floating_roots;
     List(Layla_Command) commands;
     List(Layla_Error) errors;
     List(ScrollState) scroll_states;
@@ -100,10 +101,8 @@ static inline TempID temp_id_from_child_index(i32 index);
 static inline Node *node_from_index(i32 index);
 static inline TempID node_push(Node node);
 static inline void hover_test(void);
-//TODO: maybe add a layout pass that can check for common errors
-//      it may be configured by some macro and not appear in production code
-//      that would also need an error reporting mechanism
-static inline void node_layout(Node *node);
+static inline void floating_layout(Node *node);
+static inline void floating_roots_sort(void);
 static inline void container_intrinsic_size(Node *node, Dimension dim);
 static inline void container_fill_size(Node *node, Dimension dim);
 
@@ -142,6 +141,7 @@ static inline void space_distribute(i32 space, List(NodePtr) nodes, Dimension di
 static inline i32 align_offset(Layla_Alignment align, i32 parent_size, PaddingSides padding, i32 child_size);
 static inline Layla_Alignment node_get_align_self(Node *node);
 static inline b32 node_is_scroll_y(Node *node);
+static inline b32 node_is_floating(Node *node);
 static inline ScrollState *scroll_state_get_by_id(Layla_PersistentID id);
 static inline void append_text_command(
     Layla_PersistentID id,
@@ -151,5 +151,6 @@ static inline void append_text_command(
     i32 line_x,
     i32 line_y
 );
+static inline void floating_measure_size(Node *node, Node *attached, Dimension dim);
 
 #endif

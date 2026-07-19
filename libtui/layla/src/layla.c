@@ -5,6 +5,7 @@ static Node NODES[LAYLA_MAX_NODES];
 static TempID OPEN_NODE_STACK[LAYLA_MAX_NODES];
 static TempID TEMP_CHILD_STACK[LAYLA_MAX_NODES];
 static TempID FRAME_CHILDREN[LAYLA_MAX_NODES];
+static TempID FLOATING_ROOTS[LAYLA_MAX_NODES];
 static Layla_Command COMMANDS[LAYLA_MAX_COMMANDS];
 static Layla_Error ERRORS[LAYLA_MAX_ERRORS];
 static ScrollState SCROLL_STATES[LAYLA_MAX_SCROLL_STATES];
@@ -19,6 +20,7 @@ static State state = {
     .open_node_stack = { .items = OPEN_NODE_STACK, .capacity = LAYLA_MAX_NODES },
     .temporary_child_stack = { .items = TEMP_CHILD_STACK, .capacity = LAYLA_MAX_NODES },
     .frame_children = { .items = FRAME_CHILDREN, .capacity = LAYLA_MAX_NODES },
+    .floating_roots = { .items = FLOATING_ROOTS, .capacity = LAYLA_MAX_NODES },
     .commands = { .items = COMMANDS, .capacity = LAYLA_MAX_COMMANDS },
     .errors = { .items = ERRORS, .capacity = LAYLA_MAX_ERRORS },
     .scroll_states = { .items = SCROLL_STATES, .capacity = LAYLA_MAX_SCROLL_STATES },
@@ -89,6 +91,7 @@ void layla_layout_begin(void) {
     state.open_node_stack.count = 0;
     state.temporary_child_stack.count = 0;
     state.frame_children.count = 0;
+    state.floating_roots.count = 0;
     state.commands.count = 0;
     state.hovered_temp_id = LAYLA_TEMP_ID_NONE;
     state.errors.count = 0;
@@ -119,7 +122,18 @@ Layla_CommandSlice layla_layout_end(void) {
     layla_element_close();
 
     Node *root = node_from_temp_id(LAYLA_ROOT_TEMP_ID);
-    node_layout(root);
+    container_intrinsic_width(root);
+    container_fill_width(root);
+    container_wrap_text(root);
+    container_intrinsic_height(root);
+    container_fill_height(root);
+    container_positions(root);
+    container_commands(root);
+
+    floating_roots_sort();
+    for (isize i = 0; i < state.floating_roots.count; ++i)
+        floating_layout(node_from_temp_id(state.floating_roots.items[i]));
+
     hover_test();
 
     return (Layla_CommandSlice) {
@@ -145,6 +159,11 @@ void layla_container_element_open(Layla_PersistentID id, Layla_ContainerConfig c
         .as.container.config = conf,
     };
     TempID temp_id = node_push(node);
+    if (conf.floating.attach_to != LAYLA_ATTACH_TO_NONE) {
+        assert(state.open_node_stack.count > 0 && "A floating container must be declared inside a container");
+        node.parent = layla_list_last(&state.open_node_stack);
+        layla_list_append(&state.floating_roots, (TempID) temp_id);
+    }
     layla_list_append(&state.open_node_stack, temp_id);
 }
 
@@ -164,6 +183,7 @@ void layla_element_close(void) {
         Node *child = node_from_temp_id(child_id);
         child->parent = closed_id;
     }
+    if (node_is_floating(closed)) return;
 
     layla_list_append(&state.temporary_child_stack, closed_id);
     if (closed_id > LAYLA_ROOT_TEMP_ID) {
@@ -219,19 +239,69 @@ void layla_state_update_scroll_offset_on_hovered_element(i32 delta_y) {
             return;
         }
 
+        if (node_is_floating(current)) break;
         if (current_id == LAYLA_ROOT_TEMP_ID) break;
         current_id = current->parent;
     }
 }
 
-static inline void node_layout(Node *node) {
+static inline void floating_layout(Node *node) {
+    Layla_Floating floating = node->as.container.config.floating;
+    Node *attached;
+    switch (floating.attach_to) {
+        case LAYLA_ATTACH_TO_PARENT: attached = node_from_temp_id(node->parent); break;
+        case LAYLA_ATTACH_TO_ROOT:   attached = node_from_temp_id(LAYLA_ROOT_TEMP_ID); break;
+        case LAYLA_ATTACH_TO_NONE:   UNREACHABLE("Floating layout requires a floating container");
+    }
     container_intrinsic_width(node);
+    // Due to floating container not being measured by parent, it needs to measure w/h on its own
+    floating_measure_size(node, attached, DIM_X);
     container_fill_width(node);
     container_wrap_text(node);
     container_intrinsic_height(node);
+    // Same here
+    floating_measure_size(node, attached, DIM_Y);
     container_fill_height(node);
+    node->x = attached->x + align_offset(floating.align_x, attached->w, (PaddingSides) {0}, node->w);
+    node->y = attached->y + align_offset(floating.align_y, attached->h, (PaddingSides) {0}, node->h); 
     container_positions(node);
     container_commands(node);
+}
+
+static inline void floating_measure_size(Node *node, Node *attached, Dimension dim) {
+    Layla_SizeStyle size_style = get_size_style(node->as.container.config.style, dim);
+    i32 attached_size = *node_get_size(attached, dim);
+
+    switch (size_style.type) {
+        case LAYLA_SIZE_FIXED:
+        case LAYLA_SIZE_FIT: break;
+        case LAYLA_SIZE_FILL: {
+            SizeRange range = get_size_range(size_style);
+            i32 minimum_size = MAX(range.min, *node_get_min_size(node, dim));
+            *node_get_size(node, dim) = CLAMP(attached_size, minimum_size, range.max);
+            break;
+        }
+        case LAYLA_SIZE_PERCENT: *node_get_size(node, dim) = size_from_percentage(size_style, attached_size);
+    }
+}
+
+static inline void floating_roots_sort(void) {
+    for (isize i = 1; i < state.floating_roots.count; ++i) {
+        TempID current_id = state.floating_roots.items[i];
+        i32 current_z_index = node_from_temp_id(current_id)->as.container.config.floating.z_index;
+        isize position = i;
+
+        while (position > 0) {
+            TempID previous_id = state.floating_roots.items[position - 1];
+            i32 previous_z_index = node_from_temp_id(previous_id)->as.container.config.floating.z_index;
+            if (previous_z_index <= current_z_index) break;
+
+            state.floating_roots.items[position] = previous_id;
+            position--;
+        }
+
+        state.floating_roots.items[position] = current_id;
+    }
 }
 
 static inline void container_intrinsic_width(Node *node) {
@@ -713,11 +783,23 @@ static inline void append_text_command(
 
 static inline void hover_test(void) {
     Node *root = node_from_temp_id(LAYLA_ROOT_TEMP_ID);
+    Layla_Rectangle screen = rect_from_node(root);
     state.hovered_persistent_id = LAYLA_PERSISTENT_ID_NONE;
-    state.hovered_temp_id = node_hit_test(
-        root, rect_from_node(root),
-        state.cursor_x, state.cursor_y
-    );
+    state.hovered_temp_id = LAYLA_TEMP_ID_NONE;
+
+    for (isize i = state.floating_roots.count; i > 0; --i) {
+        TempID floating_root = state.floating_roots.items[i - 1];
+        state.hovered_temp_id = node_hit_test(node_from_temp_id(floating_root),
+                                              screen, state.cursor_x, state.cursor_y);
+        if (state.hovered_temp_id != LAYLA_TEMP_ID_NONE) break;
+    }
+
+    if (state.hovered_temp_id == LAYLA_TEMP_ID_NONE) {
+        state.hovered_temp_id = node_hit_test(
+            root, screen,
+            state.cursor_x, state.cursor_y
+        );
+    }
 
     if (state.hovered_temp_id == LAYLA_TEMP_ID_NONE) return;
 
@@ -1047,4 +1129,8 @@ static inline b32 node_is_scroll_y(Node *node) {
         case LAYLA_NODE_TEXT: return false;
     }
     return false;
+}
+
+static inline b32 node_is_floating(Node *node) {
+    return node->type == LAYLA_NODE_CONTAINER && node->as.container.config.floating.attach_to != LAYLA_ATTACH_TO_NONE;
 }

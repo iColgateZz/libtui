@@ -153,6 +153,17 @@ typedef LAYLA_PACKED_ENUM {
 } Layla_Overflow;
 
 typedef struct {
+    LAYLA_PACKED_ENUM {
+        LAYLA_ATTACH_TO_NONE,
+        LAYLA_ATTACH_TO_PARENT,
+        LAYLA_ATTACH_TO_ROOT,
+    } attach_to;
+    Layla_Alignment align_x;
+    Layla_Alignment align_y;
+    i32 z_index;
+} Layla_Floating;
+
+typedef struct {
     Layla_Sizing size;
     Layla_Background background;
     Layla_Padding padding;
@@ -167,6 +178,7 @@ typedef struct {
 
 typedef struct {
     Layla_ContainerStyle style;
+    Layla_Floating floating;
     void *custom;
 } Layla_ContainerConfig;
 
