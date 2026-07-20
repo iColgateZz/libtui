@@ -85,6 +85,18 @@ i32 main(void) {
                         .size = {.w = LAYLA_FILL(), .h = LAYLA_FIXED(5)},
                         .background = LAYLA_BACKGROUND(10, 9, 254),
                     });
+
+                    Layla_Container(10, 
+                        .style = {
+                            .background = LAYLA_BACKGROUND(0, 0, 0),
+                            .size = {.w = LAYLA_FIXED(10), .h = LAYLA_FIXED(10)}
+                        },
+                        .floating = {
+                            .attach_to = LAYLA_ATTACH_TO_PARENT,
+                            .z_index = 1,
+                            .align_x = LAYLA_ALIGN_CENTER,
+                        },
+                    );
                 }
 
                 Layla_Container(6, .style = {

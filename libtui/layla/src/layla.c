@@ -158,12 +158,16 @@ void layla_container_element_open(Layla_PersistentID id, Layla_ContainerConfig c
         .type = LAYLA_NODE_CONTAINER,
         .as.container.config = conf,
     };
-    TempID temp_id = node_push(node);
     if (conf.floating.attach_to != LAYLA_ATTACH_TO_NONE) {
-        assert(state.open_node_stack.count > 0 && "A floating container must be declared inside a container");
+        assert(state.open_node_stack.count > 0);
         node.parent = layla_list_last(&state.open_node_stack);
-        layla_list_append(&state.floating_roots, (TempID) temp_id);
     }
+
+    TempID temp_id = node_push(node);
+
+    if (conf.floating.attach_to != LAYLA_ATTACH_TO_NONE)
+        layla_list_append(&state.floating_roots, temp_id);
+
     layla_list_append(&state.open_node_stack, temp_id);
 }
 
