@@ -6,6 +6,10 @@
 #define LIBTUI_RENDERER_IMPL
     #include "renderer.h"
 
+enum {
+    BUTTON_QUIT_ID = 1,
+};
+
 static i32 text_measure(Layla_TextSlice text, void *userdata) {
     UNUSED(userdata);
 
@@ -18,6 +22,25 @@ static i32 text_measure(Layla_TextSlice text, void *userdata) {
     }
 
     return width;
+}
+
+static b32 button(Layla_ElementID id, Layla_TextSlice label, b32 left_mouse_pressed) {
+    b32 hovered = layla_state_is_element_hovered_by_id(id);
+
+    Layla_Container(.id = id, .style = {
+        .background = hovered ? LAYLA_COLOR(120, 150, 255) : LAYLA_COLOR(70, 90, 180),
+        .padding = {.left = 1, .right = 1},
+        .border = {.width = 1, .color = LAYLA_RGB(255, 255, 255)},
+        .align_self = LAYLA_ALIGN_CENTER,
+        .size = {.w = LAYLA_FIT(), .h = LAYLA_FIT()},
+    }) {
+        Layla_Text(.text = label, .style = {
+            .color = LAYLA_RGB(255, 255, 255),
+            .alignment = LAYLA_ALIGN_CENTER,
+        });
+    }
+
+    return hovered && left_mouse_pressed;
 }
 
 void update_layout_input(Event event) {
@@ -41,11 +64,13 @@ i32 main(void) {
     while (!quit) {
         begin_frame();
 
+        b32 left_mouse_pressed = false;
         Slice(Event) events = get_events();
         for (isize i = 0; i < events.count; ++i) {
             Event event = events.items[i];
             if (event_is_codepoint(event, cp("q"))) quit = true;
             update_layout_input(event);
+            if (event_is(event, EMouseLeft) && event.as.mouse.pressed) left_mouse_pressed = true;
         }
 
         {
@@ -101,6 +126,8 @@ i32 main(void) {
                         },
                     );
                 }
+
+                if (button(BUTTON_QUIT_ID, LAYLA_TEXT_SLICE("Quit"), left_mouse_pressed)) quit = true;
 
                 Layla_Container(.style = {
                     .size = {.w = LAYLA_FILL(), .h = LAYLA_FIXED(5)},
