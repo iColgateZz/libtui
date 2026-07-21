@@ -43,6 +43,7 @@ typedef struct {
 
 list_def(Layla_Command)
 list_def(Layla_Error)
+list_def(Layla_ElementID)
 list_def(Node)
 list_def(TempID)
 typedef Node* NodePtr;
@@ -85,11 +86,11 @@ typedef struct {
     List(TempID) floating_roots;
     List(Layla_Command) commands;
     List(Layla_Error) errors;
+    List(Layla_ElementID) hovered_element_ids;
     List(ScrollState) scroll_states;
     i32 width, height;
     i32 cursor_x, cursor_y;
     TempID hovered_temp_id;
-    Layla_ElementID hovered_element_id;
     Layla_TextMeasureFunction text_measure_function;
     void *text_measure_userdata;
     Layla_ErrorHandler error_handler;
@@ -123,7 +124,7 @@ static inline void text_wrap_text(Node *node);
 static inline TextMeasurement text_process(Node *node, i32 wrap_width, b32 emit_commands);
 static inline i32 text_slice_measure(Layla_ElementID id, Layla_TextSlice text);
 
-static inline TempID node_hit_test(Node *node, Layla_Rectangle parent_clip, i32 x, i32 y);
+static inline b32 node_hit_test(Node *node, Layla_Rectangle parent_clip, i32 x, i32 y);
 static inline b32 rect_contains_point(i32 x, i32 y, Layla_Rectangle r);
 static inline Layla_Rectangle rect_intersect(Layla_Rectangle a, Layla_Rectangle b);
 static inline Layla_Rectangle rect_from_node(Node *node);
