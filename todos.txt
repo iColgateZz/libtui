@@ -2,16 +2,26 @@ TODO: Add multiple Layla contexts. Shared workspace VS fully isolated contexts?
     One detail depends on what a context represents:
         If it represents a page on one terminal, dimensions, cursor position, and handlers should probably remain global.
         If it represents a terminal session or render surface, those values belong in the context.
-TODO: Add transitions.
+TODO: Add simple position, size, background, and border color transitions after persistent element data exists.
 
 TODO: Add horizontal scrolling.
+TODO: Add independent horizontal and vertical clipping.
+TODO: Add API to query scroll viewport, content size, current offsets, and maximum offsets.
 TODO: Add cross-axis child alignment for containers.
 TODO: Add other text policies.
 TODO: Make text break behavior less hardcoded than ASCII space and newline.
 TODO: Add API to query an element rectangle by persistent ID.
+TODO: Add a persistent element registry with previous rectangle, parent ID, and frame generation.
+TODO: Add string and indexed element ID helpers.
+TODO: Add separate parent and element attachment points for floating containers.
+TODO: Allow floating containers to attach to an arbitrary element ID.
+TODO: Add pointer capture and passthrough modes for floating containers.
 TODO: Add per-side border widths.
-TODO: Add optional command culling for elements outside the screen or clip.
+TODO: Add optional command and subtree culling for elements outside the screen or active clip.
 TODO: Add text-line culling for large scrollable text.
+TODO: Add a virtualization helper for large fixed-height terminal lists.
+TODO: Add debug introspection for element IDs, parents, rectangles, resolved sizes, clips, scroll state, and z-index.
+TODO: Expose enough element order and rectangle data for keyboard focus and directional navigation.
 TODO: Decide whether Layla public API should keep depending directly on psh_core types.
-TODO: Remove scroll states that are not used
+TODO: Remove scroll states that have not been used for several frames.
 TODO: Tests?
