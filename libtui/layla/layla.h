@@ -142,7 +142,7 @@ typedef LAYLA_PACKED_ENUM {
     LAYLA_ALIGN_END,
 } Layla_Alignment;
 
-typedef i32 Layla_ElementID;
+typedef u32 Layla_ElementID;
 #define LAYLA_ELEMENT_ID_NONE 0
 
 typedef struct {
@@ -193,7 +193,6 @@ typedef struct {
 } Layla_ContainerStyle;
 
 typedef struct {
-    Layla_ElementID id;
     Layla_ContainerStyle style;
     Layla_Floating floating;
     void *custom;
@@ -217,7 +216,6 @@ typedef struct {
 } Layla_TextStyle;
 
 typedef struct {
-    Layla_ElementID id;
     Layla_TextSlice text;
     Layla_TextStyle style;
     void *userdata;
@@ -311,16 +309,32 @@ b32 layla_state_is_element_hovered(void);
 b32 layla_state_is_element_hovered_by_id(Layla_ElementID id);
 // The returned slice remains valid until the cursor position is set again.
 Layla_ElementIDSlice layla_state_get_hovered_element_ids(void);
+Layla_ElementID layla_element_get_open_id(void);
 
 void layla_layout_begin(void);
 Layla_CommandSlice layla_layout_end(void);
 
-void layla_text_element_open(Layla_TextConfig conf);
-void layla_container_element_open(Layla_ContainerConfig conf);
+void layla_text_element_open(void);
+void layla_text_element_open_with_id(Layla_ElementID id);
+void layla_text_element_configure(Layla_TextConfig conf);
+void layla_container_element_open(void);
+void layla_container_element_open_with_id(Layla_ElementID id);
+void layla_container_element_configure(Layla_ContainerConfig conf);
 void layla_element_close(void);
 
+// Automatic IDs depend on the parent ID and sibling declaration order.
 #define Layla_Container(...)                                    \
-    for (u8 _latch = (layla_container_element_open(             \
+    for (u8 _latch = (layla_container_element_open(),           \
+        layla_container_element_configure(                      \
+            (Layla_ContainerConfig) {                           \
+                .style.size.w = LAYLA_FIT(),                    \
+                .style.size.h = LAYLA_FIT(),                    \
+                __VA_ARGS__                                     \
+        }), 0); _latch < 1; _latch = 1, layla_element_close())
+
+#define Layla_ContainerID(id, ...)                              \
+    for (u8 _latch = (layla_container_element_open_with_id(id), \
+        layla_container_element_configure(                      \
             (Layla_ContainerConfig) {                           \
                 .style.size.w = LAYLA_FIT(),                    \
                 .style.size.h = LAYLA_FIT(),                    \
@@ -328,7 +342,14 @@ void layla_element_close(void);
         }), 0); _latch < 1; _latch = 1, layla_element_close())
 
 #define Layla_Text(...)                                         \
-    for (u8 _latch = (layla_text_element_open(                  \
+    for (u8 _latch = (layla_text_element_open(),                \
+        layla_text_element_configure(                           \
+            (Layla_TextConfig) {__VA_ARGS__}                    \
+        ), 0); _latch < 1; _latch = 1, layla_element_close())
+
+#define Layla_TextID(id, ...)                                   \
+    for (u8 _latch = (layla_text_element_open_with_id(id),      \
+        layla_text_element_configure(                           \
             (Layla_TextConfig) {__VA_ARGS__}                    \
         ), 0); _latch < 1; _latch = 1, layla_element_close())
 

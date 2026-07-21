@@ -25,15 +25,18 @@ static i32 text_measure(Layla_TextSlice text, void *userdata) {
 }
 
 static b32 button(Layla_ElementID id, Layla_TextSlice label, b32 left_mouse_pressed) {
-    b32 hovered = layla_state_is_element_hovered_by_id(id);
+    b32 hovered = false;
 
-    Layla_Container(.id = id, .style = {
-        .background = hovered ? LAYLA_COLOR(120, 150, 255) : LAYLA_COLOR(70, 90, 180),
+    Layla_ContainerID(id, .style = {
+        .background = layla_state_is_element_hovered()
+            ? LAYLA_COLOR(120, 150, 255)
+            : LAYLA_COLOR(70, 90, 180),
         .padding = {.left = 1, .right = 1},
         .border = {.width = 1, .color = LAYLA_RGB(255, 255, 255)},
         .align_self = LAYLA_ALIGN_CENTER,
         .size = {.w = LAYLA_FIT(), .h = LAYLA_FIT()},
     }) {
+        hovered = layla_state_is_element_hovered();
         Layla_Text(.text = label, .style = {
             .color = LAYLA_RGB(255, 255, 255),
             .alignment = LAYLA_ALIGN_CENTER,

@@ -22,6 +22,7 @@ typedef struct {
     i32 w, h; // resolved w, h
     i32 min_w, min_h;
     ChildrenIndices children;
+    u32 next_child_id_offset;
     
     LAYLA_PACKED_ENUM {
         LAYLA_NODE_CONTAINER,
@@ -105,6 +106,7 @@ static inline Node *node_from_temp_id(TempID id);
 static inline TempID temp_id_from_child_index(i32 index);
 static inline Node *node_from_index(i32 index);
 static inline TempID node_push(Node node);
+static inline void node_open(Node node);
 static inline void hover_test(void);
 static inline void floating_layout(Node *node);
 static inline void floating_roots_sort(void);

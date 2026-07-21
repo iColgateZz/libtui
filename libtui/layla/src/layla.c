@@ -115,7 +115,8 @@ void layla_layout_begin(void) {
     }
 
     // open implicit root element
-    layla_container_element_open((Layla_ContainerConfig) {
+    node_open((Node) {.type = LAYLA_NODE_CONTAINER});
+    layla_container_element_configure((Layla_ContainerConfig) {
         .style = {
             .size = {
                 .w = LAYLA_FIXED(state.width),
@@ -149,41 +150,69 @@ Layla_CommandSlice layla_layout_end(void) {
     };
 }
 
-void layla_text_element_open(Layla_TextConfig conf) {
-    Node node = {
-        .id = conf.id,
-        .type = LAYLA_NODE_TEXT,
-        .as.text = {
-            .text = conf.text,
-            .style = conf.style,
-            .userdata = conf.userdata,
-        },
-    };
+static inline void node_open(Node node) {
+    if (state.open_node_stack.count > 0) {
+        Node *parent = node_from_temp_id(layla_list_last(&state.open_node_stack));
+        u32 offset = parent->next_child_id_offset++;
+        if (node.id == LAYLA_ELEMENT_ID_NONE) {
+            u32 hash = parent->id;
+            hash += offset + 48;
+            hash += hash << 10;
+            hash ^= hash >> 6;
+            hash += hash << 3;
+            hash ^= hash >> 11;
+            hash += hash << 15;
+            node.id = hash + 1;
+        }
+    }
+
     TempID temp_id = node_push(node);
     layla_list_append(&state.open_node_stack, temp_id);
 }
 
-void layla_container_element_open(Layla_ContainerConfig conf) {
-    Node node = {
-        .id = conf.id,
-        .type = LAYLA_NODE_CONTAINER,
-        .as.container = {
-            .style = conf.style,
-            .floating = conf.floating,
-            .custom = conf.custom,
-        },
-    };
+void layla_text_element_open(void) {
+    assert(state.open_node_stack.count > 0);
+    node_open((Node) {.type = LAYLA_NODE_TEXT});
+}
+
+void layla_text_element_open_with_id(Layla_ElementID id) {
+    assert(state.open_node_stack.count > 0);
+    assert(id != LAYLA_ELEMENT_ID_NONE);
+    node_open((Node) {.id = id, .type = LAYLA_NODE_TEXT});
+}
+
+void layla_text_element_configure(Layla_TextConfig conf) {
+    Node *node = node_from_temp_id(layla_list_last(&state.open_node_stack));
+    assert(node->type == LAYLA_NODE_TEXT);
+    node->as.text.text = conf.text;
+    node->as.text.style = conf.style;
+    node->as.text.userdata = conf.userdata;
+}
+
+void layla_container_element_open(void) {
+    assert(state.open_node_stack.count > 0);
+    node_open((Node) {.type = LAYLA_NODE_CONTAINER});
+}
+
+void layla_container_element_open_with_id(Layla_ElementID id) {
+    assert(state.open_node_stack.count > 0);
+    assert(id != LAYLA_ELEMENT_ID_NONE);
+    node_open((Node) {.id = id, .type = LAYLA_NODE_CONTAINER});
+}
+
+void layla_container_element_configure(Layla_ContainerConfig conf) {
+    TempID temp_id = layla_list_last(&state.open_node_stack);
+    Node *node = node_from_temp_id(temp_id);
+    assert(node->type == LAYLA_NODE_CONTAINER);
+    node->as.container.style = conf.style;
+    node->as.container.floating = conf.floating;
+    node->as.container.custom = conf.custom;
+
     if (conf.floating.attach_to != LAYLA_ATTACH_TO_NONE) {
-        assert(state.open_node_stack.count > 0);
-        node.parent = layla_list_last(&state.open_node_stack);
-    }
-
-    TempID temp_id = node_push(node);
-
-    if (conf.floating.attach_to != LAYLA_ATTACH_TO_NONE)
+        assert(state.open_node_stack.count > 1);
+        node->parent = state.open_node_stack.items[state.open_node_stack.count - 2];
         layla_list_append(&state.floating_roots, temp_id);
-
-    layla_list_append(&state.open_node_stack, temp_id);
+    }
 }
 
 void layla_element_close(void) {
@@ -234,6 +263,11 @@ b32 layla_state_is_element_hovered_by_id(Layla_ElementID id) {
         if (state.hovered_element_ids.items[i] == id) return true;
 
     return false;
+}
+
+Layla_ElementID layla_element_get_open_id(void) {
+    assert(state.open_node_stack.count > 0);
+    return node_from_temp_id(layla_list_last(&state.open_node_stack))->id;
 }
 
 void layla_scroll_offset_set_by_id(Layla_ScrollID id, i32 offset_y) {
