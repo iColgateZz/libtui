@@ -76,6 +76,7 @@ typedef enum {
     EMouseMiddle,
     EScrollUp,
     EScrollDown,
+    EMouseMove,
     EMouseDrag,
 } EventType;
 
@@ -196,6 +197,7 @@ b32 event_is_term_key(Event event, TermKey key) { return event.type == ETermKey 
 b32 event_is_codepoint(Event event, CodePoint cp) { return event.type == ECodePoint && cp_equal(event.as.codepoint, cp); }
 b32 event_is_mouse(Event event) { return event.type == EScrollUp ||
                                          event.type == EScrollDown ||
+                                         event.type == EMouseMove ||
                                          event.type == EMouseDrag ||
                                          event.type == EMouseLeft ||
                                          event.type == EMouseMiddle ||
@@ -268,7 +270,7 @@ void init_terminal(void) {
     write_str("\33[?25l");                   // hide cursor
     write_str("\33[?1000h");                 // enable mouse press/release
     write_str("\33[?1002h");                 // enable mouse press/release + drag
-    // write_str("\33[?1003h");                 // enable mouse press/release + drag + hover
+    write_str("\33[?1003h");                 // enable mouse press/release + drag + hover
     write_str("\33[?1006h");                 // use mouse sgr protocol
     write_str("\33[0m");                     // reset text attributes
     write_str("\33[2J");                     // clear screen
@@ -312,6 +314,7 @@ void restore_term(void) {
 
     write_str("\33[?1000l");                     // disable mouse
     write_str("\33[?1002l");                     // disable mouse
+    write_str("\33[?1003l");                     // disable mouse
     write_str("\33[0m");                         // reset text attributes
     write_str("\33[?25h");                       // show cursor
     write_str("\33[?1049l");                     // exit alternate buffer
@@ -604,9 +607,10 @@ b32 try_parse_mouse(byte **p, byte *end, Event *e) {
         case 1:  e->type = EMouseMiddle; break;
         case 2:  e->type = EMouseRight;  break;
         case 32: e->type = EMouseDrag;   break;
+        case 35: e->type = EMouseMove;   break;
         case 64: e->type = EScrollUp;    break;
         case 65: e->type = EScrollDown;  break;
-        default: assert("There are no other values to match against");
+        default: assert(false && "Unknown mouse event");
     }
 
     *p = terminator + 1;
