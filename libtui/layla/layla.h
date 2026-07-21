@@ -150,6 +150,18 @@ typedef struct {
     isize count;
 } Layla_ElementIDSlice;
 
+typedef LAYLA_PACKED_ENUM {
+    LAYLA_CURSOR_RELEASED,
+    LAYLA_CURSOR_PRESSED_THIS_FRAME,
+    LAYLA_CURSOR_PRESSED,
+    LAYLA_CURSOR_RELEASED_THIS_FRAME,
+} Layla_CursorInteractionState;
+
+typedef struct {
+    i32 x, y;
+    Layla_CursorInteractionState interaction_state;
+} Layla_CursorState;
+
 typedef i32 Layla_ScrollID;
 #define LAYLA_SCROLL_ID_NONE 0
 
@@ -296,8 +308,9 @@ Layla_ErrorSlice layla_state_get_errors(void);
 
 void layla_state_set_text_measure_function(Layla_TextMeasureFunction function, void *userdata);
 void layla_state_set_screen_dimensions(i32 w, i32 h);
-// Hit-tests the new position against the last completed layout. Call before layla_layout_begin().
-void layla_state_set_cursor_position(i32 x, i32 y);
+// Call once per frame before layla_layout_begin(). Hit-tests the last completed layout and updates interaction_state.
+void layla_state_set_cursor_state(i32 x, i32 y, b32 is_down);
+Layla_CursorState layla_state_get_cursor_state(void);
 
 void layla_scroll_offset_update_on_hovered_element(i32 delta_y);
 void layla_scroll_offset_set_by_id(Layla_ScrollID id, i32 offset_y);
@@ -307,7 +320,7 @@ i32 layla_scroll_max_offset_get_by_id(Layla_ScrollID id);
 
 b32 layla_state_is_element_hovered(void);
 b32 layla_state_is_element_hovered_by_id(Layla_ElementID id);
-// The returned slice remains valid until the cursor position is set again.
+// The returned slice remains valid until the cursor state is set again.
 Layla_ElementIDSlice layla_state_get_hovered_element_ids(void);
 Layla_ElementID layla_element_get_open_id(void);
 

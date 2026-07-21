@@ -24,7 +24,7 @@ static i32 text_measure(Layla_TextSlice text, void *userdata) {
     return width;
 }
 
-static b32 button(Layla_ElementID id, Layla_TextSlice label, b32 left_mouse_pressed) {
+static b32 button(Layla_ElementID id, Layla_TextSlice label) {
     b32 hovered = false;
 
     Layla_ContainerID(id, .style = {
@@ -43,19 +43,8 @@ static b32 button(Layla_ElementID id, Layla_TextSlice label, b32 left_mouse_pres
         });
     }
 
-    return hovered && left_mouse_pressed;
-}
-
-void update_layout_input(Event event) {
-    if (!event_is_mouse(event)) return;
-
-    layla_state_set_cursor_position(event.as.mouse.x, event.as.mouse.y);
-
-    if (event_is(event, EScrollUp)) {
-        layla_scroll_offset_update_on_hovered_element(-1);
-    } else if (event_is(event, EScrollDown)) {
-        layla_scroll_offset_update_on_hovered_element(1);
-    }
+    Layla_CursorState cursor = layla_state_get_cursor_state();
+    return hovered && cursor.interaction_state == LAYLA_CURSOR_RELEASED_THIS_FRAME;
 }
 
 i32 main(void) {
@@ -67,14 +56,25 @@ i32 main(void) {
     while (!quit) {
         begin_frame();
 
-        b32 left_mouse_pressed = false;
+        Layla_CursorState cursor = layla_state_get_cursor_state();
+        b32 cursor_is_down = cursor.interaction_state == LAYLA_CURSOR_PRESSED_THIS_FRAME ||
+                             cursor.interaction_state == LAYLA_CURSOR_PRESSED;
+        i32 scroll_delta_y = 0;
         Slice(Event) events = get_events();
         for (isize i = 0; i < events.count; ++i) {
             Event event = events.items[i];
             if (event_is_codepoint(event, cp("q"))) quit = true;
-            update_layout_input(event);
-            if (event_is(event, EMouseLeft) && event.as.mouse.pressed) left_mouse_pressed = true;
+            if (!event_is_mouse(event)) continue;
+
+            cursor.x = event.as.mouse.x;
+            cursor.y = event.as.mouse.y;
+            if (event_is(event, EMouseLeft)) cursor_is_down = event.as.mouse.pressed;
+            if (event_is(event, EMouseDrag)) cursor_is_down = true;
+            if (event_is(event, EScrollUp)) scroll_delta_y--;
+            if (event_is(event, EScrollDown)) scroll_delta_y++;
         }
+        layla_state_set_cursor_state(cursor.x, cursor.y, cursor_is_down);
+        layla_scroll_offset_update_on_hovered_element(scroll_delta_y);
 
         {
             u32 w = get_terminal_width();
@@ -130,7 +130,7 @@ i32 main(void) {
                     );
                 }
 
-                if (button(BUTTON_QUIT_ID, LAYLA_TEXT_SLICE("Quit"), left_mouse_pressed)) quit = true;
+                if (button(BUTTON_QUIT_ID, LAYLA_TEXT_SLICE("Quit"))) quit = true;
 
                 Layla_Container(.style = {
                     .size = {.w = LAYLA_FILL(), .h = LAYLA_FIXED(5)},

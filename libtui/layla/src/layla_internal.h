@@ -90,7 +90,7 @@ typedef struct {
     List(Layla_ElementID) hovered_element_ids;
     List(ScrollState) scroll_states;
     i32 width, height;
-    i32 cursor_x, cursor_y;
+    Layla_CursorState cursor;
     TempID hovered_temp_id;
     Layla_TextMeasureFunction text_measure_function;
     void *text_measure_userdata;

@@ -26,6 +26,7 @@ static State state = {
     .errors = { .items = ERRORS, .capacity = LAYLA_MAX_ERRORS },
     .hovered_element_ids = { .items = HOVERED_ELEMENT_IDS, .capacity = LAYLA_MAX_NODES },
     .scroll_states = { .items = SCROLL_STATES, .capacity = LAYLA_MAX_SCROLL_STATES },
+    .cursor = {.x = -1, .y = -1},
     .tmp = {
         .base_ptr = TMP_STORE.bytes,
         .reserved_size = LAYLA_TEMP_STORAGE_SIZE,
@@ -39,7 +40,7 @@ static State state = {
         (list)->items[(list)->count++] = (item);    \
     } while (0)
 #else //!LAYLA_STATIC_STORAGE
-static State state = {0};
+static State state = {.cursor = {.x = -1, .y = -1}};
 #define layla_list_append list_append
 #endif //LAYLA_STATIC_STORAGE
 
@@ -82,9 +83,23 @@ void layla_state_set_screen_dimensions(i32 w, i32 h) {
     state.height = h;
 }
 
-void layla_state_set_cursor_position(i32 x, i32 y) {
-    state.cursor_x = x;
-    state.cursor_y = y;
+void layla_state_set_cursor_state(i32 x, i32 y, b32 is_down) {
+    state.cursor.x = x;
+    state.cursor.y = y;
+
+    if (is_down) {
+        state.cursor.interaction_state =
+            state.cursor.interaction_state == LAYLA_CURSOR_RELEASED ||
+            state.cursor.interaction_state == LAYLA_CURSOR_RELEASED_THIS_FRAME
+                ? LAYLA_CURSOR_PRESSED_THIS_FRAME
+                : LAYLA_CURSOR_PRESSED;
+    } else {
+        state.cursor.interaction_state =
+            state.cursor.interaction_state == LAYLA_CURSOR_PRESSED ||
+            state.cursor.interaction_state == LAYLA_CURSOR_PRESSED_THIS_FRAME
+                ? LAYLA_CURSOR_RELEASED_THIS_FRAME
+                : LAYLA_CURSOR_RELEASED;
+    }
 
     if (state.nodes.count == 0) {
         state.hovered_temp_id = LAYLA_TEMP_ID_NONE;
@@ -93,6 +108,10 @@ void layla_state_set_cursor_position(i32 x, i32 y) {
     }
 
     hover_test();
+}
+
+Layla_CursorState layla_state_get_cursor_state(void) {
+    return state.cursor;
 }
 
 void layla_layout_begin(void) {
@@ -829,10 +848,10 @@ static inline void hover_test(void) {
 
     for (isize i = state.floating_roots.count; i > 0; --i) {
         TempID floating_root = state.floating_roots.items[i - 1];
-        if (node_hit_test(node_from_temp_id(floating_root), screen, state.cursor_x, state.cursor_y)) return;
+        if (node_hit_test(node_from_temp_id(floating_root), screen, state.cursor.x, state.cursor.y)) return;
     }
 
-    node_hit_test(root, screen, state.cursor_x, state.cursor_y);
+    node_hit_test(root, screen, state.cursor.x, state.cursor.y);
 }
 
 static inline b32 node_hit_test(Node *node, Layla_Rectangle parent_clip, i32 x, i32 y) {
