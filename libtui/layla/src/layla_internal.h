@@ -51,6 +51,13 @@ typedef Node* NodePtr;
 list_def(NodePtr)
 
 typedef struct {
+    Layla_ElementID id;
+    Layla_ElementData data;
+} ElementRecord;
+
+list_def(ElementRecord)
+
+typedef struct {
     Layla_ElementID element_id;
     i32 y;
     i32 max_y;
@@ -88,6 +95,7 @@ typedef struct {
     List(Layla_Command) commands;
     List(Layla_Error) errors;
     List(Layla_ElementID) hovered_element_ids;
+    List(ElementRecord) element_records;
     List(ScrollState) scroll_states;
     i32 width, height;
     Layla_CursorState cursor;

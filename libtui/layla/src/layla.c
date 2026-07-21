@@ -9,6 +9,7 @@ static TempID FLOATING_ROOTS[LAYLA_MAX_NODES];
 static Layla_Command COMMANDS[LAYLA_MAX_COMMANDS];
 static Layla_Error ERRORS[LAYLA_MAX_ERRORS];
 static Layla_ElementID HOVERED_ELEMENT_IDS[LAYLA_MAX_NODES];
+static ElementRecord ELEMENT_RECORDS[LAYLA_MAX_NODES];
 static ScrollState SCROLL_STATES[LAYLA_MAX_SCROLL_STATES];
 static union { // try different alignments
     void *pointer;
@@ -25,6 +26,7 @@ static State state = {
     .commands = { .items = COMMANDS, .capacity = LAYLA_MAX_COMMANDS },
     .errors = { .items = ERRORS, .capacity = LAYLA_MAX_ERRORS },
     .hovered_element_ids = { .items = HOVERED_ELEMENT_IDS, .capacity = LAYLA_MAX_NODES },
+    .element_records = { .items = ELEMENT_RECORDS, .capacity = LAYLA_MAX_NODES },
     .scroll_states = { .items = SCROLL_STATES, .capacity = LAYLA_MAX_SCROLL_STATES },
     .cursor = {.x = -1, .y = -1},
     .tmp = {
@@ -114,6 +116,15 @@ Layla_CursorState layla_state_get_cursor_state(void) {
     return state.cursor;
 }
 
+Layla_ElementData layla_element_data_get_by_id(Layla_ElementID id) {
+    for (isize i = 0; i < state.element_records.count; ++i) {
+        ElementRecord record = state.element_records.items[i];
+        if (record.id == id) return record.data;
+    }
+
+    return (Layla_ElementData) {0};
+}
+
 void layla_layout_begin(void) {
     // reset state
     state.nodes.count = 0;
@@ -163,6 +174,18 @@ Layla_CommandSlice layla_layout_end(void) {
     for (isize i = 0; i < state.floating_roots.count; ++i)
         floating_layout(node_from_temp_id(state.floating_roots.items[i]));
 
+    state.element_records.count = 0;
+    for (isize i = 0; i < state.nodes.count; ++i) {
+        Node node = state.nodes.items[i];
+        layla_list_append(&state.element_records, ((ElementRecord) {
+            .id = node.id,
+            .data = {
+                .rectangle = rect_from_node(&node),
+                .found = true,
+            },
+        }));
+    }
+
     return (Layla_CommandSlice) {
         .items = state.commands.items,
         .count = state.commands.count,
@@ -196,7 +219,6 @@ void layla_text_element_open(void) {
 
 void layla_text_element_open_with_id(Layla_ElementID id) {
     assert(state.open_node_stack.count > 0);
-    assert(id != LAYLA_ELEMENT_ID_NONE);
     node_open((Node) {.id = id, .type = LAYLA_NODE_TEXT});
 }
 
@@ -215,7 +237,6 @@ void layla_container_element_open(void) {
 
 void layla_container_element_open_with_id(Layla_ElementID id) {
     assert(state.open_node_stack.count > 0);
-    assert(id != LAYLA_ELEMENT_ID_NONE);
     node_open((Node) {.id = id, .type = LAYLA_NODE_CONTAINER});
 }
 
@@ -276,8 +297,6 @@ b32 layla_state_is_element_hovered(void) {
 }
 
 b32 layla_state_is_element_hovered_by_id(Layla_ElementID id) {
-    if (id == LAYLA_ELEMENT_ID_NONE) return false;
-
     for (isize i = 0; i < state.hovered_element_ids.count; ++i)
         if (state.hovered_element_ids.items[i] == id) return true;
 
@@ -290,24 +309,21 @@ Layla_ElementID layla_element_get_open_id(void) {
 }
 
 void layla_scroll_offset_set_by_id(Layla_ElementID id, i32 offset_y) {
-    if (id == LAYLA_ELEMENT_ID_NONE) return;
     scroll_state_get_by_id(id)->y = offset_y;
 }
 
 void layla_scroll_offset_update_by_id(Layla_ElementID id, i32 delta_y) {
-    if (id == LAYLA_ELEMENT_ID_NONE || delta_y == 0) return;
+    if (delta_y == 0) return;
     ScrollState *scroll = scroll_state_get_by_id(id);
     i64 offset_y = (i64)scroll->y + (i64)delta_y;
     scroll->y = (i32)CLAMP(offset_y, (i64)INT32_MIN, (i64)INT32_MAX);
 }
 
 i32 layla_scroll_offset_get_by_id(Layla_ElementID id) {
-    if (id == LAYLA_ELEMENT_ID_NONE) return 0;
     return scroll_state_get_by_id(id)->y;
 }
 
 i32 layla_scroll_max_offset_get_by_id(Layla_ElementID id) {
-    if (id == LAYLA_ELEMENT_ID_NONE) return 0;
     return scroll_state_get_by_id(id)->max_y;
 }
 
@@ -869,7 +885,7 @@ static inline b32 node_hit_test(Node *node, Layla_Rectangle parent_clip, i32 x, 
     b32 found = false;
     if (node_contains) {
         state.hovered_temp_id = (TempID)(node - state.nodes.items);
-        if (node->id != LAYLA_ELEMENT_ID_NONE) layla_list_append(&state.hovered_element_ids, node->id);
+        layla_list_append(&state.hovered_element_ids, node->id);
         found = true;
     }
 

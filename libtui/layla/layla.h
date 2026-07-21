@@ -146,6 +146,11 @@ typedef u32 Layla_ElementID;
 #define LAYLA_ELEMENT_ID_NONE 0
 
 typedef struct {
+    Layla_Rectangle rectangle;
+    b32 found;
+} Layla_ElementData;
+
+typedef struct {
     Layla_ElementID *items;
     isize count;
 } Layla_ElementIDSlice;
@@ -315,6 +320,8 @@ b32 layla_state_is_element_hovered_by_id(Layla_ElementID id);
 // The returned slice remains valid until the cursor state is set again.
 Layla_ElementIDSlice layla_state_get_hovered_element_ids(void);
 Layla_ElementID layla_element_get_open_id(void);
+// Returns data from the last completed layout. During layout construction, this is the preceding frame's data.
+Layla_ElementData layla_element_data_get_by_id(Layla_ElementID id);
 
 void layla_layout_begin(void);
 Layla_CommandSlice layla_layout_end(void);
