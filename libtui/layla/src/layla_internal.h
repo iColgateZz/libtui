@@ -17,7 +17,7 @@ typedef i32 TempID;
 
 typedef struct {
     TempID parent;
-    Layla_PersistentID id;
+    Layla_ElementID id;
     i32 x, y; // resolved coords
     i32 w, h; // resolved w, h
     i32 min_w, min_h;
@@ -29,10 +29,14 @@ typedef struct {
     } type;
     union {
         struct {
-            Layla_ContainerConfig config;
+            Layla_ContainerStyle style;
+            Layla_Floating floating;
+            void *custom;
         } container;
         struct {
-            Layla_TextConfig config;
+            Layla_TextSlice text;
+            Layla_TextStyle style;
+            void *userdata;
         } text;
     } as;
 } Node;
@@ -45,7 +49,7 @@ typedef Node* NodePtr;
 list_def(NodePtr)
 
 typedef struct {
-    Layla_PersistentID id;
+    Layla_ScrollID id;
     i32 y;
     i32 max_y;
 } ScrollState;
@@ -85,7 +89,7 @@ typedef struct {
     i32 width, height;
     i32 cursor_x, cursor_y;
     TempID hovered_temp_id;
-    Layla_PersistentID hovered_persistent_id;
+    Layla_ElementID hovered_element_id;
     Layla_TextMeasureFunction text_measure_function;
     void *text_measure_userdata;
     Layla_ErrorHandler error_handler;
@@ -95,7 +99,7 @@ typedef struct {
 
 // Functions
 
-static inline void error_emit(Layla_ErrorType type, Layla_PersistentID id, byte const *message);
+static inline void error_emit(Layla_ErrorType type, Layla_ElementID id, byte const *message);
 static inline Node *node_from_temp_id(TempID id);
 static inline TempID temp_id_from_child_index(i32 index);
 static inline Node *node_from_index(i32 index);
@@ -117,7 +121,7 @@ static inline void container_commands(Node *node);
 static inline void text_intrinsic_width(Node *node);
 static inline void text_wrap_text(Node *node);
 static inline TextMeasurement text_process(Node *node, i32 wrap_width, b32 emit_commands);
-static inline i32 text_slice_measure(Layla_PersistentID id, Layla_TextSlice text);
+static inline i32 text_slice_measure(Layla_ElementID id, Layla_TextSlice text);
 
 static inline TempID node_hit_test(Node *node, Layla_Rectangle parent_clip, i32 x, i32 y);
 static inline b32 rect_contains_point(i32 x, i32 y, Layla_Rectangle r);
@@ -142,15 +146,8 @@ static inline i32 align_offset(Layla_Alignment align, i32 parent_size, PaddingSi
 static inline Layla_Alignment node_get_align_self(Node *node);
 static inline b32 node_is_scroll_y(Node *node);
 static inline b32 node_is_floating(Node *node);
-static inline ScrollState *scroll_state_get_by_id(Layla_PersistentID id);
-static inline void append_text_command(
-    Layla_PersistentID id,
-    Layla_TextConfig config,
-    isize line_start_byte,
-    isize line_end_byte,
-    i32 line_x,
-    i32 line_y
-);
+static inline ScrollState *scroll_state_get_by_id(Layla_ScrollID id);
+static inline void append_text_command(Node *node, isize line_start_byte, isize line_end_byte, i32 line_x, i32 line_y);
 static inline void floating_measure_size(Node *node, Node *attached, Dimension dim);
 
 #endif

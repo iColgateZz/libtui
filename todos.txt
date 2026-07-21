@@ -2,7 +2,6 @@ TODO: Add multiple Layla contexts. Shared workspace VS fully isolated contexts?
     One detail depends on what a context represents:
         If it represents a page on one terminal, dimensions, cursor position, and handlers should probably remain global.
         If it represents a terminal session or render surface, those values belong in the context.
-TODO: Maybe make ID a part of config struct, then not setting it explicitly, automatically makes it PERSISTENT_ID_NONE
 TODO: Add transitions.
 
 TODO: Add horizontal scrolling.

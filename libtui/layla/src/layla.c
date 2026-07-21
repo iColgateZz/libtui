@@ -44,7 +44,7 @@ static State state = {0};
 #define layla_list_pop  list_pop
 #define layla_list_last list_last
 
-static inline void error_emit(Layla_ErrorType type, Layla_PersistentID id, byte const *message) {
+static inline void error_emit(Layla_ErrorType type, Layla_ElementID id, byte const *message) {
     Layla_Error error = {
         .type = type,
         .id = id,
@@ -99,20 +99,19 @@ void layla_layout_begin(void) {
     if (state.width <= 0 || state.height <= 0) {
         error_emit(
             LAYLA_ERROR_SCREEN_DIMENSIONS_NOT_SET,
-            LAYLA_PERSISTENT_ID_NONE,
+            LAYLA_ELEMENT_ID_NONE,
             "Layla screen dimensions must be set to positive values before layout"
         );
     }
 
     // open implicit root element
-    layla_container_element_open(LAYLA_PERSISTENT_ID_NONE, (Layla_ContainerConfig) {
+    layla_container_element_open((Layla_ContainerConfig) {
         .style = {
             .size = {
                 .w = LAYLA_FIXED(state.width),
                 .h = LAYLA_FIXED(state.height),
             },
             .direction = LAYLA_DIR_COL,
-            .scroll = LAYLA_SCROLL_Y,
         }
     });
 }
@@ -142,21 +141,29 @@ Layla_CommandSlice layla_layout_end(void) {
     };
 }
 
-void layla_text_element_open(Layla_PersistentID id, Layla_TextConfig conf) {
+void layla_text_element_open(Layla_TextConfig conf) {
     Node node = {
-        .id = id,
+        .id = conf.id,
         .type = LAYLA_NODE_TEXT,
-        .as.text.config = conf,
+        .as.text = {
+            .text = conf.text,
+            .style = conf.style,
+            .userdata = conf.userdata,
+        },
     };
     TempID temp_id = node_push(node);
     layla_list_append(&state.open_node_stack, temp_id);
 }
 
-void layla_container_element_open(Layla_PersistentID id, Layla_ContainerConfig conf) {
+void layla_container_element_open(Layla_ContainerConfig conf) {
     Node node = {
-        .id = id,
+        .id = conf.id,
         .type = LAYLA_NODE_CONTAINER,
-        .as.container.config = conf,
+        .as.container = {
+            .style = conf.style,
+            .floating = conf.floating,
+            .custom = conf.custom,
+        },
     };
     if (conf.floating.attach_to != LAYLA_ATTACH_TO_NONE) {
         assert(state.open_node_stack.count > 0);
@@ -197,49 +204,48 @@ void layla_element_close(void) {
     }
 }
 
-Layla_PersistentID layla_state_get_hovered_element_id(void) {
-    return state.hovered_persistent_id;
+Layla_ElementID layla_state_get_hovered_element_id(void) {
+    return state.hovered_element_id;
 }
 
 b32 layla_state_is_element_hovered(void) {
     if (state.open_node_stack.count == 0) return false;
 
     TempID current_id = layla_list_last(&state.open_node_stack);
-    Layla_PersistentID persistent_id = node_from_temp_id(current_id)->id;
-    return persistent_id != LAYLA_PERSISTENT_ID_NONE &&
-           persistent_id == state.hovered_persistent_id;
+    Layla_ElementID element_id = node_from_temp_id(current_id)->id;
+    return element_id != LAYLA_ELEMENT_ID_NONE && element_id == state.hovered_element_id;
 }
 
-void layla_state_set_scroll_offset_by_id(Layla_PersistentID id, i32 offset_y) {
-    if (id == LAYLA_PERSISTENT_ID_NONE) return;
+void layla_scroll_offset_set_by_id(Layla_ScrollID id, i32 offset_y) {
+    if (id == LAYLA_SCROLL_ID_NONE) return;
     scroll_state_get_by_id(id)->y = offset_y;
 }
 
-void layla_state_update_scroll_offset_by_id(Layla_PersistentID id, i32 delta_y) {
-    if (id == LAYLA_PERSISTENT_ID_NONE || delta_y == 0) return;
+void layla_scroll_offset_update_by_id(Layla_ScrollID id, i32 delta_y) {
+    if (id == LAYLA_SCROLL_ID_NONE || delta_y == 0) return;
     ScrollState *scroll = scroll_state_get_by_id(id);
     i64 offset_y = (i64)scroll->y + (i64)delta_y;
     scroll->y = (i32)CLAMP(offset_y, (i64)INT32_MIN, (i64)INT32_MAX);
 }
 
-i32 layla_state_get_scroll_offset_by_id(Layla_PersistentID id) {
-    if (id == LAYLA_PERSISTENT_ID_NONE) return 0;
+i32 layla_scroll_offset_get_by_id(Layla_ScrollID id) {
+    if (id == LAYLA_SCROLL_ID_NONE) return 0;
     return scroll_state_get_by_id(id)->y;
 }
 
-i32 layla_state_get_max_scroll_offset_by_id(Layla_PersistentID id) {
-    if (id == LAYLA_PERSISTENT_ID_NONE) return 0;
+i32 layla_scroll_max_offset_get_by_id(Layla_ScrollID id) {
+    if (id == LAYLA_SCROLL_ID_NONE) return 0;
     return scroll_state_get_by_id(id)->max_y;
 }
 
-void layla_state_update_scroll_offset_on_hovered_element(i32 delta_y) {
+void layla_scroll_offset_update_on_hovered_element(i32 delta_y) {
     TempID current_id = state.hovered_temp_id;
     if (delta_y == 0 || current_id == LAYLA_TEMP_ID_NONE) return;
 
     for (;;) {
         Node *current = node_from_temp_id(current_id);
         if (node_is_scroll_y(current)) {
-            layla_state_update_scroll_offset_by_id(current->id, delta_y);
+            layla_scroll_offset_update_by_id(current->as.container.style.scroll.id, delta_y);
             return;
         }
 
@@ -250,7 +256,7 @@ void layla_state_update_scroll_offset_on_hovered_element(i32 delta_y) {
 }
 
 static inline void floating_layout(Node *node) {
-    Layla_Floating floating = node->as.container.config.floating;
+    Layla_Floating floating = node->as.container.floating;
     Node *attached;
     switch (floating.attach_to) {
         case LAYLA_ATTACH_TO_PARENT: attached = node_from_temp_id(node->parent); break;
@@ -273,7 +279,7 @@ static inline void floating_layout(Node *node) {
 }
 
 static inline void floating_measure_size(Node *node, Node *attached, Dimension dim) {
-    Layla_SizeStyle size_style = get_size_style(node->as.container.config.style, dim);
+    Layla_SizeStyle size_style = get_size_style(node->as.container.style, dim);
     i32 attached_size = *node_get_size(attached, dim);
 
     switch (size_style.type) {
@@ -292,12 +298,12 @@ static inline void floating_measure_size(Node *node, Node *attached, Dimension d
 static inline void floating_roots_sort(void) {
     for (isize i = 1; i < state.floating_roots.count; ++i) {
         TempID current_id = state.floating_roots.items[i];
-        i32 current_z_index = node_from_temp_id(current_id)->as.container.config.floating.z_index;
+        i32 current_z_index = node_from_temp_id(current_id)->as.container.floating.z_index;
         isize position = i;
 
         while (position > 0) {
             TempID previous_id = state.floating_roots.items[position - 1];
-            i32 previous_z_index = node_from_temp_id(previous_id)->as.container.config.floating.z_index;
+            i32 previous_z_index = node_from_temp_id(previous_id)->as.container.floating.z_index;
             if (previous_z_index <= current_z_index) break;
 
             state.floating_roots.items[position] = previous_id;
@@ -334,7 +340,7 @@ static inline void container_intrinsic_height(Node *node) {
 
 static inline void container_intrinsic_size(Node *node, Dimension dim) {
     ChildrenIndices children = node->children;
-    Layla_ContainerStyle style = node->as.container.config.style;
+    Layla_ContainerStyle style = node->as.container.style;
     Layla_SizeStyle size_style = get_size_style(style, dim);
     PaddingSides padding = padding_sides_from_container_style(style, dim);
     i32 total_padding = padding.start + padding.end;
@@ -396,7 +402,7 @@ static inline void container_fill_height(Node *node) {
 }
 
 static inline void container_fill_size(Node *node, Dimension dim) {
-    Layla_ContainerStyle style = node->as.container.config.style;
+    Layla_ContainerStyle style = node->as.container.style;
     ChildrenIndices children = node->children;
     PaddingSides padding = padding_sides_from_container_style(style, dim);
     i32 total_padding = padding.start + padding.end;
@@ -407,7 +413,7 @@ static inline void container_fill_size(Node *node, Dimension dim) {
         for (isize i = 0; i < children.count; ++i) {
             Node *child = node_from_index(children.offset + i);
             if (node_is_percentage(child, dim)) {
-                Layla_SizeStyle size_style = get_size_style(child->as.container.config.style, dim);
+                Layla_SizeStyle size_style = get_size_style(child->as.container.style, dim);
                 *node_get_size(child, dim) = size_from_percentage(size_style, available_size);
             }
         }
@@ -454,7 +460,7 @@ static inline void container_fill_size(Node *node, Dimension dim) {
                     break;
                 }
                 case LAYLA_NODE_CONTAINER: {
-                    Layla_SizeStyle size_style = get_size_style(child->as.container.config.style, dim);
+                    Layla_SizeStyle size_style = get_size_style(child->as.container.style, dim);
                     if (size_style.type == LAYLA_SIZE_PERCENT) {
                         *node_get_size(child, dim) = size_from_percentage(size_style, available_size);
                     } else if (size_style.type == LAYLA_SIZE_FILL) {
@@ -486,7 +492,7 @@ static inline void text_wrap_text(Node *node) {
 }
 
 static inline void container_positions(Node *node) {
-    Layla_ContainerStyle style = node->as.container.config.style;
+    Layla_ContainerStyle style = node->as.container.style;
     ChildrenIndices children = node->children;
     Dimension main_dim = direction_get_main_dimension(style.direction);
     Dimension cross_dim = dimension_get_other(main_dim);
@@ -518,7 +524,7 @@ static inline void container_positions(Node *node) {
     }
 
     if (node_is_scroll_y(node)) {
-        ScrollState *scroll = scroll_state_get_by_id(node->id);
+        ScrollState *scroll = scroll_state_get_by_id(node->as.container.style.scroll.id);
         i32 content_h = MAX(content_bottom + vertical_padding.end - node->y, 0);
         scroll->max_y = MAX(content_h - node->h, 0);
         scroll->y = CLAMP(scroll->y, 0, scroll->max_y);
@@ -536,8 +542,7 @@ static inline void container_positions(Node *node) {
 }
 
 static inline void container_commands(Node *node) {
-    Layla_ContainerConfig config = node->as.container.config;
-    Layla_ContainerStyle style = config.style;
+    Layla_ContainerStyle style = node->as.container.style;
     b32 overflow_hidden = style.overflow == LAYLA_OVERFLOW_HIDDEN;
 
     if (overflow_hidden) {
@@ -557,7 +562,7 @@ static inline void container_commands(Node *node) {
         );
     }
 
-    if (config.custom != NULL) {
+    if (node->as.container.custom != NULL) {
         PaddingSides horizontal_padding = padding_sides_from_container_style(style, DIM_X);
         PaddingSides vertical_padding = padding_sides_from_container_style(style, DIM_Y);
         i32 custom_w = node->w - horizontal_padding.start - horizontal_padding.end;
@@ -571,7 +576,7 @@ static inline void container_commands(Node *node) {
                     .y = node->y + vertical_padding.start,
                     .w = custom_w,
                     .h = custom_h,
-                    .userdata = config.custom,
+                    .userdata = node->as.container.custom,
                 },
             }));
         }
@@ -615,9 +620,8 @@ static inline void container_commands(Node *node) {
 }
 
 static inline TextMeasurement text_process(Node *node, i32 wrap_width, b32 emit_commands) {
-    Layla_TextConfig config = node->as.text.config;
-    Layla_TextSlice source = config.text;
-    Layla_TextStyle style = config.style;
+    Layla_TextSlice source = node->as.text.text;
+    Layla_TextStyle style = node->as.text.style;
     TextMeasurement measurement = {0};
     if (source.count <= 0) return measurement;
 
@@ -658,12 +662,7 @@ static inline TextMeasurement text_process(Node *node, i32 wrap_width, b32 emit_
 
             if (emit_commands) {
                 i32 line_x = node->x + align_offset(style.alignment, node->w, ((PaddingSides) {0}), line_width);
-                append_text_command(
-                    node->id,
-                    config,
-                    line_start_byte, cursor_byte,
-                    line_x, node->y + measurement.line_count
-                );
+                append_text_command(node, line_start_byte, cursor_byte, line_x, node->y + measurement.line_count);
             }
 
             measurement.line_count++;
@@ -704,12 +703,7 @@ static inline TextMeasurement text_process(Node *node, i32 wrap_width, b32 emit_
         if (word_overflows_line) {
             if (emit_commands) {
                 i32 line_x = node->x + align_offset(style.alignment, node->w, ((PaddingSides) {0}), line_width);
-                append_text_command(
-                    node->id,
-                    config,
-                    line_start_byte, line_end_byte,
-                    line_x, node->y + measurement.line_count
-                );
+                append_text_command(node, line_start_byte, line_end_byte, line_x, node->y + measurement.line_count);
             }
 
             measurement.line_count++;
@@ -737,19 +731,14 @@ static inline TextMeasurement text_process(Node *node, i32 wrap_width, b32 emit_
 
     if (emit_commands) {
         i32 line_x = node->x + align_offset(style.alignment, node->w, ((PaddingSides) {0}), line_width);
-        append_text_command(
-            node->id,
-            config,
-            line_start_byte, source.count,
-            line_x, node->y + measurement.line_count
-        );
+        append_text_command(node, line_start_byte, source.count, line_x, node->y + measurement.line_count);
     }
     measurement.line_count++;
 
     return measurement;
 }
 
-static inline i32 text_slice_measure(Layla_PersistentID id, Layla_TextSlice text) {
+static inline i32 text_slice_measure(Layla_ElementID id, Layla_TextSlice text) {
     i32 width = state.text_measure_function(text, state.text_measure_userdata);
     if (width < 0) {
         error_emit(
@@ -761,18 +750,11 @@ static inline i32 text_slice_measure(Layla_PersistentID id, Layla_TextSlice text
     return width;
 }
 
-static inline void append_text_command(
-    Layla_PersistentID id,
-    Layla_TextConfig config,
-    isize line_start_byte,
-    isize line_end_byte,
-    i32 line_x,
-    i32 line_y
-) {
-    Layla_TextSlice source = config.text;
-    Layla_TextStyle style = config.style;
+static inline void append_text_command(Node *node, isize line_start_byte, isize line_end_byte, i32 line_x, i32 line_y) {
+    Layla_TextSlice source = node->as.text.text;
+    Layla_TextStyle style = node->as.text.style;
     layla_list_append(&state.commands,
-        ((Layla_Command) {.type = LAYLA_CMD_TEXT, .id = id, .as.text = {
+        ((Layla_Command) {.type = LAYLA_CMD_TEXT, .id = node->id, .as.text = {
             .x = line_x,
             .y = line_y,
             .slice = {
@@ -780,7 +762,7 @@ static inline void append_text_command(
                 .count = line_end_byte - line_start_byte,
             },
             .color = style.color,
-            .userdata = config.userdata,
+            .userdata = node->as.text.userdata,
         }})
     );
 }
@@ -788,7 +770,7 @@ static inline void append_text_command(
 static inline void hover_test(void) {
     Node *root = node_from_temp_id(LAYLA_ROOT_TEMP_ID);
     Layla_Rectangle screen = rect_from_node(root);
-    state.hovered_persistent_id = LAYLA_PERSISTENT_ID_NONE;
+    state.hovered_element_id = LAYLA_ELEMENT_ID_NONE;
     state.hovered_temp_id = LAYLA_TEMP_ID_NONE;
 
     for (isize i = state.floating_roots.count; i > 0; --i) {
@@ -807,7 +789,17 @@ static inline void hover_test(void) {
 
     if (state.hovered_temp_id == LAYLA_TEMP_ID_NONE) return;
 
-    state.hovered_persistent_id = node_from_temp_id(state.hovered_temp_id)->id;
+    TempID current_id = state.hovered_temp_id;
+    for (;;) {
+        Node *current = node_from_temp_id(current_id);
+        if (current->id != LAYLA_ELEMENT_ID_NONE) {
+            state.hovered_element_id = current->id;
+            break;
+        }
+
+        if (node_is_floating(current) || current_id == LAYLA_ROOT_TEMP_ID) break;
+        current_id = current->parent;
+    }
 }
 
 static inline TempID node_hit_test(Node *node, Layla_Rectangle parent_clip, i32 x, i32 y) {
@@ -818,7 +810,7 @@ static inline TempID node_hit_test(Node *node, Layla_Rectangle parent_clip, i32 
     b32 node_contains = rect_contains_point(x, y, node_clip);
 
     b32 overflow_hidden = node->type == LAYLA_NODE_CONTAINER
-        && node->as.container.config.style.overflow == LAYLA_OVERFLOW_HIDDEN;
+        && node->as.container.style.overflow == LAYLA_OVERFLOW_HIDDEN;
 
     if (overflow_hidden && !node_contains) return LAYLA_TEMP_ID_NONE;
 
@@ -832,7 +824,7 @@ static inline TempID node_hit_test(Node *node, Layla_Rectangle parent_clip, i32 
 
     if (!node_contains) return LAYLA_TEMP_ID_NONE;
 
-    return node->id != LAYLA_PERSISTENT_ID_NONE ? (TempID)(node - state.nodes.items) : LAYLA_TEMP_ID_NONE;
+    return (TempID)(node - state.nodes.items);
 }
 
 // Helper functions
@@ -881,7 +873,7 @@ static inline Layla_Rectangle rect_from_node(Node *node) {
 
 static inline Layla_Alignment node_get_align_self(Node *node) {
     switch (node->type) {
-        case LAYLA_NODE_CONTAINER: return node->as.container.config.style.align_self;
+        case LAYLA_NODE_CONTAINER: return node->as.container.style.align_self;
         case LAYLA_NODE_TEXT: return LAYLA_ALIGN_START;
     }
     UNREACHABLE("It must always match against alignment");
@@ -961,7 +953,7 @@ static inline b32 node_is_fill(Node *node, Dimension dim) {
     switch (node->type) {
         case LAYLA_NODE_TEXT: return dim == DIM_X;
         case LAYLA_NODE_CONTAINER:
-            return get_size_style(node->as.container.config.style, dim).type == LAYLA_SIZE_FILL;
+            return get_size_style(node->as.container.style, dim).type == LAYLA_SIZE_FILL;
     }
     return false;
 }
@@ -970,7 +962,7 @@ static inline b32 node_is_percentage(Node *node, Dimension dim) {
     switch (node->type) {
         case LAYLA_NODE_TEXT: return false;
         case LAYLA_NODE_CONTAINER:
-            return get_size_style(node->as.container.config.style, dim).type == LAYLA_SIZE_PERCENT;
+            return get_size_style(node->as.container.style, dim).type == LAYLA_SIZE_PERCENT;
     }
     return false;
 }
@@ -986,7 +978,7 @@ static inline i32 node_get_fill_max(Node *node, Dimension dim) {
     switch (node->type) {
         case LAYLA_NODE_TEXT: return *node_get_size(node, dim);
         case LAYLA_NODE_CONTAINER: {
-            Layla_SizeStyle size = get_size_style(node->as.container.config.style, dim);
+            Layla_SizeStyle size = get_size_style(node->as.container.style, dim);
             assert(size.type == LAYLA_SIZE_FILL && "function is only for fill size");
             return get_size_range(size).max;
         }
@@ -998,7 +990,7 @@ static inline i32 node_get_fill_min(Node *node, Dimension dim) {
     switch (node->type) {
         case LAYLA_NODE_TEXT: return *node_get_min_size(node, dim);
         case LAYLA_NODE_CONTAINER: {
-            Layla_SizeStyle size = get_size_style(node->as.container.config.style, dim);
+            Layla_SizeStyle size = get_size_style(node->as.container.style, dim);
             assert(size.type == LAYLA_SIZE_FILL && "function is only for fill size");
             return MAX(get_size_range(size).min, *node_get_min_size(node, dim));
         }
@@ -1113,7 +1105,7 @@ static inline void space_distribute(i32 space, List(NodePtr) nodes, Dimension di
 }
 
 //TODO: improve performance
-static inline ScrollState *scroll_state_get_by_id(Layla_PersistentID id) {
+static inline ScrollState *scroll_state_get_by_id(Layla_ScrollID id) {
     for (isize i = 0; i < state.scroll_states.count; ++i) {
         ScrollState *scroll_state = &state.scroll_states.items[i];
         if (scroll_state->id == id) return scroll_state;
@@ -1124,17 +1116,13 @@ static inline ScrollState *scroll_state_get_by_id(Layla_PersistentID id) {
 }
 
 static inline b32 node_is_scroll_y(Node *node) {
-    if (node->id == LAYLA_PERSISTENT_ID_NONE) return false;
-
     switch (node->type) {
-        case LAYLA_NODE_CONTAINER: {
-            return node->as.container.config.style.scroll == LAYLA_SCROLL_Y;
-        }
+        case LAYLA_NODE_CONTAINER: return node->as.container.style.scroll.axis == LAYLA_SCROLL_Y;
         case LAYLA_NODE_TEXT: return false;
     }
     return false;
 }
 
 static inline b32 node_is_floating(Node *node) {
-    return node->type == LAYLA_NODE_CONTAINER && node->as.container.config.floating.attach_to != LAYLA_ATTACH_TO_NONE;
+    return node->type == LAYLA_NODE_CONTAINER && node->as.container.floating.attach_to != LAYLA_ATTACH_TO_NONE;
 }

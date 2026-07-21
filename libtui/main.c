@@ -26,9 +26,9 @@ void update_layout_input(Event event) {
     layla_state_set_cursor_position(event.as.mouse.x, event.as.mouse.y);
 
     if (event_is(event, EScrollUp)) {
-        layla_state_update_scroll_offset_on_hovered_element(-1);
+        layla_scroll_offset_update_on_hovered_element(-1);
     } else if (event_is(event, EScrollDown)) {
-        layla_state_update_scroll_offset_on_hovered_element(1);
+        layla_scroll_offset_update_on_hovered_element(1);
     }
 }
 
@@ -54,39 +54,42 @@ i32 main(void) {
             layla_state_set_screen_dimensions(w, h);
             layla_layout_begin();
 
-            Layla_Container(1, .style = {
+            Layla_Container(.style = {
                 .background = LAYLA_BACKGROUND(196, 240, 120),
                 .direction = LAYLA_DIR_ROW,
                 .size = {.w = LAYLA_FIXED(w), .h = LAYLA_FIXED(h)},
             }) {
-                Layla_Container(2, .style = {
+                Layla_Container(.style = {
                     .size = {.w = LAYLA_FILL(.max = 10), .h = LAYLA_PERCENT(0.5)},
                     // .size = {.w = LAYLA_PERCENT(0.4), .h = LAYLA_PERCENT(0.5)},
                     .background = LAYLA_BACKGROUND(255, 133, 182),
                     .align_self = LAYLA_ALIGN_CENTER,
                 });
 
-                Layla_Container(3, .style = {
-                    .size = {.w = LAYLA_PERCENT(.8), .h = LAYLA_FIT()},
+                Layla_Container(.style = {
+                    .size = {.w = LAYLA_PERCENT(.8), .h = LAYLA_FIT(.max= 3)},
                     .background = LAYLA_BACKGROUND(233, 255, 57),
                     .align_self = LAYLA_ALIGN_CENTER,
                     .direction = LAYLA_DIR_COL,
                     .padding = {.left = 1, .right = 1, .top = 5, .bottom = 1},
-                    .scroll = LAYLA_SCROLL_Y,
                     .border = {.width = 1},
+                    .scroll = {
+                        .id = 1,
+                        .axis = LAYLA_SCROLL_Y,
+                    },
                 }) {
-                    Layla_Text(4, .text = LAYLA_TEXT_SLICE("LibTUI text wraps inside containers. LibTUI text wraps inside containers."),
+                    Layla_Text(.text = LAYLA_TEXT_SLICE("LibTUI text wraps inside containers. LibTUI text wraps inside containers."),
                         .style = {
                             .color = {255, 255, 255},
                             .alignment = LAYLA_ALIGN_CENTER,
                         },
                     );
-                    Layla_Container(5, .style = {
+                    Layla_Container(.style = {
                         .size = {.w = LAYLA_FILL(), .h = LAYLA_FIXED(5)},
                         .background = LAYLA_BACKGROUND(10, 9, 254),
                     });
 
-                    Layla_Container(10, 
+                    Layla_Container(
                         .style = {
                             .background = LAYLA_BACKGROUND(0, 0, 0),
                             .size = {.w = LAYLA_FIXED(10), .h = LAYLA_FIXED(10)}
@@ -99,7 +102,7 @@ i32 main(void) {
                     );
                 }
 
-                Layla_Container(6, .style = {
+                Layla_Container(.style = {
                     .size = {.w = LAYLA_FILL(), .h = LAYLA_FIXED(5)},
                     .background = LAYLA_BACKGROUND(195, 255, 57),
                     .align_self = LAYLA_ALIGN_CENTER,

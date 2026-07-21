@@ -142,9 +142,20 @@ typedef LAYLA_PACKED_ENUM {
     LAYLA_ALIGN_END,
 } Layla_Alignment;
 
+typedef i32 Layla_ElementID;
+#define LAYLA_ELEMENT_ID_NONE 0
+
+typedef i32 Layla_ScrollID;
+#define LAYLA_SCROLL_ID_NONE 0
+
 typedef LAYLA_PACKED_ENUM {
     LAYLA_SCROLL_NONE,
     LAYLA_SCROLL_Y,
+} Layla_ScrollAxis;
+
+typedef struct {
+    Layla_ScrollID id;
+    Layla_ScrollAxis axis;
 } Layla_Scroll;
 
 typedef LAYLA_PACKED_ENUM {
@@ -177,6 +188,7 @@ typedef struct {
 } Layla_ContainerStyle;
 
 typedef struct {
+    Layla_ElementID id;
     Layla_ContainerStyle style;
     Layla_Floating floating;
     void *custom;
@@ -200,13 +212,11 @@ typedef struct {
 } Layla_TextStyle;
 
 typedef struct {
+    Layla_ElementID id;
     Layla_TextSlice text;
     Layla_TextStyle style;
     void *userdata;
 } Layla_TextConfig;
-
-typedef i32 Layla_PersistentID;
-#define LAYLA_PERSISTENT_ID_NONE 0
 
 typedef LAYLA_PACKED_ENUM {
     LAYLA_ERROR_SCREEN_DIMENSIONS_NOT_SET,
@@ -216,7 +226,7 @@ typedef LAYLA_PACKED_ENUM {
 
 typedef struct {
     Layla_ErrorType type;
-    Layla_PersistentID id;
+    Layla_ElementID id;
     byte const *message;
 } Layla_Error;
 
@@ -236,7 +246,7 @@ typedef struct {
         LAYLA_CMD_BORDER,
         LAYLA_CMD_CUSTOM,
     } type;
-    Layla_PersistentID id;
+    Layla_ElementID id;
     union {
         struct Layla_CommandRectangle {
             i32 x, y, w, h;
@@ -285,34 +295,32 @@ void layla_state_set_text_measure_function(Layla_TextMeasureFunction function, v
 void layla_state_set_screen_dimensions(i32 w, i32 h);
 void layla_state_set_cursor_position(i32 x, i32 y);
 
-void layla_state_update_scroll_offset_on_hovered_element(i32 delta_y);
-void layla_state_set_scroll_offset_by_id(Layla_PersistentID id, i32 offset_y);
-void layla_state_update_scroll_offset_by_id(Layla_PersistentID id, i32 delta_y);
-i32 layla_state_get_scroll_offset_by_id(Layla_PersistentID id);
-i32 layla_state_get_max_scroll_offset_by_id(Layla_PersistentID id);
+void layla_scroll_offset_update_on_hovered_element(i32 delta_y);
+void layla_scroll_offset_set_by_id(Layla_ScrollID id, i32 offset_y);
+void layla_scroll_offset_update_by_id(Layla_ScrollID id, i32 delta_y);
+i32 layla_scroll_offset_get_by_id(Layla_ScrollID id);
+i32 layla_scroll_max_offset_get_by_id(Layla_ScrollID id);
 
 b32 layla_state_is_element_hovered(void);
-Layla_PersistentID layla_state_get_hovered_element_id(void);
+Layla_ElementID layla_state_get_hovered_element_id(void);
 
 void layla_layout_begin(void);
 Layla_CommandSlice layla_layout_end(void);
 
-void layla_text_element_open(Layla_PersistentID id, Layla_TextConfig conf);
-void layla_container_element_open(Layla_PersistentID id, Layla_ContainerConfig conf);
+void layla_text_element_open(Layla_TextConfig conf);
+void layla_container_element_open(Layla_ContainerConfig conf);
 void layla_element_close(void);
 
-#define Layla_Container(id, ...)                                \
+#define Layla_Container(...)                                    \
     for (u8 _latch = (layla_container_element_open(             \
-            id,                                                 \
             (Layla_ContainerConfig) {                           \
                 .style.size.w = LAYLA_FIT(),                    \
                 .style.size.h = LAYLA_FIT(),                    \
                 __VA_ARGS__                                     \
         }), 0); _latch < 1; _latch = 1, layla_element_close())
 
-#define Layla_Text(id, ...)                                     \
+#define Layla_Text(...)                                         \
     for (u8 _latch = (layla_text_element_open(                  \
-            id,                                                 \
             (Layla_TextConfig) {__VA_ARGS__}                    \
         ), 0); _latch < 1; _latch = 1, layla_element_close())
 
