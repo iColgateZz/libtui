@@ -51,7 +51,7 @@ typedef Node* NodePtr;
 list_def(NodePtr)
 
 typedef struct {
-    Layla_ScrollID id;
+    Layla_ElementID element_id;
     i32 y;
     i32 max_y;
 } ScrollState;
@@ -149,7 +149,7 @@ static inline i32 align_offset(Layla_Alignment align, i32 parent_size, PaddingSi
 static inline Layla_Alignment node_get_align_self(Node *node);
 static inline b32 node_is_scroll_y(Node *node);
 static inline b32 node_is_floating(Node *node);
-static inline ScrollState *scroll_state_get_by_id(Layla_ScrollID id);
+static inline ScrollState *scroll_state_get_by_id(Layla_ElementID id);
 static inline void append_text_command(Node *node, isize line_start_byte, isize line_end_byte, i32 line_x, i32 line_y);
 static inline void floating_measure_size(Node *node, Node *attached, Dimension dim);
 

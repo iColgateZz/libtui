@@ -289,25 +289,25 @@ Layla_ElementID layla_element_get_open_id(void) {
     return node_from_temp_id(layla_list_last(&state.open_node_stack))->id;
 }
 
-void layla_scroll_offset_set_by_id(Layla_ScrollID id, i32 offset_y) {
-    if (id == LAYLA_SCROLL_ID_NONE) return;
+void layla_scroll_offset_set_by_id(Layla_ElementID id, i32 offset_y) {
+    if (id == LAYLA_ELEMENT_ID_NONE) return;
     scroll_state_get_by_id(id)->y = offset_y;
 }
 
-void layla_scroll_offset_update_by_id(Layla_ScrollID id, i32 delta_y) {
-    if (id == LAYLA_SCROLL_ID_NONE || delta_y == 0) return;
+void layla_scroll_offset_update_by_id(Layla_ElementID id, i32 delta_y) {
+    if (id == LAYLA_ELEMENT_ID_NONE || delta_y == 0) return;
     ScrollState *scroll = scroll_state_get_by_id(id);
     i64 offset_y = (i64)scroll->y + (i64)delta_y;
     scroll->y = (i32)CLAMP(offset_y, (i64)INT32_MIN, (i64)INT32_MAX);
 }
 
-i32 layla_scroll_offset_get_by_id(Layla_ScrollID id) {
-    if (id == LAYLA_SCROLL_ID_NONE) return 0;
+i32 layla_scroll_offset_get_by_id(Layla_ElementID id) {
+    if (id == LAYLA_ELEMENT_ID_NONE) return 0;
     return scroll_state_get_by_id(id)->y;
 }
 
-i32 layla_scroll_max_offset_get_by_id(Layla_ScrollID id) {
-    if (id == LAYLA_SCROLL_ID_NONE) return 0;
+i32 layla_scroll_max_offset_get_by_id(Layla_ElementID id) {
+    if (id == LAYLA_ELEMENT_ID_NONE) return 0;
     return scroll_state_get_by_id(id)->max_y;
 }
 
@@ -318,7 +318,7 @@ void layla_scroll_offset_update_on_hovered_element(i32 delta_y) {
     for (;;) {
         Node *current = node_from_temp_id(current_id);
         if (node_is_scroll_y(current)) {
-            layla_scroll_offset_update_by_id(current->as.container.style.scroll.id, delta_y);
+            layla_scroll_offset_update_by_id(current->id, delta_y);
             return;
         }
 
@@ -597,7 +597,7 @@ static inline void container_positions(Node *node) {
     }
 
     if (node_is_scroll_y(node)) {
-        ScrollState *scroll = scroll_state_get_by_id(node->as.container.style.scroll.id);
+        ScrollState *scroll = scroll_state_get_by_id(node->id);
         i32 content_h = MAX(content_bottom + vertical_padding.end - node->y, 0);
         scroll->max_y = MAX(content_h - node->h, 0);
         scroll->y = CLAMP(scroll->y, 0, scroll->max_y);
@@ -1161,19 +1161,19 @@ static inline void space_distribute(i32 space, List(NodePtr) nodes, Dimension di
 }
 
 //TODO: improve performance
-static inline ScrollState *scroll_state_get_by_id(Layla_ScrollID id) {
+static inline ScrollState *scroll_state_get_by_id(Layla_ElementID id) {
     for (isize i = 0; i < state.scroll_states.count; ++i) {
         ScrollState *scroll_state = &state.scroll_states.items[i];
-        if (scroll_state->id == id) return scroll_state;
+        if (scroll_state->element_id == id) return scroll_state;
     }
 
-    layla_list_append(&state.scroll_states, ((ScrollState) {.id = id}));
+    layla_list_append(&state.scroll_states, ((ScrollState) {.element_id = id}));
     return &layla_list_last(&state.scroll_states);
 }
 
 static inline b32 node_is_scroll_y(Node *node) {
     switch (node->type) {
-        case LAYLA_NODE_CONTAINER: return node->as.container.style.scroll.axis == LAYLA_SCROLL_Y;
+        case LAYLA_NODE_CONTAINER: return node->as.container.style.scroll == LAYLA_SCROLL_Y;
         case LAYLA_NODE_TEXT: return false;
     }
     return false;

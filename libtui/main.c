@@ -8,6 +8,7 @@
 
 enum {
     BUTTON_QUIT_ID = 1,
+    SCROLL_PANEL_ID,
 };
 
 static i32 text_measure(Layla_TextSlice text, void *userdata) {
@@ -94,17 +95,14 @@ i32 main(void) {
                     .align_self = LAYLA_ALIGN_CENTER,
                 });
 
-                Layla_Container(.style = {
+                Layla_ContainerID(SCROLL_PANEL_ID, .style = {
                     .size = {.w = LAYLA_PERCENT(.8), .h = LAYLA_FIT()},
                     .background = LAYLA_COLOR(233, 255, 57),
                     .align_self = LAYLA_ALIGN_CENTER,
                     .direction = LAYLA_DIR_COL,
                     .padding = {.left = 1, .right = 1, .top = 5, .bottom = 1},
                     .border = {.width = 1},
-                    .scroll = {
-                        .id = 1,
-                        .axis = LAYLA_SCROLL_Y,
-                    },
+                    .scroll = LAYLA_SCROLL_Y,
                 }) {
                     Layla_Text(.text = LAYLA_TEXT_SLICE("LibTUI text wraps inside containers. LibTUI text wraps inside containers."),
                         .style = {
