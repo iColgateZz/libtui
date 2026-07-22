@@ -9,6 +9,7 @@
 enum {
     BUTTON_QUIT_ID = 1,
     SCROLL_PANEL_ID,
+    TOOLTIP_ID,
 };
 
 static i32 text_measure(Layla_TextSlice text, void *userdata) {
@@ -54,6 +55,7 @@ i32 main(void) {
     set_fps(60);
 
     b32 quit = false;
+    b32 tooltip_open = false;
     while (!quit) {
         begin_frame();
 
@@ -61,6 +63,8 @@ i32 main(void) {
         b32 cursor_is_down = cursor.interaction_state == LAYLA_CURSOR_PRESSED_THIS_FRAME ||
                              cursor.interaction_state == LAYLA_CURSOR_PRESSED;
         i32 scroll_delta_y = 0;
+        b32 left_mouse_pressed = false;
+        b32 right_mouse_pressed = false;
         Slice(Event) events = get_events();
         for (isize i = 0; i < events.count; ++i) {
             Event event = events.items[i];
@@ -69,11 +73,17 @@ i32 main(void) {
 
             cursor.x = event.as.mouse.x;
             cursor.y = event.as.mouse.y;
-            if (event_is(event, EMouseLeft)) cursor_is_down = event.as.mouse.pressed;
+            if (event_is(event, EMouseLeft)) {
+                cursor_is_down = event.as.mouse.pressed;
+                left_mouse_pressed = event.as.mouse.pressed;
+            }
+            if (event_is(event, EMouseRight) && event.as.mouse.pressed) right_mouse_pressed = true;
             if (event_is(event, EMouseDrag)) cursor_is_down = true;
             if (event_is(event, EScrollUp)) scroll_delta_y--;
             if (event_is(event, EScrollDown)) scroll_delta_y++;
         }
+        if (left_mouse_pressed) tooltip_open = false;
+        if (right_mouse_pressed) tooltip_open = layla_state_is_element_hovered_by_id(BUTTON_QUIT_ID);
         layla_state_set_cursor_state(cursor.x, cursor.y, cursor_is_down);
         layla_scroll_offset_update_on_hovered_element(scroll_delta_y);
 
@@ -114,24 +124,36 @@ i32 main(void) {
                         .size = {.w = LAYLA_FILL(), .h = LAYLA_FIXED(5)},
                         .background = LAYLA_COLOR(10, 9, 254),
                     });
-
-                    Layla_Container(
-                        .style = {
-                            .background = LAYLA_COLOR(0, 0, 0),
-                            .size = {.w = LAYLA_FIXED(10), .h = LAYLA_FIXED(10)}
-                        },
-                        .floating = {
-                            .attach_to = LAYLA_ATTACH_TO_PARENT,
-                            .attach_point = {
-                                .parent = {.x = LAYLA_ALIGN_CENTER, .y = LAYLA_ALIGN_CENTER},
-                                .element.x = LAYLA_ALIGN_CENTER,
-                            },
-                            .z_index = 1,
-                        },
-                    );
                 }
 
                 if (button(BUTTON_QUIT_ID, LAYLA_TEXT_SLICE("Quit"))) quit = true;
+
+                if (tooltip_open) {
+                    Layla_ContainerID(TOOLTIP_ID,
+                        .style = {
+                            .background = LAYLA_COLOR(30, 30, 30),
+                            .padding = {.left = 1, .right = 1},
+                            .border = {.width = 1, .color = LAYLA_RGB(255, 255, 255)},
+                            .size = {.w = LAYLA_FIT(), .h = LAYLA_FIT()},
+                        },
+                        .floating = {
+                            .attach_to = {
+                                .type = LAYLA_ATTACH_TO_ELEMENT,
+                                .as.element.id = BUTTON_QUIT_ID,
+                            },
+                            .attach_point = {
+                                .parent = {.x = LAYLA_ALIGN_CENTER, .y = LAYLA_ALIGN_START},
+                                .element = {.x = LAYLA_ALIGN_CENTER, .y = LAYLA_ALIGN_END},
+                            },
+                            .z_index = 10,
+                        },
+                    ) {
+                        Layla_Text(
+                            .text = LAYLA_TEXT_SLICE("Right-click tooltip"),
+                            .style.color = LAYLA_RGB(255, 255, 255),
+                        );
+                    }
+                }
 
                 Layla_Container(.style = {
                     .size = {.w = LAYLA_FILL(), .h = LAYLA_FIXED(5)},

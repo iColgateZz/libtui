@@ -111,6 +111,7 @@ typedef struct {
 
 static inline void error_emit(Layla_ErrorType type, Layla_ElementID id, byte const *message);
 static inline Node *node_from_temp_id(TempID id);
+static inline Node *node_get_by_element_id(Layla_ElementID id);
 static inline TempID temp_id_from_child_index(i32 index);
 static inline Node *node_from_index(i32 index);
 static inline TempID node_push(Node node);

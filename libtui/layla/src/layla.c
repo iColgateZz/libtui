@@ -248,7 +248,7 @@ void layla_container_element_configure(Layla_ContainerConfig conf) {
     node->as.container.floating = conf.floating;
     node->as.container.custom = conf.custom;
 
-    if (conf.floating.attach_to != LAYLA_ATTACH_TO_NONE) {
+    if (conf.floating.attach_to.type != LAYLA_ATTACH_TO_NONE) {
         assert(state.open_node_stack.count > 1);
         node->parent = state.open_node_stack.items[state.open_node_stack.count - 2];
         layla_list_append(&state.floating_roots, temp_id);
@@ -347,9 +347,15 @@ void layla_scroll_offset_update_on_hovered_element(i32 delta_y) {
 static inline void floating_layout(Node *node) {
     Layla_Floating floating = node->as.container.floating;
     Node *attached;
-    switch (floating.attach_to) {
+    switch (floating.attach_to.type) {
         case LAYLA_ATTACH_TO_PARENT: attached = node_from_temp_id(node->parent); break;
         case LAYLA_ATTACH_TO_ROOT:   attached = node_from_temp_id(LAYLA_ROOT_TEMP_ID); break;
+        case LAYLA_ATTACH_TO_ELEMENT: {
+            attached = node_get_by_element_id(floating.attach_to.as.element.id);
+            assert(attached != NULL && "Floating attachment element was not declared in the current layout");
+            assert(attached != node && "Floating container cannot attach to itself");
+            break;
+        }
         case LAYLA_ATTACH_TO_NONE:   UNREACHABLE("Floating layout requires a floating container");
     }
     container_intrinsic_width(node);
@@ -910,6 +916,17 @@ static inline Node *node_from_temp_id(TempID id) {
     return &state.nodes.items[id];
 }
 
+static inline Node *node_get_by_element_id(Layla_ElementID id) {
+    if (id == LAYLA_ELEMENT_ID_NONE) return NULL;
+
+    for (isize i = 0; i < state.nodes.count; ++i) {
+        Node *node = &state.nodes.items[i];
+        if (node->id == id) return node;
+    }
+
+    return NULL;
+}
+
 static inline TempID temp_id_from_child_index(i32 index) {
     assert(0 <= index && index < state.frame_children.count);
     return state.frame_children.items[index];
@@ -1209,5 +1226,5 @@ static inline b32 node_is_scroll_y(Node *node) {
 }
 
 static inline b32 node_is_floating(Node *node) {
-    return node->type == LAYLA_NODE_CONTAINER && node->as.container.floating.attach_to != LAYLA_ATTACH_TO_NONE;
+    return node->type == LAYLA_NODE_CONTAINER && node->as.container.floating.attach_to.type != LAYLA_ATTACH_TO_NONE;
 }

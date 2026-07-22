@@ -187,7 +187,17 @@ typedef struct {
         LAYLA_ATTACH_TO_NONE,
         LAYLA_ATTACH_TO_PARENT,
         LAYLA_ATTACH_TO_ROOT,
-    } attach_to;
+        LAYLA_ATTACH_TO_ELEMENT,
+    } type;
+    union {
+        struct {
+            Layla_ElementID id;
+        } element;
+    } as;
+} Layla_FloatingAttachTo;
+
+typedef struct {
+    Layla_FloatingAttachTo attach_to;
     struct {
         Layla_FloatingAttachPoint parent;
         Layla_FloatingAttachPoint element;
