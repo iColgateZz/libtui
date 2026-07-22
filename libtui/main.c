@@ -122,8 +122,11 @@ i32 main(void) {
                         },
                         .floating = {
                             .attach_to = LAYLA_ATTACH_TO_PARENT,
+                            .attach_point = {
+                                .parent = {.x = LAYLA_ALIGN_CENTER, .y = LAYLA_ALIGN_CENTER},
+                                .element.x = LAYLA_ALIGN_CENTER,
+                            },
                             .z_index = 1,
-                            .align_x = LAYLA_ALIGN_CENTER,
                         },
                     );
                 }

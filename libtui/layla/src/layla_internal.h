@@ -154,6 +154,7 @@ static inline i32 node_get_fill_max(Node *node, Dimension dim);
 static inline i32 node_get_fill_min(Node *node, Dimension dim);
 static inline void space_distribute(i32 space, List(NodePtr) nodes, Dimension dim);
 static inline i32 align_offset(Layla_Alignment align, i32 parent_size, PaddingSides padding, i32 child_size);
+static inline i32 alignment_resolve_position(Layla_Alignment alignment, i32 size);
 static inline Layla_Alignment node_get_align_self(Node *node);
 static inline b32 node_is_scroll_y(Node *node);
 static inline b32 node_is_floating(Node *node);

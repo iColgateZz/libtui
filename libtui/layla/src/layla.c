@@ -361,8 +361,12 @@ static inline void floating_layout(Node *node) {
     // Same here
     floating_measure_size(node, attached, DIM_Y);
     container_fill_height(node);
-    node->x = attached->x + align_offset(floating.align_x, attached->w, (PaddingSides) {0}, node->w);
-    node->y = attached->y + align_offset(floating.align_y, attached->h, (PaddingSides) {0}, node->h); 
+    node->x = attached->x
+              + alignment_resolve_position(floating.attach_point.parent.x, attached->w)
+              - alignment_resolve_position(floating.attach_point.element.x, node->w);
+    node->y = attached->y
+              + alignment_resolve_position(floating.attach_point.parent.y, attached->h)
+              - alignment_resolve_position(floating.attach_point.element.y, node->h);
     container_positions(node);
     container_commands(node);
 }
@@ -960,6 +964,15 @@ static inline i32 align_offset(Layla_Alignment align, i32 parent_size, PaddingSi
         case LAYLA_ALIGN_END:    return padding.start + remaining;
     }
 
+    UNREACHABLE("It must always match against alignment");
+}
+
+static inline i32 alignment_resolve_position(Layla_Alignment alignment, i32 size) {
+    switch (alignment) {
+        case LAYLA_ALIGN_START:  return 0;
+        case LAYLA_ALIGN_CENTER: return size / 2;
+        case LAYLA_ALIGN_END:    return size;
+    }
     UNREACHABLE("It must always match against alignment");
 }
 

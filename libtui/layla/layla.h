@@ -178,13 +178,20 @@ typedef LAYLA_PACKED_ENUM {
 } Layla_Overflow;
 
 typedef struct {
+    Layla_Alignment x;
+    Layla_Alignment y;
+} Layla_FloatingAttachPoint;
+
+typedef struct {
     LAYLA_PACKED_ENUM {
         LAYLA_ATTACH_TO_NONE,
         LAYLA_ATTACH_TO_PARENT,
         LAYLA_ATTACH_TO_ROOT,
     } attach_to;
-    Layla_Alignment align_x;
-    Layla_Alignment align_y;
+    struct {
+        Layla_FloatingAttachPoint parent;
+        Layla_FloatingAttachPoint element;
+    } attach_point;
     i32 z_index;
 } Layla_Floating;
 
