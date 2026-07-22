@@ -11,7 +11,6 @@ TODO: Add cross-axis child alignment for containers.
 TODO: Add other text policies.
 TODO: Make text break behavior less hardcoded than ASCII space and newline.
 TODO: Add string and indexed element ID helpers.
-TODO: Add pointer capture and passthrough modes for floating containers.
 TODO: Add per-side border widths.
 TODO: Add optional command and subtree culling for elements outside the screen or active clip.
 TODO: Add text-line culling for large scrollable text.

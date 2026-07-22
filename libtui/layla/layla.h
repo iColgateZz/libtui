@@ -196,12 +196,20 @@ typedef struct {
     } as;
 } Layla_FloatingAttachTo;
 
+typedef LAYLA_PACKED_ENUM {
+    // Stop hit testing after this floating tree is hit.
+    LAYLA_CURSOR_CAPTURE,
+    // Keep this floating tree's hover results and continue hit testing underneath it.
+    LAYLA_CURSOR_FALLTHROUGH,
+} Layla_CursorCaptureMode;
+
 typedef struct {
     Layla_FloatingAttachTo attach_to;
     struct {
         Layla_FloatingAttachPoint parent;
         Layla_FloatingAttachPoint element;
     } attach_point;
+    Layla_CursorCaptureMode cursor_capture_mode;
     i32 z_index;
 } Layla_Floating;
 

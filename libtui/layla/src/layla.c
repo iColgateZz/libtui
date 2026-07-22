@@ -874,7 +874,9 @@ static inline void hover_test(void) {
 
     for (isize i = state.floating_roots.count; i > 0; --i) {
         TempID floating_root = state.floating_roots.items[i - 1];
-        if (node_hit_test(node_from_temp_id(floating_root), screen, state.cursor.x, state.cursor.y)) return;
+        Node *node = node_from_temp_id(floating_root);
+        b32 hit = node_hit_test(node, screen, state.cursor.x, state.cursor.y);
+        if (hit && node->as.container.floating.cursor_capture_mode == LAYLA_CURSOR_CAPTURE) return;
     }
 
     node_hit_test(root, screen, state.cursor.x, state.cursor.y);
