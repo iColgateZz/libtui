@@ -128,11 +128,11 @@ static inline void container_wrap_text(Node *node);
 static inline void container_intrinsic_height(Node *node);
 static inline void container_fill_height(Node *node);
 static inline void container_positions(Node *node);
-static inline void container_commands(Node *node);
+static inline void container_commands(Node *node, Layla_Rectangle active_clip);
 
 static inline void text_intrinsic_width(Node *node);
 static inline void text_wrap_text(Node *node);
-static inline TextMeasurement text_process(Node *node, i32 wrap_width, b32 emit_commands);
+static inline TextMeasurement text_process(Node *node, i32 wrap_width, b32 emit_commands, Layla_Rectangle active_clip);
 static inline i32 text_slice_measure(Layla_ElementID id, Layla_TextSlice text);
 
 static inline b32 node_hit_test(Node *node, Layla_Rectangle parent_clip, i32 x, i32 y);
@@ -160,7 +160,7 @@ static inline Layla_Alignment node_get_align_self(Node *node);
 static inline b32 node_is_scroll_y(Node *node);
 static inline b32 node_is_floating(Node *node);
 static inline ScrollState *scroll_state_get_by_id(Layla_ElementID id);
-static inline void append_text_command(Node *node, isize line_start_byte, isize line_end_byte, i32 line_x, i32 line_y);
+static inline void append_text_command(Node *node, isize line_start_byte, isize line_end_byte, i32 line_x, i32 line_y, i32 line_width, Layla_Rectangle active_clip);
 static inline void floating_measure_size(Node *node, Node *attached, Dimension dim);
 
 #endif

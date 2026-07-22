@@ -12,9 +12,7 @@ TODO: Add horizontal scrolling.
     TODO: Make text break behavior less hardcoded than ASCII space and newline.
     TODO: Add string and indexed element ID helpers.
     TODO: Add per-side border widths.
-TODO: Add optional command and subtree culling for elements outside the screen or active clip.
-TODO: Add text-line culling for large scrollable text.
-TODO: Add a virtualization helper for large fixed-height terminal lists.
+    TODO: Add a virtualization helper for large fixed-height terminal lists.
     TODO: Add debug introspection for element IDs, parents, rectangles, resolved sizes, clips, scroll state, and z-index.
     TODO: Expose enough element order and rectangle data for keyboard focus and directional navigation.
     TODO: Decide whether Layla public API should keep depending directly on psh_core types.

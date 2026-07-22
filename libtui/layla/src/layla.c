@@ -168,7 +168,7 @@ Layla_CommandSlice layla_layout_end(void) {
     container_intrinsic_height(root);
     container_fill_height(root);
     container_positions(root);
-    container_commands(root);
+    container_commands(root, rect_from_node(root));
 
     floating_roots_sort();
     for (isize i = 0; i < state.floating_roots.count; ++i)
@@ -374,7 +374,7 @@ static inline void floating_layout(Node *node) {
               + alignment_resolve_position(floating.attach_point.parent.y, attached->h)
               - alignment_resolve_position(floating.attach_point.element.y, node->h);
     container_positions(node);
-    container_commands(node);
+    container_commands(node, rect_from_node(node_from_temp_id(LAYLA_ROOT_TEMP_ID)));
 }
 
 static inline void floating_measure_size(Node *node, Node *attached, Dimension dim) {
@@ -475,7 +475,7 @@ static inline void container_intrinsic_size(Node *node, Dimension dim) {
 }
 
 static inline void text_intrinsic_width(Node *node) {
-    TextMeasurement measurement = text_process(node, 0, false);
+    TextMeasurement measurement = text_process(node, 0, false, (Layla_Rectangle) {0});
     node->w = measurement.natural_width;
     node->min_w = measurement.minimum_width;
 }
@@ -586,7 +586,7 @@ static inline void container_wrap_text(Node *node) {
 }
 
 static inline void text_wrap_text(Node *node) {
-    TextMeasurement measurement = text_process(node, MAX(node->w, 1), false);
+    TextMeasurement measurement = text_process(node, MAX(node->w, 1), false, (Layla_Rectangle) {0});
     node->h = node->min_h = measurement.line_count;
 }
 
@@ -640,9 +640,14 @@ static inline void container_positions(Node *node) {
     }
 }
 
-static inline void container_commands(Node *node) {
+static inline void container_commands(Node *node, Layla_Rectangle active_clip) {
     Layla_ContainerStyle style = node->as.container.style;
     b32 overflow_hidden = style.overflow == LAYLA_OVERFLOW_HIDDEN;
+    Layla_Rectangle node_rectangle = rect_from_node(node);
+    Layla_Rectangle visible_rectangle = rect_intersect(active_clip, node_rectangle);
+    b32 node_is_visible = visible_rectangle.w > 0 && visible_rectangle.h > 0;
+
+    if (overflow_hidden && !node_is_visible) return;
 
     if (overflow_hidden) {
         layla_list_append(&state.commands,
@@ -652,27 +657,33 @@ static inline void container_commands(Node *node) {
         );
     }
 
-    if (style.background.is_set) {
+    if (node_is_visible && style.background.is_set) {
         layla_list_append(&state.commands,
             ((Layla_Command) {.type = LAYLA_CMD_RECTANGLE, .id = node->id, .as.rectangle = {
-                .x = node->x, .y = node->y, .w = node->w, .h = node->h,
-                .color = style.background.color,
+                .x = node->x, .y = node->y, .w = node->w, .h = node->h, .color = style.background.color,
             }})
         );
     }
 
-    if (node->as.container.custom != NULL) {
+    if (node_is_visible && node->as.container.custom != NULL) {
         PaddingSides horizontal_padding = padding_sides_from_container_style(style, DIM_X);
         PaddingSides vertical_padding = padding_sides_from_container_style(style, DIM_Y);
         i32 custom_w = node->w - horizontal_padding.start - horizontal_padding.end;
         i32 custom_h = node->h - vertical_padding.start - vertical_padding.end;
-        if (custom_w > 0 && custom_h > 0) {
+        Layla_Rectangle custom_rectangle = {
+            .x = node->x + horizontal_padding.start, 
+            .y = node->y + vertical_padding.start,
+            .w = custom_w, 
+            .h = custom_h,
+        };
+        Layla_Rectangle visible_custom_rectangle = rect_intersect(active_clip, custom_rectangle);
+        if (visible_custom_rectangle.w > 0 && visible_custom_rectangle.h > 0) {
             layla_list_append(&state.commands, ((Layla_Command) {
                 .type = LAYLA_CMD_CUSTOM,
                 .id = node->id,
                 .as.custom = {
-                    .x = node->x + horizontal_padding.start,
-                    .y = node->y + vertical_padding.start,
+                    .x = custom_rectangle.x,
+                    .y = custom_rectangle.y,
                     .w = custom_w,
                     .h = custom_h,
                     .userdata = node->as.container.custom,
@@ -682,12 +693,22 @@ static inline void container_commands(Node *node) {
     }
 
     ChildrenIndices children = node->children;
+    Layla_Rectangle child_clip = overflow_hidden ? visible_rectangle : active_clip;
     for (isize i = 0; i < children.count; ++i) {
         Node *child = node_from_index(children.offset + i);
         if (child->type == LAYLA_NODE_TEXT) {
-            text_process(child, MAX(child->w, 1), true);
+            Layla_Rectangle text_vertical_bounds = {
+                .x = child_clip.x,
+                .y = child->y,
+                .w = child_clip.w,
+                .h = child->h,
+            };
+            Layla_Rectangle visible_text_rectangle = rect_intersect(child_clip, text_vertical_bounds);
+            if (visible_text_rectangle.w > 0 && visible_text_rectangle.h > 0) {
+                text_process(child, MAX(child->w, 1), true, child_clip);
+            }
         } else {
-            container_commands(child);
+            container_commands(child, child_clip);
         }
     }
 
@@ -697,12 +718,16 @@ static inline void container_commands(Node *node) {
         i32 h = node->h - 2 * i;
         if (w < 2 || h < 2) continue;
 
+        Layla_Rectangle border_rectangle = {.x = node->x + i, .y = node->y + i, .w = w, .h = h};
+        Layla_Rectangle visible_border_rectangle = rect_intersect(active_clip, border_rectangle);
+        if (visible_border_rectangle.w <= 0 || visible_border_rectangle.h <= 0) continue;
+
         layla_list_append(&state.commands, ((Layla_Command) {
             .type = LAYLA_CMD_BORDER,
             .id = node->id,
             .as.border = {
-                .x = node->x + i,
-                .y = node->y + i,
+                .x = border_rectangle.x,
+                .y = border_rectangle.y,
                 .w = w,
                 .h = h,
                 .color = border.color,
@@ -712,13 +737,11 @@ static inline void container_commands(Node *node) {
     }
 
     if (overflow_hidden) {
-        layla_list_append(&state.commands, ((Layla_Command) {
-            .type = LAYLA_CMD_CLIP_END, .id = node->id,
-        }));
+        layla_list_append(&state.commands, ((Layla_Command) {.type = LAYLA_CMD_CLIP_END, .id = node->id}));
     }
 }
 
-static inline TextMeasurement text_process(Node *node, i32 wrap_width, b32 emit_commands) {
+static inline TextMeasurement text_process(Node *node, i32 wrap_width, b32 emit_commands, Layla_Rectangle active_clip) {
     Layla_TextSlice source = node->as.text.text;
     Layla_TextStyle style = node->as.text.style;
     TextMeasurement measurement = {0};
@@ -761,7 +784,7 @@ static inline TextMeasurement text_process(Node *node, i32 wrap_width, b32 emit_
 
             if (emit_commands) {
                 i32 line_x = node->x + align_offset(style.alignment, node->w, ((PaddingSides) {0}), line_width);
-                append_text_command(node, line_start_byte, cursor_byte, line_x, node->y + measurement.line_count);
+                append_text_command(node, line_start_byte, cursor_byte, line_x, node->y + measurement.line_count, line_width, active_clip);
             }
 
             measurement.line_count++;
@@ -802,7 +825,7 @@ static inline TextMeasurement text_process(Node *node, i32 wrap_width, b32 emit_
         if (word_overflows_line) {
             if (emit_commands) {
                 i32 line_x = node->x + align_offset(style.alignment, node->w, ((PaddingSides) {0}), line_width);
-                append_text_command(node, line_start_byte, line_end_byte, line_x, node->y + measurement.line_count);
+                append_text_command(node, line_start_byte, line_end_byte, line_x, node->y + measurement.line_count, line_width, active_clip);
             }
 
             measurement.line_count++;
@@ -830,7 +853,7 @@ static inline TextMeasurement text_process(Node *node, i32 wrap_width, b32 emit_
 
     if (emit_commands) {
         i32 line_x = node->x + align_offset(style.alignment, node->w, ((PaddingSides) {0}), line_width);
-        append_text_command(node, line_start_byte, source.count, line_x, node->y + measurement.line_count);
+        append_text_command(node, line_start_byte, source.count, line_x, node->y + measurement.line_count, line_width, active_clip);
     }
     measurement.line_count++;
 
@@ -849,9 +872,14 @@ static inline i32 text_slice_measure(Layla_ElementID id, Layla_TextSlice text) {
     return width;
 }
 
-static inline void append_text_command(Node *node, isize line_start_byte, isize line_end_byte, i32 line_x, i32 line_y) {
+static inline 
+void append_text_command(Node *node, isize line_start_byte, isize line_end_byte, i32 line_x, i32 line_y, i32 line_width, Layla_Rectangle active_clip) {
     Layla_TextSlice source = node->as.text.text;
     Layla_TextStyle style = node->as.text.style;
+    Layla_Rectangle line_rectangle = {.x = line_x, .y = line_y, .w = MAX(line_width, 1), .h = 1};
+    Layla_Rectangle visible_line_rectangle = rect_intersect(active_clip, line_rectangle);
+    if (visible_line_rectangle.w <= 0 || visible_line_rectangle.h <= 0) return;
+
     layla_list_append(&state.commands,
         ((Layla_Command) {.type = LAYLA_CMD_TEXT, .id = node->id, .as.text = {
             .x = line_x,
