@@ -1,5 +1,8 @@
 #include "layla_internal.h"
 
+static inline u64 element_id_hash(Layla_ElementID id) { return id; }
+static inline b32 element_id_equal(Layla_ElementID a, Layla_ElementID b) { return a == b; }
+
 #ifdef LAYLA_STATIC_STORAGE
 static Node NODES[LAYLA_MAX_NODES];
 static TempID OPEN_NODE_STACK[LAYLA_MAX_NODES];
@@ -9,8 +12,8 @@ static TempID FLOATING_ROOTS[LAYLA_MAX_NODES];
 static Layla_Command COMMANDS[LAYLA_MAX_COMMANDS];
 static Layla_Error ERRORS[LAYLA_MAX_ERRORS];
 static Layla_ElementID HOVERED_ELEMENT_IDS[LAYLA_MAX_NODES];
-static ElementRecord ELEMENT_RECORDS[LAYLA_MAX_NODES];
-static ScrollState SCROLL_STATES[LAYLA_MAX_SCROLL_STATES];
+static HashMapEntry(Layla_ElementID, ElementRecord) ELEMENT_RECORDS_BY_ID[LAYLA_MAX_NODES * 2];
+static HashMapEntry(Layla_ElementID, ScrollState) SCROLL_STATES_BY_ELEMENT_ID[LAYLA_MAX_SCROLL_STATES];
 static union { // try different alignments
     void *pointer;
     long double maximum_alignment;
@@ -26,8 +29,20 @@ static State state = {
     .commands = { .items = COMMANDS, .capacity = LAYLA_MAX_COMMANDS },
     .errors = { .items = ERRORS, .capacity = LAYLA_MAX_ERRORS },
     .hovered_element_ids = { .items = HOVERED_ELEMENT_IDS, .capacity = LAYLA_MAX_NODES },
-    .element_records = { .items = ELEMENT_RECORDS, .capacity = LAYLA_MAX_NODES },
-    .scroll_states = { .items = SCROLL_STATES, .capacity = LAYLA_MAX_SCROLL_STATES },
+    .element_records = {
+        .items = ELEMENT_RECORDS_BY_ID,
+        .capacity = LAYLA_MAX_NODES * 2,
+        .fixed_capacity = true,
+        .key_hash = element_id_hash,
+        .key_equal = element_id_equal,
+    },
+    .scroll_states = {
+        .items = SCROLL_STATES_BY_ELEMENT_ID,
+        .capacity = LAYLA_MAX_SCROLL_STATES,
+        .fixed_capacity = true,
+        .key_hash = element_id_hash,
+        .key_equal = element_id_equal,
+    },
     .cursor = {.x = -1, .y = -1},
     .tmp = {
         .base_ptr = TMP_STORE.bytes,
@@ -42,7 +57,11 @@ static State state = {
         (list)->items[(list)->count++] = (item);    \
     } while (0)
 #else //!LAYLA_STATIC_STORAGE
-static State state = {.cursor = {.x = -1, .y = -1}};
+static State state = {
+    .element_records = { .key_hash = element_id_hash, .key_equal = element_id_equal },
+    .scroll_states = { .key_hash = element_id_hash, .key_equal = element_id_equal },
+    .cursor = {.x = -1, .y = -1},
+};
 #define layla_list_append list_append
 #endif //LAYLA_STATIC_STORAGE
 
@@ -117,12 +136,12 @@ Layla_CursorState layla_state_get_cursor_state(void) {
 }
 
 Layla_ElementData layla_element_data_get_by_id(Layla_ElementID id) {
-    for (isize i = 0; i < state.element_records.count; ++i) {
-        ElementRecord record = state.element_records.items[i];
-        if (record.id == id) return record.data;
+    ElementRecord *record = NULL;
+    hash_map_get(&state.element_records, id, &record);
+    if (record == NULL || record->generation != state.completed_generation) {
+        return (Layla_ElementData) {0};
     }
-
-    return (Layla_ElementData) {0};
+    return record->data;
 }
 
 void layla_layout_begin(void) {
@@ -174,17 +193,28 @@ Layla_CommandSlice layla_layout_end(void) {
     for (isize i = 0; i < state.floating_roots.count; ++i)
         floating_layout(node_from_temp_id(state.floating_roots.items[i]));
 
-    state.element_records.count = 0;
+    u32 next_generation = state.completed_generation + 1;
+    isize record_count = state.element_records.count;
+    isize current_count = state.nodes.count;
+    b32 too_many_stale_records = record_count >= current_count * 2;
+    b32 fixed_map_needs_room = state.element_records.fixed_capacity
+        && record_count > state.element_records.capacity - current_count
+        && record_count > current_count;
+    if (next_generation == 0 || too_many_stale_records || fixed_map_needs_room) {
+        hash_map_clear(&state.element_records);
+    }
+
     for (isize i = 0; i < state.nodes.count; ++i) {
         Node node = state.nodes.items[i];
-        layla_list_append(&state.element_records, ((ElementRecord) {
-            .id = node.id,
+        hash_map_insert(&state.element_records, node.id, ((ElementRecord) {
+            .generation = next_generation,
             .data = {
                 .rectangle = rect_from_node(&node),
                 .found = true,
             },
         }));
     }
+    state.completed_generation = next_generation;
 
     return (Layla_CommandSlice) {
         .items = state.commands.items,
@@ -1236,15 +1266,14 @@ static inline void space_distribute(i32 space, List(NodePtr) nodes, Dimension di
     }
 }
 
-//TODO: improve performance
 static inline ScrollState *scroll_state_get_by_id(Layla_ElementID id) {
-    for (isize i = 0; i < state.scroll_states.count; ++i) {
-        ScrollState *scroll_state = &state.scroll_states.items[i];
-        if (scroll_state->element_id == id) return scroll_state;
-    }
+    ScrollState *scroll_state = NULL;
+    hash_map_get(&state.scroll_states, id, &scroll_state);
+    if (scroll_state != NULL) return scroll_state;
 
-    layla_list_append(&state.scroll_states, ((ScrollState) {.element_id = id}));
-    return &layla_list_last(&state.scroll_states);
+    hash_map_insert(&state.scroll_states, id, ((ScrollState) {0}));
+    hash_map_get(&state.scroll_states, id, &scroll_state);
+    return scroll_state;
 }
 
 static inline b32 node_is_scroll_y(Node *node) {

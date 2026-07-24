@@ -16,6 +16,7 @@
 #endif
 
 #ifdef LAYLA_STATIC_STORAGE
+    // LAYLA_MAX_NODES and LAYLA_MAX_SCROLL_STATES must be powers of two.
     #ifndef LAYLA_MAX_NODES
         #define LAYLA_MAX_NODES 1024
     #endif

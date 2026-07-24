@@ -51,19 +51,17 @@ typedef Node* NodePtr;
 list_def(NodePtr)
 
 typedef struct {
-    Layla_ElementID id;
-    Layla_ElementData data;
-} ElementRecord;
-
-list_def(ElementRecord)
-
-typedef struct {
-    Layla_ElementID element_id;
     i32 y;
     i32 max_y;
 } ScrollState;
 
-list_def(ScrollState)
+typedef struct {
+    Layla_ElementData data;
+    u32 generation;
+} ElementRecord;
+
+hash_map_def(Layla_ElementID, ElementRecord)
+hash_map_def(Layla_ElementID, ScrollState)
 
 typedef enum {
     DIM_X,
@@ -95,8 +93,9 @@ typedef struct {
     List(Layla_Command) commands;
     List(Layla_Error) errors;
     List(Layla_ElementID) hovered_element_ids;
-    List(ElementRecord) element_records;
-    List(ScrollState) scroll_states;
+    HashMap(Layla_ElementID, ElementRecord) element_records;
+    HashMap(Layla_ElementID, ScrollState) scroll_states;
+    u32 completed_generation;
     i32 width, height;
     Layla_CursorState cursor;
     TempID hovered_temp_id;
@@ -110,6 +109,8 @@ typedef struct {
 // Functions
 
 static inline void error_emit(Layla_ErrorType type, Layla_ElementID id, byte const *message);
+static inline u64 element_id_hash(Layla_ElementID id);
+static inline b32 element_id_equal(Layla_ElementID a, Layla_ElementID b);
 static inline Node *node_from_temp_id(TempID id);
 static inline Node *node_get_by_element_id(Layla_ElementID id);
 static inline TempID temp_id_from_child_index(i32 index);
