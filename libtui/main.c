@@ -61,20 +61,20 @@ i32 main(void) {
         for (isize i = 0; i < events.count; ++i) {
             Brenda_Event event = events.items[i];
             if (brenda_event_is_text(event, (byte *)"q", sizeof("q") - 1)) quit = true;
-            if (!brenda_event_is_mouse(event)) continue;
+            if (event.type < BRENDA_EVENT_MOUSE_LEFT) continue;
 
             cursor.x = event.as.mouse.x;
             cursor.y = event.as.mouse.y;
-            if (brenda_event_is_type(event, BRENDA_EVENT_MOUSE_LEFT)) {
+            if (event.type == BRENDA_EVENT_MOUSE_LEFT) {
                 cursor_is_down = event.as.mouse.pressed;
                 left_mouse_pressed = event.as.mouse.pressed;
             }
-            if (brenda_event_is_type(event, BRENDA_EVENT_MOUSE_RIGHT) && event.as.mouse.pressed) {
+            if (event.type == BRENDA_EVENT_MOUSE_RIGHT && event.as.mouse.pressed) {
                 right_mouse_pressed = true;
             }
-            if (brenda_event_is_type(event, BRENDA_EVENT_MOUSE_DRAG)) cursor_is_down = true;
-            if (brenda_event_is_type(event, BRENDA_EVENT_SCROLL_UP)) scroll_delta_y--;
-            if (brenda_event_is_type(event, BRENDA_EVENT_SCROLL_DOWN)) scroll_delta_y++;
+            if (event.type == BRENDA_EVENT_MOUSE_DRAG) cursor_is_down = true;
+            if (event.type == BRENDA_EVENT_SCROLL_UP) scroll_delta_y--;
+            if (event.type == BRENDA_EVENT_SCROLL_DOWN) scroll_delta_y++;
         }
         if (left_mouse_pressed) tooltip_open = false;
         if (right_mouse_pressed) tooltip_open = layla_state_is_element_hovered_by_id(BUTTON_QUIT_ID);

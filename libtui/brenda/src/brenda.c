@@ -22,23 +22,8 @@ Brenda_EventSlice brenda_events_get(void) {
     };
 }
 
-b32 brenda_event_is_type(Brenda_Event event, Brenda_EventType type) { return event.type == type; }
-b32 brenda_event_is_term_key(Brenda_Event event, Brenda_TermKey key) {
-    return event.type == BRENDA_EVENT_TERM_KEY && event.as.term_key == key;
-}
-
 b32 brenda_event_is_text(Brenda_Event event, byte *text, isize length) {
-    return event.type == BRENDA_EVENT_TEXT && memcmp(event.as.text.bytes, text, length) == 0;
-}
-
-b32 brenda_event_is_mouse(Brenda_Event event) {
-    return event.type == BRENDA_EVENT_SCROLL_UP ||
-           event.type == BRENDA_EVENT_SCROLL_DOWN ||
-           event.type == BRENDA_EVENT_MOUSE_MOVE ||
-           event.type == BRENDA_EVENT_MOUSE_DRAG ||
-           event.type == BRENDA_EVENT_MOUSE_LEFT ||
-           event.type == BRENDA_EVENT_MOUSE_MIDDLE ||
-           event.type == BRENDA_EVENT_MOUSE_RIGHT;
+    return event.type == BRENDA_EVENT_TEXT && memcmp(event.as.utf8.bytes, text, length) == 0;
 }
 
 #define write_string(string) output_write(string, sizeof(string) - 1)
@@ -452,8 +437,8 @@ static b32 text_parse(byte **p, byte *end, Brenda_Event *e) {
     //TODO: utf8_next also decodes width. It is not needed here.
     TerminalTextUnit text_unit = utf8_next(p, start + expected_length);
     e->type = BRENDA_EVENT_TEXT;
-    e->as.text.length = text_unit.utf8_length;
-    memcpy(e->as.text.bytes, text_unit.utf8, text_unit.utf8_length);
+    e->as.utf8.length = text_unit.utf8_length;
+    memcpy(e->as.utf8.bytes, text_unit.utf8, text_unit.utf8_length);
     return true;
 }
 
@@ -464,7 +449,7 @@ static Cell cell(TerminalTextUnit text_unit, Brenda_Effect effect) {
 static Cell cell_empty(void) { return (Cell) { .text_unit = text_unit_from_byte(' ') }; }
 static b32 cell_equal(Cell a, Cell b) { return memcmp(&a, &b, sizeof a) == 0; }
 
-b32 brenda_effect_equal(Brenda_Effect a, Brenda_Effect b) { return memcmp(&a, &b, sizeof a) == 0; }
+static inline b32 brenda_effect_equal(Brenda_Effect a, Brenda_Effect b) { return memcmp(&a, &b, sizeof a) == 0; }
 
 static void text_unit_put(i32 x, i32 y, TerminalTextUnit text_unit) {
     Brenda_Rectangle parent = brenda_clip_peek();
@@ -581,12 +566,12 @@ Brenda_Rectangle brenda_clip_peek(void) {
     return list_last(&state.clips);
 }
 
-b32 brenda_rectangle_contains_point(Brenda_Rectangle r, i32 x, i32 y) {
+static inline b32 brenda_rectangle_contains_point(Brenda_Rectangle r, i32 x, i32 y) {
     return r.x <= x && x < r.x + r.w 
         && r.y <= y && y < r.y + r.h;
 }
 
-Brenda_Rectangle brenda_rectangle_intersect(Brenda_Rectangle a, Brenda_Rectangle b) {
+static inline Brenda_Rectangle brenda_rectangle_intersect(Brenda_Rectangle a, Brenda_Rectangle b) {
     i32 x1 = MAX(a.x, b.x);
     i32 y1 = MAX(a.y, b.y);
     i32 x2 = MIN(a.x + a.w, b.x + b.w);
@@ -599,7 +584,7 @@ Brenda_Rectangle brenda_rectangle_intersect(Brenda_Rectangle a, Brenda_Rectangle
     return (Brenda_Rectangle){ x1, y1, x2 - x1, y2 - y1 };
 }
 
-Brenda_Rectangle brenda_rectangle_union(Brenda_Rectangle a, Brenda_Rectangle b) {
+static inline Brenda_Rectangle brenda_rectangle_union(Brenda_Rectangle a, Brenda_Rectangle b) {
     i32 left   = MIN(a.x, b.x);
     i32 top    = MIN(a.y, b.y);
     i32 right  = MAX(a.x + a.w, b.x + b.w);

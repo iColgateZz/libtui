@@ -67,8 +67,8 @@ typedef struct {
         } mouse;
         struct {
             byte bytes[4];
-            u8 length;
-        } text;
+            u8 length; // 1-4
+        } utf8;
         Brenda_TermKey term_key;
     } as;
 } Brenda_Event;
@@ -88,17 +88,8 @@ typedef struct {
     byte *end;
 } Brenda_Stream;
 
-b32 brenda_effect_equal(Brenda_Effect a, Brenda_Effect b);
-
-b32 brenda_event_is_type(Brenda_Event event, Brenda_EventType type);
-b32 brenda_event_is_mouse(Brenda_Event event);
-b32 brenda_event_is_term_key(Brenda_Event event, Brenda_TermKey key);
 b32 brenda_event_is_text(Brenda_Event event, byte *text, isize length);
 Brenda_EventSlice brenda_events_get(void);
-
-b32 brenda_rectangle_contains_point(Brenda_Rectangle rectangle, i32 x, i32 y);
-Brenda_Rectangle brenda_rectangle_intersect(Brenda_Rectangle a, Brenda_Rectangle b);
-Brenda_Rectangle brenda_rectangle_union(Brenda_Rectangle a, Brenda_Rectangle b);
 
 void brenda_clip_push(i32 x, i32 y, i32 w, i32 h);
 void brenda_clip_push_rectangle(Brenda_Rectangle rectangle);
@@ -114,9 +105,9 @@ void brenda_frame_begin(void);
 void brenda_frame_end(void);
 u64 brenda_frame_get_delta_time(void);
 
+i32 brenda_text_measure(byte *text, isize length);
 void brenda_effect_put(i32 x, i32 y, Brenda_Effect effect);
 void brenda_effect_merge(i32 x, i32 y, Brenda_Effect effect);
-i32 brenda_text_measure(byte *text, isize length);
 void brenda_text_put(i32 x, i32 y, byte *text, isize length);
 void brenda_line_draw(i32 x0, i32 y0, i32 x1, i32 y1, byte *text, usize length);
 void brenda_box_draw(Brenda_Rectangle rectangle);

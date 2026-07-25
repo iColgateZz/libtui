@@ -89,4 +89,10 @@ static byte *format_string(byte *cursor, byte *end, s8 text);
 static void debug_text_unit_put(i32 x, i32 y, TerminalTextUnit text_unit);
 static Brenda_Stream brenda_stream_start_from_arena(Arena *arena, usize size);
 
+static inline b32 brenda_rectangle_contains_point(Brenda_Rectangle rectangle, i32 x, i32 y);
+static inline Brenda_Rectangle brenda_rectangle_intersect(Brenda_Rectangle a, Brenda_Rectangle b);
+static inline Brenda_Rectangle brenda_rectangle_union(Brenda_Rectangle a, Brenda_Rectangle b);
+
+static inline b32 brenda_effect_equal(Brenda_Effect a, Brenda_Effect b);
+
 #endif
