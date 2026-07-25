@@ -164,59 +164,22 @@ i32 main(void) {
                 switch (cmd.type) {
                     case LAYLA_CMD_RECTANGLE: {
                         Layla_CommandRectangle rectangle = cmd.as.rectangle;
-                        brenda_box_fill(
-                            *(Brenda_Rectangle *)&rectangle,
-                            (Brenda_Effect) {
-                                .bg = *(Brenda_RGB *)&rectangle.color,
-                                .flags = BRENDA_EFFECT_BG,
-                            }
-                        );
-
+                        brenda_rectangle_fill(*(Brenda_Rectangle *)&rectangle, *(Brenda_RGB *)&rectangle.color);
                         break;
                     }
 
                     case LAYLA_CMD_TEXT: {
                         Layla_CommandText text = cmd.as.text;
-
-                        Brenda_Effect effect = {
-                            .fg = *(Brenda_RGB *)&text.color,
-                            .flags = BRENDA_EFFECT_FG,
-                        };
-
-                        isize length = text.slice.count;
-                        brenda_text_put(text.x, text.y, text.slice.items, length);
-                        i32 width = brenda_text_measure_width(text.slice.items, length);
-                        for (i32 x = text.x; x < text.x + width; ++x) brenda_effect_merge(x, text.y, effect);
-
+                        Brenda_TextEffect effect = { .color = *(Brenda_RGB *)&text.color, };
+                        brenda_text_draw(text.x, text.y, text.slice.items, text.slice.count, effect);
                         break;
                     }
 
                     case LAYLA_CMD_BORDER: {
                         Layla_CommandBorder border = cmd.as.border;
                         Brenda_Rectangle rectangle = *(Brenda_Rectangle *)&border;
-                        Brenda_Effect effect = {
-                            .fg = *(Brenda_RGB *)&border.color,
-                            .flags = BRENDA_EFFECT_FG,
-                        };
-
-                        if (border.userdata == NULL) {
-                            i32 x0 = rectangle.x;
-                            i32 y0 = rectangle.y;
-                            i32 x1 = rectangle.x + rectangle.w - 1;
-                            i32 y1 = rectangle.y + rectangle.h - 1;
-
-                            brenda_box_draw(rectangle);
-
-                            for (i32 x = x0; x <= x1; ++x) {
-                                brenda_effect_merge(x, y0, effect);
-                                brenda_effect_merge(x, y1, effect);
-                            }
-                            for (i32 y = y0; y <= y1; ++y) {
-                                brenda_effect_merge(x0, y, effect);
-                                brenda_effect_merge(x1, y, effect);
-                            }
-                        }
-
+                        Brenda_TextEffect effect = { .color = *(Brenda_RGB *)&border.color, };
+                        brenda_box_draw(rectangle, effect);
                         break;
                     }
 

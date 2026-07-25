@@ -119,7 +119,7 @@ static void signal_winch_handle(i32 signo) {
 
     // trigger full redraw
     for (isize i = 0; i < state.front_buffer.count; ++i)
-        state.front_buffer.items[i] = cell(text_unit_from_byte(0xFF), (Brenda_Effect) {0});
+        state.front_buffer.items[i] = cell(text_unit_from_byte(0xFF), (Effect) {0});
 
     write(state.pipe.write_fd, &signo, sizeof signo);
 }
@@ -183,10 +183,10 @@ static void frame_render(void) {
             }
 
             usize run_start = pos;
-            Brenda_Effect run_effect = back_items[run_start].effect;
+            Effect run_effect = back_items[run_start].effect;
             while (pos < row_end && 
                 !cell_equal(back_items[pos], front_items[pos]) &&
-                brenda_effect_equal(back_items[pos].effect, run_effect)) {
+                effect_equal(back_items[pos].effect, run_effect)) {
                 pos++;
             }
 
@@ -218,22 +218,22 @@ static void cells_emit(List(byte) *out, Cell *cells, usize start, usize len) {
     effect_reset(out);
 }
 
-static void effect_emit(List(byte) *out, Brenda_Effect e) {
+static void effect_emit(List(byte) *out, Effect e) {
     if (e.flags == 0) return;
 
     Brenda_Stream s = brenda_stream_start_from_arena(&state.tmp, 64);
     brenda_stream_format(&s, "\33[");
 
-    if (e.flags & BRENDA_EFFECT_BOLD)          brenda_stream_format(&s, "1;");
-    if (e.flags & BRENDA_EFFECT_DIM)           brenda_stream_format(&s, "2;");
-    if (e.flags & BRENDA_EFFECT_ITALIC)        brenda_stream_format(&s, "3;");
-    if (e.flags & BRENDA_EFFECT_UNDERLINE)     brenda_stream_format(&s, "4;");
-    if (e.flags & BRENDA_EFFECT_INVERSE)       brenda_stream_format(&s, "7;");
-    if (e.flags & BRENDA_EFFECT_STRIKETHROUGH) brenda_stream_format(&s, "9;");
+    if (e.flags & EFFECT_BOLD)          brenda_stream_format(&s, "1;");
+    if (e.flags & EFFECT_DIM)           brenda_stream_format(&s, "2;");
+    if (e.flags & EFFECT_ITALIC)        brenda_stream_format(&s, "3;");
+    if (e.flags & EFFECT_UNDERLINE)     brenda_stream_format(&s, "4;");
+    if (e.flags & EFFECT_INVERSE)       brenda_stream_format(&s, "7;");
+    if (e.flags & EFFECT_STRIKETHROUGH) brenda_stream_format(&s, "9;");
 
-    if (e.flags & BRENDA_EFFECT_FG)
+    if (e.flags & EFFECT_FG)
         brenda_stream_format(&s, "38;2;%u;%u;%u;", e.fg.r, e.fg.g, e.fg.b);
-    if (e.flags & BRENDA_EFFECT_BG)
+    if (e.flags & EFFECT_BG)
         brenda_stream_format(&s, "48;2;%u;%u;%u;", e.bg.r, e.bg.g, e.bg.b);
 
     // replace ';' with 'm'
@@ -438,25 +438,41 @@ static b32 text_parse(byte **p, byte *end, Brenda_Event *e) {
     return true;
 }
 
-static Cell cell(TerminalTextUnit text_unit, Brenda_Effect effect) {
+static inline Effect effect_from_text_effect(Brenda_TextEffect text_effect) {
+    return (Effect) {
+        .fg = text_effect.color,
+        .flags = EFFECT_FG | text_effect.flags,
+    };
+}
+
+static void effect_merge(Effect *effect, Effect new_effect) {
+    effect->flags |= new_effect.flags;
+    if (new_effect.flags & EFFECT_FG) effect->fg = new_effect.fg;
+    if (new_effect.flags & EFFECT_BG) effect->bg = new_effect.bg;
+}
+
+static Cell cell(TerminalTextUnit text_unit, Effect effect) {
     return (Cell) { .text_unit = text_unit, .effect = effect };
 }
 
 static Cell cell_empty(void) { return (Cell) { .text_unit = text_unit_from_byte(' ') }; }
 static b32 cell_equal(Cell a, Cell b) { return memcmp(&a, &b, sizeof a) == 0; }
 
-static inline b32 brenda_effect_equal(Brenda_Effect a, Brenda_Effect b) { return memcmp(&a, &b, sizeof a) == 0; }
+static inline b32 effect_equal(Effect a, Effect b) { return memcmp(&a, &b, sizeof a) == 0; }
 
-static void text_unit_put(i32 x, i32 y, TerminalTextUnit text_unit) {
+static void text_unit_put(i32 x, i32 y, TerminalTextUnit text_unit, Effect effect) {
     Brenda_Rectangle parent = brenda_clip_peek();
-    if (!brenda_rectangle_contains_point(parent, x, y)) return;
+    if (!rectangle_contains_point(parent, x, y)) return;
 
     u32 w = state.width;
     Cell *cells = state.back_buffer.items;
 
     if (text_unit.cell_width == 1) {
         wide_character_fix(x, y);
-        cells[x + y * w].text_unit = text_unit;
+        Cell *current = &cells[x + y * w];
+        current->text_unit = text_unit;
+        current->flags = CELL_REGULAR;
+        effect_merge(&current->effect, effect);
         return;
     }
 
@@ -469,8 +485,11 @@ static void text_unit_put(i32 x, i32 y, TerminalTextUnit text_unit) {
         Cell *lead = &cells[x + y * w];
         lead->text_unit = text_unit;
         lead->flags = CELL_WIDE_LEAD;
+        effect_merge(&lead->effect, effect);
+
         Cell *cont = &cells[(x + 1) + y * w];
         cont->flags = CELL_CONTINUATION;
+        effect_merge(&cont->effect, effect);
         return;
     }
 
@@ -482,6 +501,7 @@ static void wide_character_fix(i32 x, i32 y) {
     Cell *cells = state.back_buffer.items;
     Cell c = cells[x + y * w];
 
+    //TODO: this should clear text, not effect.
     if ((c.flags & CELL_WIDE_LEAD) && (u32)x + 1 < w) {
         cells[(x + 1) + y * w] = cell_empty();
     }
@@ -489,40 +509,6 @@ static void wide_character_fix(i32 x, i32 y) {
     if ((c.flags & CELL_CONTINUATION) && (u32)x > 0) {
         cells[(x - 1) + y * w] = cell_empty();
     }
-}
-
-void brenda_effect_put(i32 x, i32 y, Brenda_Effect e) {
-    Brenda_Rectangle parent = brenda_clip_peek();
-    if (!brenda_rectangle_contains_point(parent, x, y)) return;
-
-    u32 w = state.width;
-    Cell *cells = state.back_buffer.items;
-    Cell *cur = &cells[x + y * w];
-
-    cur->effect = e;
-    if ((cur->flags & CELL_WIDE_LEAD) && (u32)x + 1 < w) {
-        cells[(x + 1) + y * w].effect = e;
-    } else if ((cur->flags & CELL_CONTINUATION) && x > 0) {
-        cells[(x - 1) + y * w].effect = e;
-    }
-}
-
-void brenda_effect_merge(i32 x, i32 y, Brenda_Effect new_effect) {
-    Brenda_Rectangle parent = brenda_clip_peek();
-    if (!brenda_rectangle_contains_point(parent, x, y)) return;
-
-    u32 w = state.width;
-    Cell *cells = state.back_buffer.items;
-    Brenda_Effect *cur = &cells[x + y * w].effect;
-
-    // 0 0 | 0
-    // 0 1 | 1
-    // 1 0 | 1
-    // 1 1 | 1
-
-    cur->flags |= new_effect.flags;
-    if (new_effect.flags & BRENDA_EFFECT_FG) cur->fg = new_effect.fg;
-    if (new_effect.flags & BRENDA_EFFECT_BG) cur->bg = new_effect.bg;
 }
 
 i32 brenda_text_measure_width(byte *text, isize length) {
@@ -533,12 +519,13 @@ i32 brenda_text_measure_width(byte *text, isize length) {
     return width;
 }
 
-void brenda_text_put(i32 x, i32 y, byte *text, isize length) {
+void brenda_text_draw(i32 x, i32 y, byte *text, isize length, Brenda_TextEffect text_effect) {
+    Effect effect = effect_from_text_effect(text_effect);
     byte *cursor = text;
     byte *end = text + length;
     while (cursor < end) {
         TerminalTextUnit text_unit = utf8_next(&cursor, end);
-        text_unit_put(x, y, text_unit);
+        text_unit_put(x, y, text_unit, effect);
         x += text_unit.cell_width;
     }
 }
@@ -550,7 +537,7 @@ void brenda_clip_push(i32 x, i32 y, i32 w, i32 h) {
 
 void brenda_clip_push_rectangle(Brenda_Rectangle r) {
     Brenda_Rectangle parent = brenda_clip_peek();
-    Brenda_Rectangle clipped = brenda_rectangle_intersect(parent, r);
+    Brenda_Rectangle clipped = rectangle_intersect(parent, r);
     list_append(&state.clips, clipped);
 }
 
@@ -562,12 +549,12 @@ Brenda_Rectangle brenda_clip_peek(void) {
     return list_last(&state.clips);
 }
 
-static inline b32 brenda_rectangle_contains_point(Brenda_Rectangle r, i32 x, i32 y) {
+static inline b32 rectangle_contains_point(Brenda_Rectangle r, i32 x, i32 y) {
     return r.x <= x && x < r.x + r.w 
         && r.y <= y && y < r.y + r.h;
 }
 
-static inline Brenda_Rectangle brenda_rectangle_intersect(Brenda_Rectangle a, Brenda_Rectangle b) {
+static inline Brenda_Rectangle rectangle_intersect(Brenda_Rectangle a, Brenda_Rectangle b) {
     i32 x1 = MAX(a.x, b.x);
     i32 y1 = MAX(a.y, b.y);
     i32 x2 = MIN(a.x + a.w, b.x + b.w);
@@ -578,20 +565,6 @@ static inline Brenda_Rectangle brenda_rectangle_intersect(Brenda_Rectangle a, Br
     }
 
     return (Brenda_Rectangle){ x1, y1, x2 - x1, y2 - y1 };
-}
-
-static inline Brenda_Rectangle brenda_rectangle_union(Brenda_Rectangle a, Brenda_Rectangle b) {
-    i32 left   = MIN(a.x, b.x);
-    i32 top    = MIN(a.y, b.y);
-    i32 right  = MAX(a.x + a.w, b.x + b.w);
-    i32 bottom = MAX(a.y + a.h, b.y + b.h);
-
-    return (Brenda_Rectangle) {
-        .x = left,
-        .y = top,
-        .w = right - left,
-        .h = bottom - top
-    };
 }
 
 byte *brenda_format(byte *p, byte *end, byte *f, ...) {
@@ -734,9 +707,10 @@ void brenda_debug_draw(i32 x, i32 y, byte *fmt, ...) {
     }
 }
 
-void brenda_line_draw(i32 x0, i32 y0, i32 x1, i32 y1, byte *text, usize length) {
+void brenda_line_draw(i32 x0, i32 y0, i32 x1, i32 y1, byte *text, isize length, Brenda_TextEffect text_effect) {
     byte *cursor = text;
     TerminalTextUnit text_unit = utf8_next(&cursor, text + length);
+    Effect effect = effect_from_text_effect(text_effect);
 
     if (x0 == x1) { // vertical
         if (y1 < y0) {
@@ -746,7 +720,7 @@ void brenda_line_draw(i32 x0, i32 y0, i32 x1, i32 y1, byte *text, usize length) 
         }
 
         for (i32 y = y0; y <= y1; y++) {
-            text_unit_put(x0, y, text_unit);
+            text_unit_put(x0, y, text_unit, effect);
         }
     }
     else if (y0 == y1) { // horizontal
@@ -757,12 +731,12 @@ void brenda_line_draw(i32 x0, i32 y0, i32 x1, i32 y1, byte *text, usize length) 
         }
 
         for (i32 x = x0; x <= x1; x++) {
-            text_unit_put(x, y0, text_unit);
+            text_unit_put(x, y0, text_unit, effect);
         }
     }
 }
 
-void brenda_box_draw(Brenda_Rectangle r) {
+void brenda_box_draw(Brenda_Rectangle r, Brenda_TextEffect effect) {
     if (r.w < 2 || r.h < 2) return;
 
     i32 x0 = r.x;
@@ -770,21 +744,33 @@ void brenda_box_draw(Brenda_Rectangle r) {
     i32 x1 = r.x + r.w - 1;
     i32 y1 = r.y + r.h - 1;
 
-    brenda_text_put(x0, y0, (byte *)"┌", sizeof("┌") - 1);
-    brenda_text_put(x1, y0, (byte *)"┐", sizeof("┐") - 1);
-    brenda_text_put(x0, y1, (byte *)"└", sizeof("└") - 1);
-    brenda_text_put(x1, y1, (byte *)"┘", sizeof("┘") - 1);
+    brenda_text_draw(x0, y0, (byte *)"┌", sizeof("┌") - 1, effect);
+    brenda_text_draw(x1, y0, (byte *)"┐", sizeof("┐") - 1, effect);
+    brenda_text_draw(x0, y1, (byte *)"└", sizeof("└") - 1, effect);
+    brenda_text_draw(x1, y1, (byte *)"┘", sizeof("┘") - 1, effect);
 
-    brenda_line_draw(x0 + 1, y0, x1 - 1, y0, (byte *)"─", sizeof("─") - 1);
-    brenda_line_draw(x0 + 1, y1, x1 - 1, y1, (byte *)"─", sizeof("─") - 1);
-    brenda_line_draw(x0, y0 + 1, x0, y1 - 1, (byte *)"│", sizeof("│") - 1);
-    brenda_line_draw(x1, y0 + 1, x1, y1 - 1, (byte *)"│", sizeof("│") - 1);
+    brenda_line_draw(x0 + 1, y0, x1 - 1, y0, (byte *)"─", sizeof("─") - 1, effect);
+    brenda_line_draw(x0 + 1, y1, x1 - 1, y1, (byte *)"─", sizeof("─") - 1, effect);
+    brenda_line_draw(x0, y0 + 1, x0, y1 - 1, (byte *)"│", sizeof("│") - 1, effect);
+    brenda_line_draw(x1, y0 + 1, x1, y1 - 1, (byte *)"│", sizeof("│") - 1, effect);
 }
 
-void brenda_box_fill(Brenda_Rectangle r, Brenda_Effect e) {
-    for (i32 j = 0; j < r.h; ++j) {
-        for (i32 i = 0; i < r.w; ++i) {
-            brenda_effect_put(r.x + i, r.y + j, e);
+void brenda_rectangle_fill(Brenda_Rectangle r, Brenda_RGB color) {
+    Effect effect = {.bg = color, .flags = EFFECT_BG};
+    Brenda_Rectangle clip = brenda_clip_peek();
+    Brenda_Rectangle rectangle = rectangle_intersect(r, clip);
+    Cell *cells = state.back_buffer.items;
+
+    for (i32 y = rectangle.y; y < rectangle.y + rectangle.h; ++y) {
+        for (i32 x = rectangle.x; x < rectangle.x + rectangle.w; ++x) {
+            Cell *current = &cells[x + y * state.width];
+            effect_merge(&current->effect, effect);
+
+            if ((current->flags & CELL_WIDE_LEAD) && (u32)x + 1 < state.width) {
+                effect_merge(&cells[x + 1 + y * state.width].effect, effect);
+            } else if ((current->flags & CELL_CONTINUATION) && x > 0) {
+                effect_merge(&cells[x - 1 + y * state.width].effect, effect);
+            }
         }
     }
 }
@@ -798,7 +784,7 @@ static Brenda_Stream brenda_stream_start_from_arena(Arena *arena, usize size) {
 static void debug_text_unit_put(i32 x, i32 y, TerminalTextUnit text_unit) {
     u32 w = state.width;
     Cell *cells = state.back_buffer.items;
-    cells[x + y * w] = cell(text_unit, (Brenda_Effect) {0});
+    cells[x + y * w] = cell(text_unit, (Effect) {0});
 }
 
 static TerminalTextUnit text_unit_from_bytes(byte *utf8, u8 utf8_length, u8 cell_width) {

@@ -10,21 +10,18 @@ typedef struct {
 } Brenda_RGB;
 
 enum {
-    BRENDA_EFFECT_FG            = 1 << 0,
-    BRENDA_EFFECT_BG            = 1 << 1,
-    BRENDA_EFFECT_BOLD          = 1 << 2,
-    BRENDA_EFFECT_DIM           = 1 << 3,
-    BRENDA_EFFECT_ITALIC        = 1 << 4,
-    BRENDA_EFFECT_UNDERLINE     = 1 << 5,
-    BRENDA_EFFECT_INVERSE       = 1 << 6,
-    BRENDA_EFFECT_STRIKETHROUGH = 1 << 7,
+    BRENDA_TEXT_EFFECT_BOLD          = 1 << 0,
+    BRENDA_TEXT_EFFECT_DIM           = 1 << 1,
+    BRENDA_TEXT_EFFECT_ITALIC        = 1 << 2,
+    BRENDA_TEXT_EFFECT_UNDERLINE     = 1 << 3,
+    BRENDA_TEXT_EFFECT_INVERSE       = 1 << 4,
+    BRENDA_TEXT_EFFECT_STRIKETHROUGH = 1 << 5,
 };
 
 typedef struct {
-    Brenda_RGB fg;
-    Brenda_RGB bg;
+    Brenda_RGB color;
     u8 flags;
-} Brenda_Effect;
+} Brenda_TextEffect;
 
 typedef enum {
     BRENDA_TERM_KEY_BACKSPACE = 8,
@@ -105,14 +102,10 @@ void brenda_frame_end(void);
 u64 brenda_frame_get_delta_time(void);
 
 i32 brenda_text_measure_width(byte *text, isize length);
-void brenda_text_put(i32 x, i32 y, byte *text, isize length);
-
-void brenda_effect_put(i32 x, i32 y, Brenda_Effect effect);
-void brenda_effect_merge(i32 x, i32 y, Brenda_Effect effect);
-
-void brenda_line_draw(i32 x0, i32 y0, i32 x1, i32 y1, byte *utf8, usize length);
-void brenda_box_draw(Brenda_Rectangle rectangle);
-void brenda_box_fill(Brenda_Rectangle rectangle, Brenda_Effect effect);
+void brenda_text_draw(i32 x, i32 y, byte *text, isize length, Brenda_TextEffect effect);
+void brenda_line_draw(i32 x0, i32 y0, i32 x1, i32 y1, byte *utf8, isize byte_count, Brenda_TextEffect effect);
+void brenda_box_draw(Brenda_Rectangle rectangle, Brenda_TextEffect effect);
+void brenda_rectangle_fill(Brenda_Rectangle rectangle, Brenda_RGB color);
 
 byte *brenda_format(byte *cursor, byte *end, byte *format, ...);
 Brenda_Stream brenda_stream_start(byte *buffer, usize size);
