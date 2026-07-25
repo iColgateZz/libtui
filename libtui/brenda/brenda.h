@@ -79,6 +79,12 @@ typedef struct {
     i32 x, y, w, h;
 } Brenda_Rectangle;
 
+typedef struct {
+    byte *start;
+    byte *cursor;
+    byte *end;
+} Brenda_Stream;
+
 b32 brenda_effect_equal(Brenda_Effect a, Brenda_Effect b);
 
 b32 brenda_event_is_type(Brenda_Event event, Brenda_EventType type);
@@ -112,5 +118,12 @@ void brenda_text_put(i32 x, i32 y, byte *text, usize length);
 void brenda_line_draw(i32 x0, i32 y0, i32 x1, i32 y1, Psh_CodePoint codepoint);
 void brenda_box_draw(Brenda_Rectangle rectangle);
 void brenda_box_fill(Brenda_Rectangle rectangle, Brenda_Effect effect);
+
+byte *brenda_format(byte *cursor, byte *end, byte *format, ...);
+Brenda_Stream brenda_stream_start(byte *buffer, usize size);
+void brenda_stream_format(Brenda_Stream *stream, byte *format, ...);
+psh_s8 brenda_stream_end(Brenda_Stream stream);
+
+void brenda_debug_draw(i32 x, i32 y, byte *format, ...);
 
 #endif

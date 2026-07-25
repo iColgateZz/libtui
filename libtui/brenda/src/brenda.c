@@ -240,24 +240,24 @@ static void cells_emit(List(byte) *out, Cell *cells, usize start, usize len) {
 static void effect_emit(List(byte) *out, Brenda_Effect e) {
     if (e.flags == 0) return;
 
-    Stream s = arena_stream_start(&state.tmp, 64);
-    stream_format(&s, "\33[");
+    Brenda_Stream s = brenda_stream_start_from_arena(&state.tmp, 64);
+    brenda_stream_format(&s, "\33[");
 
-    if (e.flags & BRENDA_EFFECT_BOLD)          stream_format(&s, "1;");
-    if (e.flags & BRENDA_EFFECT_DIM)           stream_format(&s, "2;");
-    if (e.flags & BRENDA_EFFECT_ITALIC)        stream_format(&s, "3;");
-    if (e.flags & BRENDA_EFFECT_UNDERLINE)     stream_format(&s, "4;");
-    if (e.flags & BRENDA_EFFECT_INVERSE)       stream_format(&s, "7;");
-    if (e.flags & BRENDA_EFFECT_STRIKETHROUGH) stream_format(&s, "9;");
+    if (e.flags & BRENDA_EFFECT_BOLD)          brenda_stream_format(&s, "1;");
+    if (e.flags & BRENDA_EFFECT_DIM)           brenda_stream_format(&s, "2;");
+    if (e.flags & BRENDA_EFFECT_ITALIC)        brenda_stream_format(&s, "3;");
+    if (e.flags & BRENDA_EFFECT_UNDERLINE)     brenda_stream_format(&s, "4;");
+    if (e.flags & BRENDA_EFFECT_INVERSE)       brenda_stream_format(&s, "7;");
+    if (e.flags & BRENDA_EFFECT_STRIKETHROUGH) brenda_stream_format(&s, "9;");
 
     if (e.flags & BRENDA_EFFECT_FG)
-        stream_format(&s, "38;2;%u;%u;%u;", e.fg.r, e.fg.g, e.fg.b);
+        brenda_stream_format(&s, "38;2;%u;%u;%u;", e.fg.r, e.fg.g, e.fg.b);
     if (e.flags & BRENDA_EFFECT_BG)
-        stream_format(&s, "48;2;%u;%u;%u;", e.bg.r, e.bg.g, e.bg.b);
+        brenda_stream_format(&s, "48;2;%u;%u;%u;", e.bg.r, e.bg.g, e.bg.b);
 
     // replace ';' with 'm'
     *(s.cursor - 1) = 'm';
-    s8 result = stream_end(s);
+    s8 result = brenda_stream_end(s);
     list_append_many(out, result.s, result.len);
 }
 
@@ -267,9 +267,9 @@ static void effect_reset(List(byte) *out) {
 }
 
 static void cursor_move_emit(List(byte) *a, u32 row, u32 col) {
-    Stream s = arena_stream_start(&state.tmp, 64);
-    stream_format(&s, "\33[%u;%uH", row + 1, col + 1);
-    s8 result = stream_end(s);
+    Brenda_Stream s = brenda_stream_start_from_arena(&state.tmp, 64);
+    brenda_stream_format(&s, "\33[%u;%uH", row + 1, col + 1);
+    s8 result = brenda_stream_end(s);
 
     list_append_many(a, result.s, result.len);
 }
@@ -603,7 +603,7 @@ Brenda_Rectangle brenda_rectangle_union(Brenda_Rectangle a, Brenda_Rectangle b) 
     };
 }
 
-byte *format(byte *p, byte *end, byte *f, ...) {
+byte *brenda_format(byte *p, byte *end, byte *f, ...) {
     va_list args;
     va_start(args, f);
     p = format_variadic(p, end, f, args);
@@ -705,49 +705,49 @@ static byte *format_string(byte *p, byte *end, s8 s) {
     return p;
 }
 
-static Stream stream_start(byte *buffer, usize size) {
-    return (Stream) {
+Brenda_Stream brenda_stream_start(byte *buffer, usize size) {
+    return (Brenda_Stream) {
         .start = buffer,
         .cursor = buffer,
         .end = buffer + size
     };
 }
 
-static void stream_format(Stream *s, byte *f, ...) {
+void brenda_stream_format(Brenda_Stream *s, byte *f, ...) {
     va_list args;
     va_start(args, f);
     s->cursor = format_variadic(s->cursor, s->end, f, args);
     va_end(args);
 }
 
-static s8 stream_end(Stream s) {
+psh_s8 brenda_stream_end(Brenda_Stream s) {
     usize len = MIN(s.cursor - s.start, s.end - s.start);
     return s8(s.start, len);
 }
 
-static Stream arena_stream_start(Arena *arena, usize size) {
+Brenda_Stream brenda_stream_start_from_arena(Arena *arena, usize size) {
     byte *buffer = arena_push(arena, byte, size);
     assert(buffer && "arena does not have enough memory");
-    return stream_start(buffer, size);
+    return brenda_stream_start(buffer, size);
 }
 
-void debug_put_cp(i32 x, i32 y, Psh_CodePoint cp) {
+static void debug_codepoint_put(i32 x, i32 y, Psh_CodePoint cp) {
     u32 w = state.width;
     Cell *cells = state.back_buffer.items;
     cells[x + y * w] = cell(cp, (Brenda_Effect) {0});
 }
 
-void debug(i32 x, i32 y, byte *fmt, ...) {
-    Stream s = arena_stream_start(&state.tmp, 256);
+void brenda_debug_draw(i32 x, i32 y, byte *fmt, ...) {
+    Brenda_Stream s = brenda_stream_start_from_arena(&state.tmp, 256);
 
     va_list args;
     va_start(args, fmt);
     s.cursor = format_variadic(s.cursor, s.end, fmt, args);
     va_end(args);
 
-    s8 str = stream_end(s);
+    s8 str = brenda_stream_end(s);
     for (isize i = 0; i < str.len; i++)
-        debug_put_cp(x + i, y, cp_from_byte(str.s[i]));
+        debug_codepoint_put(x + i, y, cp_from_byte(str.s[i]));
 }
 
 void brenda_line_draw(i32 x0, i32 y0, i32 x1, i32 y1, Psh_CodePoint cp) {

@@ -21,12 +21,6 @@ typedef struct {
     Brenda_Effect effect;
 } Cell;
 
-typedef struct {
-    byte *start;
-    byte *cursor;
-    byte *end;
-} Stream;
-
 list_def(Cell)
 list_def(Brenda_Rectangle)
 list_def(byte)
@@ -78,9 +72,7 @@ static byte *format_variadic(byte *cursor, byte *end, byte *format, va_list argu
 static byte *format_uint(byte *cursor, byte *end, u64 value, u8 base);
 static byte *format_cstring(byte *cursor, byte *end, byte *text);
 static byte *format_string(byte *cursor, byte *end, s8 text);
-static Stream stream_start(byte *buffer, usize size);
-static void stream_format(Stream *stream, byte *format, ...);
-static s8 stream_end(Stream stream);
-static Stream arena_stream_start(Arena *arena, usize size);
+static void debug_codepoint_put(i32 x, i32 y, CodePoint codepoint);
+Brenda_Stream brenda_stream_start_from_arena(Arena *arena, usize size);
 
 #endif
