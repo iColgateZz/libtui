@@ -1,10 +1,10 @@
+#define PSH_CORE_NO_PREFIX
 #define PSH_CORE_IMPL
     #include "psh_core.h"
 #undef PSH_CORE_IMPL
 
 #include "layla.h"
-#define LIBTUI_RENDERER_IMPL
-    #include "renderer.h"
+#include "brenda.h"
 
 enum {
     BUTTON_QUIT_ID = 1,
@@ -51,13 +51,13 @@ static b32 button(Layla_ElementID id, Layla_TextSlice label) {
 
 i32 main(void) {
     layla_state_set_text_measure_function(text_measure, NULL);
-    init_terminal();
-    set_fps(60);
+    brenda_terminal_init();
+    brenda_terminal_set_fps(60);
 
     b32 quit = false;
     b32 tooltip_open = false;
     while (!quit) {
-        begin_frame();
+        brenda_frame_begin();
 
         Layla_CursorState cursor = layla_state_get_cursor_state();
         b32 cursor_is_down = cursor.interaction_state == LAYLA_CURSOR_PRESSED_THIS_FRAME ||
@@ -65,22 +65,24 @@ i32 main(void) {
         i32 scroll_delta_y = 0;
         b32 left_mouse_pressed = false;
         b32 right_mouse_pressed = false;
-        Slice(Event) events = get_events();
+        Brenda_EventSlice events = brenda_events_get();
         for (isize i = 0; i < events.count; ++i) {
-            Event event = events.items[i];
-            if (event_is_codepoint(event, cp("q"))) quit = true;
-            if (!event_is_mouse(event)) continue;
+            Brenda_Event event = events.items[i];
+            if (brenda_event_is_codepoint(event, cp("q"))) quit = true;
+            if (!brenda_event_is_mouse(event)) continue;
 
             cursor.x = event.as.mouse.x;
             cursor.y = event.as.mouse.y;
-            if (event_is(event, EMouseLeft)) {
+            if (brenda_event_is_type(event, BRENDA_EVENT_MOUSE_LEFT)) {
                 cursor_is_down = event.as.mouse.pressed;
                 left_mouse_pressed = event.as.mouse.pressed;
             }
-            if (event_is(event, EMouseRight) && event.as.mouse.pressed) right_mouse_pressed = true;
-            if (event_is(event, EMouseDrag)) cursor_is_down = true;
-            if (event_is(event, EScrollUp)) scroll_delta_y--;
-            if (event_is(event, EScrollDown)) scroll_delta_y++;
+            if (brenda_event_is_type(event, BRENDA_EVENT_MOUSE_RIGHT) && event.as.mouse.pressed) {
+                right_mouse_pressed = true;
+            }
+            if (brenda_event_is_type(event, BRENDA_EVENT_MOUSE_DRAG)) cursor_is_down = true;
+            if (brenda_event_is_type(event, BRENDA_EVENT_SCROLL_UP)) scroll_delta_y--;
+            if (brenda_event_is_type(event, BRENDA_EVENT_SCROLL_DOWN)) scroll_delta_y++;
         }
         if (left_mouse_pressed) tooltip_open = false;
         if (right_mouse_pressed) tooltip_open = layla_state_is_element_hovered_by_id(BUTTON_QUIT_ID);
@@ -88,8 +90,8 @@ i32 main(void) {
         layla_scroll_offset_update_on_hovered_element(scroll_delta_y);
 
         {
-            u32 w = get_terminal_width();
-            u32 h = get_terminal_height();
+            u32 w = brenda_terminal_get_width();
+            u32 h = brenda_terminal_get_height();
             layla_state_set_screen_dimensions(w, h);
             layla_layout_begin();
 
@@ -169,9 +171,12 @@ i32 main(void) {
                 switch (cmd.type) {
                     case LAYLA_CMD_RECTANGLE: {
                         Layla_CommandRectangle rectangle = cmd.as.rectangle;
-                        fill_box(
-                            *(Rectangle *)&rectangle,
-                            (Effect) { .bg = *(RGB *)&rectangle.color, .flags = EFFECT_BG }
+                        brenda_box_fill(
+                            *(Brenda_Rectangle *)&rectangle,
+                            (Brenda_Effect) {
+                                .bg = *(Brenda_RGB *)&rectangle.color,
+                                .flags = BRENDA_EFFECT_BG,
+                            }
                         );
 
                         break;
@@ -180,9 +185,9 @@ i32 main(void) {
                     case LAYLA_CMD_TEXT: {
                         Layla_CommandText text = cmd.as.text;
 
-                        Effect effect = {
-                            .fg = *(RGB *)&text.color,
-                            .flags = EFFECT_FG,
+                        Brenda_Effect effect = {
+                            .fg = *(Brenda_RGB *)&text.color,
+                            .flags = BRENDA_EFFECT_FG,
                         };
 
                         i32 x = text.x;
@@ -191,8 +196,8 @@ i32 main(void) {
 
                         while (start < end) {
                             CodePoint cp = utf8_next(&start, end);
-                            put_cp(x, text.y, cp);
-                            merge_effect(x, text.y, effect);
+                            brenda_codepoint_put(x, text.y, cp);
+                            brenda_effect_merge(x, text.y, effect);
                             x += cp.display_width;
                         }
 
@@ -201,10 +206,10 @@ i32 main(void) {
 
                     case LAYLA_CMD_BORDER: {
                         Layla_CommandBorder border = cmd.as.border;
-                        Rectangle rectangle = *(Rectangle *)&border;
-                        Effect effect = {
-                            .fg = *(RGB *)&border.color,
-                            .flags = EFFECT_FG,
+                        Brenda_Rectangle rectangle = *(Brenda_Rectangle *)&border;
+                        Brenda_Effect effect = {
+                            .fg = *(Brenda_RGB *)&border.color,
+                            .flags = BRENDA_EFFECT_FG,
                         };
 
                         if (border.userdata == NULL) {
@@ -213,15 +218,15 @@ i32 main(void) {
                             i32 x1 = rectangle.x + rectangle.w - 1;
                             i32 y1 = rectangle.y + rectangle.h - 1;
 
-                            draw_box(rectangle);
+                            brenda_box_draw(rectangle);
 
                             for (i32 x = x0; x <= x1; ++x) {
-                                merge_effect(x, y0, effect);
-                                merge_effect(x, y1, effect);
+                                brenda_effect_merge(x, y0, effect);
+                                brenda_effect_merge(x, y1, effect);
                             }
                             for (i32 y = y0; y <= y1; ++y) {
-                                merge_effect(x0, y, effect);
-                                merge_effect(x1, y, effect);
+                                brenda_effect_merge(x0, y, effect);
+                                brenda_effect_merge(x1, y, effect);
                             }
                         }
 
@@ -234,12 +239,12 @@ i32 main(void) {
 
                     case LAYLA_CMD_CLIP_START: {
                         Layla_CommandClipStart clip_start = cmd.as.clip_start;
-                        clip_push_rect(*(Rectangle *)&clip_start);
+                        brenda_clip_push_rectangle(*(Brenda_Rectangle *)&clip_start);
                         break;
                     }
 
                     case LAYLA_CMD_CLIP_END: {
-                        clip_pop();
+                        brenda_clip_pop();
                         break;
                     }
 
@@ -247,7 +252,7 @@ i32 main(void) {
                 }
             }
         }
-        end_frame();
+        brenda_frame_end();
     }
 
     return 0;

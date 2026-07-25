@@ -2,7 +2,7 @@
 #define EXECUTABLE BUILD_DIR "/app"
 #define PATH_CAPACITY 256
 
-#define PSH_CC_MORE_FLAGS "-std=c99", "-Ilayla", "-Ipsh_core", "-Wpedantic"
+#define PSH_CC_MORE_FLAGS "-std=c99", "-Ilayla", "-Ibrenda", "-Ipsh_core", "-Wpedantic"
 #define PSH_CORE_IMPL
 #include "psh_core/psh_core.h"
 
@@ -97,6 +97,7 @@ i32 main(i32 argc, byte *argv[]) {
     byte *source_files[] = {
         "main.c",
         "layla/src/layla.c",
+        "brenda/src/brenda.c",
     };
 
     usize source_count = psh_countof(source_files);
