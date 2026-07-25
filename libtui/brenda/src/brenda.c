@@ -27,8 +27,8 @@ b32 brenda_event_is_term_key(Brenda_Event event, Brenda_TermKey key) {
     return event.type == BRENDA_EVENT_TERM_KEY && event.as.term_key == key;
 }
 
-b32 brenda_event_is_codepoint(Brenda_Event event, Psh_CodePoint codepoint) {
-    return event.type == BRENDA_EVENT_CODEPOINT && cp_equal(event.as.codepoint, codepoint);
+b32 brenda_event_is_text(Brenda_Event event, byte *text, isize length) {
+    return event.type == BRENDA_EVENT_TEXT && memcmp(event.as.text.bytes, text, length) == 0;
 }
 
 b32 brenda_event_is_mouse(Brenda_Event event) {
@@ -138,7 +138,7 @@ static void signal_winch_handle(i32 signo) {
 
     // trigger full redraw
     for (isize i = 0; i < state.front_buffer.count; ++i)
-        state.front_buffer.items[i] = cell(cp_from_byte(0xFF), (Brenda_Effect) {0});
+        state.front_buffer.items[i] = cell(text_unit_from_byte(0xFF), (Brenda_Effect) {0});
 
     write(state.pipe.write_fd, &signo, sizeof signo);
 }
@@ -231,7 +231,7 @@ static void cells_emit(List(byte) *out, Cell *cells, usize start, usize len) {
         Cell c = cells[start + i];
         if (c.flags & CELL_CONTINUATION) continue;
 
-        list_append_many(out, c.codepoint.raw, c.codepoint.raw_len);
+        list_append_many(out, c.text_unit.utf8, c.text_unit.utf8_length);
     }
 
     effect_reset(out);
@@ -446,51 +446,54 @@ static b32 term_key_parse(byte **p, byte *end, Brenda_Event *e) {
 
 static b32 text_parse(byte **p, byte *end, Brenda_Event *e) {
     byte *start = *p;
-    u8 len = utf8_expected_len(*start);
-    if (end - start < len) return false;
+    u8 expected_length = utf8_expected_length(*start);
+    if (end - start < expected_length) return false;
 
-    e->type = BRENDA_EVENT_CODEPOINT;
-    e->as.codepoint = utf8_next(p, start + len);
+    //TODO: utf8_next also decodes width. It is not needed here.
+    TerminalTextUnit text_unit = utf8_next(p, start + expected_length);
+    e->type = BRENDA_EVENT_TEXT;
+    e->as.text.length = text_unit.utf8_length;
+    memcpy(e->as.text.bytes, text_unit.utf8, text_unit.utf8_length);
     return true;
 }
 
-static Cell cell(CodePoint cp, Brenda_Effect effect) {
-    return (Cell) { .codepoint = cp, .effect = effect };
+static Cell cell(TerminalTextUnit text_unit, Brenda_Effect effect) {
+    return (Cell) { .text_unit = text_unit, .effect = effect };
 }
 
-static Cell cell_empty(void) { return (Cell) { .codepoint = cp_from_byte(' ') }; }
+static Cell cell_empty(void) { return (Cell) { .text_unit = text_unit_from_byte(' ') }; }
 static b32 cell_equal(Cell a, Cell b) { return memcmp(&a, &b, sizeof a) == 0; }
 
 b32 brenda_effect_equal(Brenda_Effect a, Brenda_Effect b) { return memcmp(&a, &b, sizeof a) == 0; }
 
-void brenda_codepoint_put(i32 x, i32 y, Psh_CodePoint cp) {
+static void text_unit_put(i32 x, i32 y, TerminalTextUnit text_unit) {
     Brenda_Rectangle parent = brenda_clip_peek();
     if (!brenda_rectangle_contains_point(parent, x, y)) return;
 
     u32 w = state.width;
     Cell *cells = state.back_buffer.items;
 
-    if (cp.display_width == 1) {
+    if (text_unit.cell_width == 1) {
         wide_character_fix(x, y);
-        cells[x + y * w].codepoint = cp;
+        cells[x + y * w].text_unit = text_unit;
         return;
     }
 
-    if (cp.display_width == 2) {
+    if (text_unit.cell_width == 2) {
         if ((u32)x + 1 >= w) return; // cannot fit
 
         wide_character_fix(x, y);
         wide_character_fix(x + 1, y);
 
         Cell *lead = &cells[x + y * w];
-        lead->codepoint = cp;
+        lead->text_unit = text_unit;
         lead->flags = CELL_WIDE_LEAD;
         Cell *cont = &cells[(x + 1) + y * w];
         cont->flags = CELL_CONTINUATION;
         return;
     }
 
-    assert(false && "a codepoint with invalid width");
+    assert(false && "a terminal text unit has an invalid cell width");
 }
 
 static void wide_character_fix(i32 x, i32 y) {
@@ -541,14 +544,21 @@ void brenda_effect_merge(i32 x, i32 y, Brenda_Effect new_effect) {
     if (new_effect.flags & BRENDA_EFFECT_BG) cur->bg = new_effect.bg;
 }
 
-void brenda_text_put(i32 x, i32 y, byte *s, usize len) {
-    byte *p = s;
-    byte *end = s + len;
+i32 brenda_text_measure(byte *text, isize length) {
+    i32 width = 0;
+    byte *cursor = text;
+    byte *end = text + length;
+    while (cursor < end) width += utf8_next(&cursor, end).cell_width;
+    return width;
+}
 
-    while (p < end) {
-        CodePoint cp = utf8_next(&p, end);
-        brenda_codepoint_put(x, y, cp);
-        x += cp.display_width;
+void brenda_text_put(i32 x, i32 y, byte *text, isize length) {
+    byte *cursor = text;
+    byte *end = text + length;
+    while (cursor < end) {
+        TerminalTextUnit text_unit = utf8_next(&cursor, end);
+        text_unit_put(x, y, text_unit);
+        x += text_unit.cell_width;
     }
 }
 
@@ -725,18 +735,6 @@ psh_s8 brenda_stream_end(Brenda_Stream s) {
     return s8(s.start, len);
 }
 
-Brenda_Stream brenda_stream_start_from_arena(Arena *arena, usize size) {
-    byte *buffer = arena_push(arena, byte, size);
-    assert(buffer && "arena does not have enough memory");
-    return brenda_stream_start(buffer, size);
-}
-
-static void debug_codepoint_put(i32 x, i32 y, Psh_CodePoint cp) {
-    u32 w = state.width;
-    Cell *cells = state.back_buffer.items;
-    cells[x + y * w] = cell(cp, (Brenda_Effect) {0});
-}
-
 void brenda_debug_draw(i32 x, i32 y, byte *fmt, ...) {
     Brenda_Stream s = brenda_stream_start_from_arena(&state.tmp, 256);
 
@@ -745,12 +743,20 @@ void brenda_debug_draw(i32 x, i32 y, byte *fmt, ...) {
     s.cursor = format_variadic(s.cursor, s.end, fmt, args);
     va_end(args);
 
-    s8 str = brenda_stream_end(s);
-    for (isize i = 0; i < str.len; i++)
-        debug_codepoint_put(x + i, y, cp_from_byte(str.s[i]));
+    s8 text = brenda_stream_end(s);
+    byte *cursor = text.s;
+    byte *end = text.s + text.len;
+    while (cursor < end) {
+        TerminalTextUnit text_unit = utf8_next(&cursor, end);
+        debug_text_unit_put(x, y, text_unit);
+        x += text_unit.cell_width;
+    }
 }
 
-void brenda_line_draw(i32 x0, i32 y0, i32 x1, i32 y1, Psh_CodePoint cp) {
+void brenda_line_draw(i32 x0, i32 y0, i32 x1, i32 y1, byte *text, usize length) {
+    byte *cursor = text;
+    TerminalTextUnit text_unit = utf8_next(&cursor, text + length);
+
     if (x0 == x1) { // vertical
         if (y1 < y0) {
             i32 tmp = y0;
@@ -759,7 +765,7 @@ void brenda_line_draw(i32 x0, i32 y0, i32 x1, i32 y1, Psh_CodePoint cp) {
         }
 
         for (i32 y = y0; y <= y1; y++) {
-            brenda_codepoint_put(x0, y, cp);
+            text_unit_put(x0, y, text_unit);
         }
     }
     else if (y0 == y1) { // horizontal
@@ -770,7 +776,7 @@ void brenda_line_draw(i32 x0, i32 y0, i32 x1, i32 y1, Psh_CodePoint cp) {
         }
 
         for (i32 x = x0; x <= x1; x++) {
-            brenda_codepoint_put(x, y0, cp);
+            text_unit_put(x, y0, text_unit);
         }
     }
 }
@@ -783,15 +789,15 @@ void brenda_box_draw(Brenda_Rectangle r) {
     i32 x1 = r.x + r.w - 1;
     i32 y1 = r.y + r.h - 1;
 
-    brenda_codepoint_put(x0, y0, cp("┌"));
-    brenda_codepoint_put(x1, y0, cp("┐"));
-    brenda_codepoint_put(x0, y1, cp("└"));
-    brenda_codepoint_put(x1, y1, cp("┘"));
+    brenda_text_put(x0, y0, (byte *)"┌", sizeof("┌") - 1);
+    brenda_text_put(x1, y0, (byte *)"┐", sizeof("┐") - 1);
+    brenda_text_put(x0, y1, (byte *)"└", sizeof("└") - 1);
+    brenda_text_put(x1, y1, (byte *)"┘", sizeof("┘") - 1);
 
-    brenda_line_draw(x0 + 1, y0, x1 - 1, y0, cp("─"));
-    brenda_line_draw(x0 + 1, y1, x1 - 1, y1, cp("─"));
-    brenda_line_draw(x0, y0 + 1, x0, y1 - 1, cp("│"));
-    brenda_line_draw(x1, y0 + 1, x1, y1 - 1, cp("│"));
+    brenda_line_draw(x0 + 1, y0, x1 - 1, y0, (byte *)"─", sizeof("─") - 1);
+    brenda_line_draw(x0 + 1, y1, x1 - 1, y1, (byte *)"─", sizeof("─") - 1);
+    brenda_line_draw(x0, y0 + 1, x0, y1 - 1, (byte *)"│", sizeof("│") - 1);
+    brenda_line_draw(x1, y0 + 1, x1, y1 - 1, (byte *)"│", sizeof("│") - 1);
 }
 
 void brenda_box_fill(Brenda_Rectangle r, Brenda_Effect e) {
@@ -800,4 +806,120 @@ void brenda_box_fill(Brenda_Rectangle r, Brenda_Effect e) {
             brenda_effect_put(r.x + i, r.y + j, e);
         }
     }
+}
+
+static Brenda_Stream brenda_stream_start_from_arena(Arena *arena, usize size) {
+    byte *buffer = arena_push(arena, byte, size);
+    assert(buffer && "arena does not have enough memory");
+    return brenda_stream_start(buffer, size);
+}
+
+static void debug_text_unit_put(i32 x, i32 y, TerminalTextUnit text_unit) {
+    u32 w = state.width;
+    Cell *cells = state.back_buffer.items;
+    cells[x + y * w] = cell(text_unit, (Brenda_Effect) {0});
+}
+
+static TerminalTextUnit text_unit_from_bytes(byte *utf8, u8 utf8_length, u8 cell_width) {
+    TerminalTextUnit text_unit = {
+        .utf8_length = utf8_length,
+        .cell_width = cell_width,
+    };
+    memcpy(text_unit.utf8, utf8, utf8_length);
+    return text_unit;
+}
+
+static TerminalTextUnit text_unit_from_byte(byte value) {
+    return (TerminalTextUnit) {
+        .utf8 = {value},
+        .utf8_length = 1,
+        .cell_width = 1,
+    };
+}
+
+static u8 utf8_expected_length(byte first) {
+    u8 value = (u8)first;
+    if (value < 0x80) return 1;
+    if ((value & 0xE0) == 0xC0) return 2;
+    if ((value & 0xF0) == 0xE0) return 3;
+    if ((value & 0xF8) == 0xF0) return 4;
+    return 1;
+}
+
+static TerminalTextUnit utf8_next(byte **cursor, byte *end) {
+    static TerminalTextUnit replacement = {
+        .utf8 = {0xEF, 0xBF, 0xBD},
+        .utf8_length = 3,
+        .cell_width = 1,
+    };
+
+    byte *start = *cursor;
+    if (start >= end) return replacement;
+
+    u8 first = start[0];
+    if (first < 0x80) {
+        *cursor += 1;
+        return text_unit_from_byte(first);
+    }
+
+    usize length = 0;
+    Unicode codepoint = 0;
+
+    if ((first & 0xE0) == 0xC0) {
+        length = 2;
+        codepoint = first & 0x1F;
+    } else if ((first & 0xF0) == 0xE0) {
+        length = 3;
+        codepoint = first & 0x0F;
+    } else if ((first & 0xF8) == 0xF0) {
+        length = 4;
+        codepoint = first & 0x07;
+    } else {
+        *cursor += 1;
+        return replacement;
+    }
+
+    if (start + length > end) {
+        *cursor = end;
+        return replacement;
+    }
+
+    for (usize i = 1; i < length; ++i) {
+        if (((u8)start[i] & 0xC0) != 0x80) {
+            *cursor += i;
+            return replacement;
+        }
+        codepoint = (codepoint << 6) | ((u8)start[i] & 0x3F);
+    }
+
+    *cursor += length;
+    return text_unit_from_bytes(start, length, cell_width_from_unicode(codepoint));
+}
+
+static u8 cell_width_from_unicode(Unicode codepoint) {
+    if (codepoint < 32 || (codepoint >= 0x7F && codepoint < 0xA0)) return 0;
+
+    if ((codepoint >= 0x0300 && codepoint <= 0x036F) ||
+        (codepoint >= 0x1AB0 && codepoint <= 0x1AFF) ||
+        (codepoint >= 0x1DC0 && codepoint <= 0x1DFF) ||
+        (codepoint >= 0x20D0 && codepoint <= 0x20FF) ||
+        (codepoint >= 0xFE20 && codepoint <= 0xFE2F)) {
+        return 0;
+    }
+
+    if ((codepoint >= 0x1100 && codepoint <= 0x115F) ||
+        (codepoint >= 0x2329 && codepoint <= 0x232A) ||
+        (codepoint >= 0x2E80 && codepoint <= 0xA4CF) ||
+        (codepoint >= 0xAC00 && codepoint <= 0xD7A3) ||
+        (codepoint >= 0xF900 && codepoint <= 0xFAFF) ||
+        (codepoint >= 0xFE10 && codepoint <= 0xFE19) ||
+        (codepoint >= 0xFE30 && codepoint <= 0xFE6F) ||
+        (codepoint >= 0xFF00 && codepoint <= 0xFF60) ||
+        (codepoint >= 0xFFE0 && codepoint <= 0xFFE6) ||
+        (codepoint >= 0x1F300 && codepoint <= 0x1F64F) ||
+        (codepoint >= 0x1F900 && codepoint <= 0x1F9FF)) {
+        return 2;
+    }
+
+    return 1;
 }

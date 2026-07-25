@@ -2,6 +2,7 @@
 #define PSH_CORE_IMPL
     #include "psh_core.h"
 #undef PSH_CORE_IMPL
+#undef PSH_CORE_NO_PREFIX
 
 #include "layla.h"
 #include "brenda.h"
@@ -14,16 +15,7 @@ enum {
 
 static i32 text_measure(Layla_TextSlice text, void *userdata) {
     UNUSED(userdata);
-
-    i32 width = 0;
-    byte *cursor = text.items;
-    byte *end = text.items + text.count;
-    while (cursor < end) {
-        CodePoint codepoint = utf8_next(&cursor, end);
-        width += codepoint.display_width;
-    }
-
-    return width;
+    return brenda_text_measure(text.items, text.count);
 }
 
 static b32 button(Layla_ElementID id, Layla_TextSlice label) {
@@ -68,7 +60,7 @@ i32 main(void) {
         Brenda_EventSlice events = brenda_events_get();
         for (isize i = 0; i < events.count; ++i) {
             Brenda_Event event = events.items[i];
-            if (brenda_event_is_codepoint(event, cp("q"))) quit = true;
+            if (brenda_event_is_text(event, (byte *)"q", sizeof("q") - 1)) quit = true;
             if (!brenda_event_is_mouse(event)) continue;
 
             cursor.x = event.as.mouse.x;
@@ -190,16 +182,10 @@ i32 main(void) {
                             .flags = BRENDA_EFFECT_FG,
                         };
 
-                        i32 x = text.x;
-                        byte *start = text.slice.items;
-                        byte *end = start + text.slice.count;
-
-                        while (start < end) {
-                            CodePoint cp = utf8_next(&start, end);
-                            brenda_codepoint_put(x, text.y, cp);
-                            brenda_effect_merge(x, text.y, effect);
-                            x += cp.display_width;
-                        }
+                        isize length = text.slice.count;
+                        brenda_text_put(text.x, text.y, text.slice.items, length);
+                        i32 width = brenda_text_measure(text.slice.items, length);
+                        for (i32 x = text.x; x < text.x + width; ++x) brenda_effect_merge(x, text.y, effect);
 
                         break;
                     }

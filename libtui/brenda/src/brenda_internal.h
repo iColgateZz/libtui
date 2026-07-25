@@ -15,8 +15,16 @@ enum {
     CELL_WIDE_LEAD    = 0x02,
 };
 
+typedef u32 Unicode;
+
 typedef struct {
-    CodePoint codepoint;
+    byte utf8[4];
+    u8 utf8_length;
+    u8 cell_width;
+} TerminalTextUnit;
+
+typedef struct {
+    TerminalTextUnit text_unit;
     u8 flags;
     Brenda_Effect effect;
 } Cell;
@@ -43,7 +51,12 @@ typedef struct {
     u32 height;
 } State;
 
-static Cell cell(CodePoint codepoint, Brenda_Effect effect);
+static TerminalTextUnit text_unit_from_bytes(byte *utf8, u8 utf8_length, u8 cell_width);
+static TerminalTextUnit text_unit_from_byte(byte value);
+static u8 utf8_expected_length(byte first);
+static TerminalTextUnit utf8_next(byte **cursor, byte *end);
+static u8 cell_width_from_unicode(Unicode codepoint);
+static Cell cell(TerminalTextUnit text_unit, Brenda_Effect effect);
 static Cell cell_empty(void);
 static b32 cell_equal(Cell a, Cell b);
 static void terminal_restore(void);
@@ -64,6 +77,7 @@ static b32 escape_parse(byte **cursor, byte *end, Brenda_Event *event);
 static b32 mouse_parse(byte **cursor, byte *end, Brenda_Event *event);
 static b32 term_key_parse(byte **cursor, byte *end, Brenda_Event *event);
 static b32 text_parse(byte **cursor, byte *end, Brenda_Event *event);
+static void text_unit_put(i32 x, i32 y, TerminalTextUnit text_unit);
 static void wide_character_fix(i32 x, i32 y);
 static void cells_emit(List(byte) *output, Cell *cells, usize start, usize length);
 static void effect_emit(List(byte) *output, Brenda_Effect effect);
@@ -72,7 +86,7 @@ static byte *format_variadic(byte *cursor, byte *end, byte *format, va_list argu
 static byte *format_uint(byte *cursor, byte *end, u64 value, u8 base);
 static byte *format_cstring(byte *cursor, byte *end, byte *text);
 static byte *format_string(byte *cursor, byte *end, s8 text);
-static void debug_codepoint_put(i32 x, i32 y, CodePoint codepoint);
-Brenda_Stream brenda_stream_start_from_arena(Arena *arena, usize size);
+static void debug_text_unit_put(i32 x, i32 y, TerminalTextUnit text_unit);
+static Brenda_Stream brenda_stream_start_from_arena(Arena *arena, usize size);
 
 #endif

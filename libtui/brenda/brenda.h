@@ -3,7 +3,7 @@
 
 #include "psh_core.h"
 
-#define BRENDA_CTRL(value) psh_cp_from_byte((value) & 0x1F)
+// #define BRENDA_CTRL(value) psh_cp_from_byte((value) & 0x1F)
 
 typedef struct {
     u8 r, g, b;
@@ -47,7 +47,7 @@ typedef enum {
 typedef enum {
     BRENDA_EVENT_NONE,
     BRENDA_EVENT_TERM_KEY,
-    BRENDA_EVENT_CODEPOINT,
+    BRENDA_EVENT_TEXT,
     BRENDA_EVENT_WINCH,
     BRENDA_EVENT_MOUSE_LEFT,
     BRENDA_EVENT_MOUSE_RIGHT,
@@ -65,7 +65,10 @@ typedef struct {
             i32 x, y;
             b32 pressed;
         } mouse;
-        Psh_CodePoint codepoint;
+        struct {
+            byte bytes[4];
+            u8 length;
+        } text;
         Brenda_TermKey term_key;
     } as;
 } Brenda_Event;
@@ -90,7 +93,7 @@ b32 brenda_effect_equal(Brenda_Effect a, Brenda_Effect b);
 b32 brenda_event_is_type(Brenda_Event event, Brenda_EventType type);
 b32 brenda_event_is_mouse(Brenda_Event event);
 b32 brenda_event_is_term_key(Brenda_Event event, Brenda_TermKey key);
-b32 brenda_event_is_codepoint(Brenda_Event event, Psh_CodePoint codepoint);
+b32 brenda_event_is_text(Brenda_Event event, byte *text, isize length);
 Brenda_EventSlice brenda_events_get(void);
 
 b32 brenda_rectangle_contains_point(Brenda_Rectangle rectangle, i32 x, i32 y);
@@ -111,11 +114,11 @@ void brenda_frame_begin(void);
 void brenda_frame_end(void);
 u64 brenda_frame_get_delta_time(void);
 
-void brenda_codepoint_put(i32 x, i32 y, Psh_CodePoint codepoint);
 void brenda_effect_put(i32 x, i32 y, Brenda_Effect effect);
 void brenda_effect_merge(i32 x, i32 y, Brenda_Effect effect);
-void brenda_text_put(i32 x, i32 y, byte *text, usize length);
-void brenda_line_draw(i32 x0, i32 y0, i32 x1, i32 y1, Psh_CodePoint codepoint);
+i32 brenda_text_measure(byte *text, isize length);
+void brenda_text_put(i32 x, i32 y, byte *text, isize length);
+void brenda_line_draw(i32 x0, i32 y0, i32 x1, i32 y1, byte *text, usize length);
 void brenda_box_draw(Brenda_Rectangle rectangle);
 void brenda_box_fill(Brenda_Rectangle rectangle, Brenda_Effect effect);
 
