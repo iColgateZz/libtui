@@ -22,10 +22,6 @@ Brenda_EventSlice brenda_events_get(void) {
     };
 }
 
-b32 brenda_event_is_text(Brenda_Event event, byte *text, isize length) {
-    return event.type == BRENDA_EVENT_TEXT && memcmp(event.as.utf8.bytes, text, length) == 0;
-}
-
 #define write_string(string) output_write(string, sizeof(string) - 1)
 
 static void output_write(byte *text, usize length) { write(STDOUT_FILENO, text, length); }
@@ -436,7 +432,7 @@ static b32 text_parse(byte **p, byte *end, Brenda_Event *e) {
 
     //TODO: utf8_next also decodes width. It is not needed here.
     TerminalTextUnit text_unit = utf8_next(p, start + expected_length);
-    e->type = BRENDA_EVENT_TEXT;
+    e->type = BRENDA_EVENT_UTF8;
     e->as.utf8.length = text_unit.utf8_length;
     memcpy(e->as.utf8.bytes, text_unit.utf8, text_unit.utf8_length);
     return true;
@@ -529,7 +525,7 @@ void brenda_effect_merge(i32 x, i32 y, Brenda_Effect new_effect) {
     if (new_effect.flags & BRENDA_EFFECT_BG) cur->bg = new_effect.bg;
 }
 
-i32 brenda_text_measure(byte *text, isize length) {
+i32 brenda_text_measure_width(byte *text, isize length) {
     i32 width = 0;
     byte *cursor = text;
     byte *end = text + length;

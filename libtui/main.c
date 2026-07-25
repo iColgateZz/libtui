@@ -15,7 +15,7 @@ enum {
 
 static i32 text_measure(Layla_TextSlice text, void *userdata) {
     UNUSED(userdata);
-    return brenda_text_measure(text.items, text.count);
+    return brenda_text_measure_width(text.items, text.count);
 }
 
 static b32 button(Layla_ElementID id, Layla_TextSlice label) {
@@ -60,7 +60,8 @@ i32 main(void) {
         Brenda_EventSlice events = brenda_events_get();
         for (isize i = 0; i < events.count; ++i) {
             Brenda_Event event = events.items[i];
-            if (brenda_event_is_text(event, (byte *)"q", sizeof("q") - 1)) quit = true;
+            if (event.type == BRENDA_EVENT_UTF8 
+                && event.as.utf8.length == 1 && event.as.utf8.bytes[0] == 'q') quit = true;
             if (event.type < BRENDA_EVENT_MOUSE_LEFT) continue;
 
             cursor.x = event.as.mouse.x;
@@ -184,7 +185,7 @@ i32 main(void) {
 
                         isize length = text.slice.count;
                         brenda_text_put(text.x, text.y, text.slice.items, length);
-                        i32 width = brenda_text_measure(text.slice.items, length);
+                        i32 width = brenda_text_measure_width(text.slice.items, length);
                         for (i32 x = text.x; x < text.x + width; ++x) brenda_effect_merge(x, text.y, effect);
 
                         break;

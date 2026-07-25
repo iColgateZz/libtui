@@ -47,7 +47,7 @@ typedef enum {
 typedef enum {
     BRENDA_EVENT_NONE,
     BRENDA_EVENT_TERM_KEY,
-    BRENDA_EVENT_TEXT,
+    BRENDA_EVENT_UTF8,
     BRENDA_EVENT_WINCH,
     BRENDA_EVENT_MOUSE_LEFT,
     BRENDA_EVENT_MOUSE_RIGHT,
@@ -88,7 +88,6 @@ typedef struct {
     byte *end;
 } Brenda_Stream;
 
-b32 brenda_event_is_text(Brenda_Event event, byte *text, isize length);
 Brenda_EventSlice brenda_events_get(void);
 
 void brenda_clip_push(i32 x, i32 y, i32 w, i32 h);
@@ -105,11 +104,13 @@ void brenda_frame_begin(void);
 void brenda_frame_end(void);
 u64 brenda_frame_get_delta_time(void);
 
-i32 brenda_text_measure(byte *text, isize length);
+i32 brenda_text_measure_width(byte *text, isize length);
+void brenda_text_put(i32 x, i32 y, byte *text, isize length);
+
 void brenda_effect_put(i32 x, i32 y, Brenda_Effect effect);
 void brenda_effect_merge(i32 x, i32 y, Brenda_Effect effect);
-void brenda_text_put(i32 x, i32 y, byte *text, isize length);
-void brenda_line_draw(i32 x0, i32 y0, i32 x1, i32 y1, byte *text, usize length);
+
+void brenda_line_draw(i32 x0, i32 y0, i32 x1, i32 y1, byte *utf8, usize length);
 void brenda_box_draw(Brenda_Rectangle rectangle);
 void brenda_box_fill(Brenda_Rectangle rectangle, Brenda_Effect effect);
 
