@@ -83,8 +83,6 @@ static void screen_dimensions_update(void);
 static void signal_winch_handle(i32 signal_number);
 static i64 time_get_ms(void);
 static i64 time_get_ns(void);
-static void timestamp_save(void);
-static void delta_time_calculate(void);
 static void events_poll_until(i64 deadline_ns);
 static void events_handle_available(i32 timeout_ms);
 static void input_parse_pending(void);

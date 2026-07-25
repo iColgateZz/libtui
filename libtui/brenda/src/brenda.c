@@ -29,6 +29,7 @@ static void output_write(byte *text, usize length) { write(STDOUT_FILENO, text, 
 void brenda_terminal_init(void) {
     assert(tcgetattr(STDIN_FILENO, &state.original_terminal) == 0);
     
+    //TODO: make more of this configurable
     struct termios raw = state.original_terminal;
     raw.c_iflag &= ~(BRKINT | ICRNL | INPCK | ISTRIP | IXON);
     raw.c_oflag &= ~(OPOST);
@@ -53,6 +54,7 @@ void brenda_terminal_init(void) {
     write_string("\33[H");                      // move cursor to home position
 
     screen_dimensions_update();
+    //TODO: make restore public?
     atexit(terminal_restore);
     assert(pipe_open(&state.pipe));
 
@@ -129,7 +131,7 @@ void brenda_terminal_set_fps(i32 fps) {
 }
 
 void brenda_frame_begin(void) {
-    timestamp_save();
+    state.saved_time = time_get_ms();
 
     arena_clear(&state.tmp);
     list_clear(&state.frame_commands);
@@ -146,9 +148,6 @@ void brenda_frame_begin(void) {
     events_poll_until(deadline);
 }
 
-static void timestamp_save(void) { state.saved_time = time_get_ms(); }
-static void delta_time_calculate(void) { state.delta_time = time_get_ms() - state.saved_time; }
-
 static i64 time_get_ns(void) {
     struct timespec ts = {0};
     clock_gettime(CLOCK_MONOTONIC, &ts);
@@ -162,7 +161,7 @@ static i64 time_get_ms(void) {
 void brenda_frame_end(void) {
     frame_render();
     output_write(state.frame_commands.items, state.frame_commands.count);
-    delta_time_calculate();
+    state.delta_time = time_get_ms() - state.saved_time;
 }
 
 //TODO: maybe hash each row and compare hashes?
