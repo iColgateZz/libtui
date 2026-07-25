@@ -500,13 +500,16 @@ static void wide_character_fix(i32 x, i32 y) {
     Cell *cells = state.back_buffer.items;
     Cell c = cells[x + y * w];
 
-    //TODO: this should clear text, not effect.
     if ((c.flags & CELL_WIDE_LEAD) && (u32)x + 1 < w) {
-        cells[(x + 1) + y * w] = cell_empty();
+        Cell *continuation = &cells[(x + 1) + y * w];
+        continuation->text_unit = text_unit_from_byte(' ');
+        continuation->flags = CELL_REGULAR;
     }
 
     if ((c.flags & CELL_CONTINUATION) && (u32)x > 0) {
-        cells[(x - 1) + y * w] = cell_empty();
+        Cell *lead = &cells[(x - 1) + y * w];
+        lead->text_unit = text_unit_from_byte(' ');
+        lead->flags = CELL_REGULAR;
     }
 }
 
