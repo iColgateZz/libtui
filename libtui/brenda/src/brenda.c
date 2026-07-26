@@ -131,21 +131,7 @@ void brenda_cursor_set_position(i32 x, i32 y) {
     state.cursor.y = y;
 }
 
-//TODO: this should only write to pipe, other stuff should be handled after read.
-//      Code here is not async-safe.
 static void signal_winch_handle(i32 signo) {
-    screen_dimensions_update();
-
-    u32 new_size = state.width * state.height;
-    list_resize(&state.back_buffer, new_size);
-    list_resize(&state.front_buffer, new_size);
-
-    root_clip_update();
-
-    // trigger full redraw
-    for (isize i = 0; i < state.front_buffer.count; ++i)
-        state.front_buffer.items[i] = cell(text_unit_from_byte(0xFF), (Effect) {0});
-
     write(state.pipe.write_fd, &signo, sizeof signo);
 }
 
@@ -321,6 +307,17 @@ static void events_handle_available(i32 timeout_ms) {
         i32 sig;
         read(state.pipe.read_fd, &sig, sizeof sig);
         list_append(&state.events, ((Brenda_Event) {.type = BRENDA_EVENT_WINCH}));
+
+        screen_dimensions_update();
+        root_clip_update();
+
+        u32 new_size = state.width * state.height;
+        list_resize(&state.back_buffer, new_size);
+        list_resize(&state.front_buffer, new_size);
+
+        // trigger full redraw
+        for (isize i = 0; i < state.front_buffer.count; ++i)
+            state.front_buffer.items[i] = cell(text_unit_from_byte(0xFF), (Effect) {0});
     }
 
     if (pfd[1].revents & POLLIN) {
