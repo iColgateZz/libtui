@@ -101,6 +101,7 @@ static void output_write(byte *text, usize length);
 static void cursor_move_emit(List(byte) *output, u32 row, u32 column);
 static void frame_render(void);
 static void root_clip_update(void);
+static b32 input_unit_parse(byte **cursor, byte *end, Brenda_Event *event);
 static b32 escape_parse(byte **cursor, byte *end, Brenda_Event *event);
 static b32 mouse_parse(byte **cursor, byte *end, Brenda_Event *event);
 static b32 term_key_parse(byte **cursor, byte *end, Brenda_Event *event);

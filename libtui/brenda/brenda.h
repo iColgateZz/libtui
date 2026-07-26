@@ -38,6 +38,12 @@ typedef struct {
     Brenda_MouseTracking mouse_tracking;
 } Brenda_TerminalConfig;
 
+enum {
+    BRENDA_MODIFIER_SHIFT = 1 << 0,
+    BRENDA_MODIFIER_ALT   = 1 << 1,
+    BRENDA_MODIFIER_CTRL  = 1 << 2,
+};
+
 typedef enum {
     BRENDA_TERM_KEY_BACKSPACE = 8,
     BRENDA_TERM_KEY_TAB       = 9,
@@ -54,6 +60,18 @@ typedef enum {
     BRENDA_TERM_KEY_DOWN     = -8,
     BRENDA_TERM_KEY_LEFT     = -9,
     BRENDA_TERM_KEY_RIGHT    = -10,
+    BRENDA_TERM_KEY_F1       = -11,
+    BRENDA_TERM_KEY_F2       = -12,
+    BRENDA_TERM_KEY_F3       = -13,
+    BRENDA_TERM_KEY_F4       = -14,
+    BRENDA_TERM_KEY_F5       = -15,
+    BRENDA_TERM_KEY_F6       = -16,
+    BRENDA_TERM_KEY_F7       = -17,
+    BRENDA_TERM_KEY_F8       = -18,
+    BRENDA_TERM_KEY_F9       = -19,
+    BRENDA_TERM_KEY_F10      = -20,
+    BRENDA_TERM_KEY_F11      = -21,
+    BRENDA_TERM_KEY_F12      = -22,
 } Brenda_TermKey;
 
 typedef enum {
@@ -72,6 +90,7 @@ typedef enum {
 
 typedef struct {
     Brenda_EventType type;
+    u8 modifiers;
     union {
         struct {
             i32 x, y;

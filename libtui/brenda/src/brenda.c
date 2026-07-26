@@ -332,7 +332,6 @@ static void events_handle_available(i32 timeout_ms) {
     }
 }
 
-//TODO: handle ctrl/shift/alt modifiers, function key
 //TODO: support extended keyboard protocol
 //TODO: add syncronized output
 //TODO: support OSC 8 hyperlinks
@@ -345,16 +344,17 @@ static void input_parse_pending(void) {
         byte *before = p;
         Brenda_Event e = { .type = BRENDA_EVENT_NONE };
 
-        if (*p == BRENDA_TERM_KEY_ESCAPE) {
+        if (*p != BRENDA_TERM_KEY_ESCAPE) {
+            if (!input_unit_parse(&p, end, &e)) break;
+        } else if (end - p <= 1) {
+            break;
+        } else if (p[1] == '[' || p[1] == 'O') {
             if (!escape_parse(&p, end, &e)) break;
-        } else if (*p == 127) {
-            p++;
-            e = (Brenda_Event) {
-                .type = BRENDA_EVENT_TERM_KEY,
-                .as.term_key = BRENDA_TERM_KEY_BACKSPACE,
-            };
         } else {
-            if (!text_parse(&p, end, &e)) break;
+            byte *alt_input = p + 1;
+            if (!input_unit_parse(&alt_input, end, &e)) break;
+            e.modifiers |= BRENDA_MODIFIER_ALT;
+            p = alt_input;
         }
 
         assert(p > before);
@@ -372,14 +372,41 @@ static void input_parse_pending(void) {
     state.input_bytes.count -= consumed;
 }
 
-static b32 escape_parse(byte **p, byte *end, Brenda_Event *e) {
-    byte *start = *p;
-    if (end - start == 1) return false;
+// UTF-8 text or a single-byte terminal control key.
+static b32 input_unit_parse(byte **p, byte *end, Brenda_Event *e) {
+    u8 value = (u8)**p;
 
-    if (start[1] != '[') {
-        *p = start + 1;
+    if (value == 127) {
+        (*p)++;
+        e->type = BRENDA_EVENT_TERM_KEY;
+        e->as.term_key = BRENDA_TERM_KEY_BACKSPACE;
         return true;
     }
+
+    if (value == '\t' || value == '\r' || value == '\n') {
+        (*p)++;
+        e->type = BRENDA_EVENT_TERM_KEY;
+        e->as.term_key = value == '\t' ? BRENDA_TERM_KEY_TAB : BRENDA_TERM_KEY_ENTER;
+        return true;
+    }
+
+    if (value <= 31 && value != BRENDA_TERM_KEY_ESCAPE) {
+        (*p)++;
+        e->type = BRENDA_EVENT_UTF8;
+        e->modifiers = BRENDA_MODIFIER_CTRL;
+        e->as.utf8.bytes[0] = value == 0 ? ' ' : "@abcdefghijklmnopqrstuvwxyz[\\]^_"[value];
+        e->as.utf8.length = 1;
+        return true;
+    }
+
+    return text_parse(p, end, e);
+}
+
+// CSI (ESC [) or SS3 (ESC O) terminal sequence.
+static b32 escape_parse(byte **p, byte *end, Brenda_Event *e) {
+    byte *start = *p;
+    assert(end - start >= 2);
+    assert(start[1] == '[' || start[1] == 'O');
 
     if (mouse_parse(p, end, e)) return true;
     if (term_key_parse(p, end, e)) return true;
@@ -395,6 +422,7 @@ static b32 escape_parse(byte **p, byte *end, Brenda_Event *e) {
     return false;
 }
 
+// SGR mouse sequence: CSI < button ; x ; y M/m.
 static b32 mouse_parse(byte **p, byte *end, Brenda_Event *e) {
     byte *start = *p;
     isize n = end - start;
@@ -411,11 +439,17 @@ static b32 mouse_parse(byte **p, byte *end, Brenda_Event *e) {
     e->as.mouse.y       = strtol(cursor + 1, &cursor, 10) - 1;
     e->as.mouse.pressed = (*cursor == 'M');
 
-    switch (btn) {
+    if (btn & 4)  e->modifiers |= BRENDA_MODIFIER_SHIFT;
+    if (btn & 8)  e->modifiers |= BRENDA_MODIFIER_ALT;
+    if (btn & 16) e->modifiers |= BRENDA_MODIFIER_CTRL;
+
+    switch (btn & ~(4 | 8 | 16)) {
         case 0:  e->type = BRENDA_EVENT_MOUSE_LEFT;   break;
         case 1:  e->type = BRENDA_EVENT_MOUSE_MIDDLE; break;
         case 2:  e->type = BRENDA_EVENT_MOUSE_RIGHT;  break;
-        case 32: e->type = BRENDA_EVENT_MOUSE_DRAG;   break;
+        case 32:
+        case 33:
+        case 34: e->type = BRENDA_EVENT_MOUSE_DRAG;   break;
         case 35: e->type = BRENDA_EVENT_MOUSE_MOVE;   break;
         case 64: e->type = BRENDA_EVENT_SCROLL_UP;    break;
         case 65: e->type = BRENDA_EVENT_SCROLL_DOWN;  break;
@@ -426,38 +460,107 @@ static b32 mouse_parse(byte **p, byte *end, Brenda_Event *e) {
     return true;
 }
 
-static struct {byte str[4]; Brenda_TermKey k;} term_key_table[] = {
-    {"[A" , BRENDA_TERM_KEY_UP},
-    {"[B" , BRENDA_TERM_KEY_DOWN},
-    {"[C" , BRENDA_TERM_KEY_RIGHT},
-    {"[D" , BRENDA_TERM_KEY_LEFT},
-    {"[2~", BRENDA_TERM_KEY_INSERT},
-    {"[3~", BRENDA_TERM_KEY_DELETE},
-    {"[H" , BRENDA_TERM_KEY_HOME},
-    {"[4~", BRENDA_TERM_KEY_END},
-    {"[5~", BRENDA_TERM_KEY_PAGE_UP},
-    {"[6~", BRENDA_TERM_KEY_PAGE_DOWN},
-};
-
+// CSI or SS3 navigation, editing and function key.
 static b32 term_key_parse(byte **p, byte *end, Brenda_Event *e) {
     byte *start = *p;
     isize n = end - start;
     if (n < 3) return false;
 
-    for (usize i = 0; i < ARRAY_SIZE(term_key_table); i++) {
-        byte *key = term_key_table[i].str;
-        isize key_len = strlen(key);
-        if (n >= key_len + 1 && memcmp(start + 1, key, key_len) == 0) {
-            e->type = BRENDA_EVENT_TERM_KEY;
-            e->as.term_key = term_key_table[i].k;
-            *p = start + key_len + 1;
-            return true;
+    if (start[1] == 'O') {
+        switch (start[2]) {
+            case 'A': e->as.term_key = BRENDA_TERM_KEY_UP;    break;
+            case 'B': e->as.term_key = BRENDA_TERM_KEY_DOWN;  break;
+            case 'C': e->as.term_key = BRENDA_TERM_KEY_RIGHT; break;
+            case 'D': e->as.term_key = BRENDA_TERM_KEY_LEFT;  break;
+            case 'H': e->as.term_key = BRENDA_TERM_KEY_HOME;  break;
+            case 'F': e->as.term_key = BRENDA_TERM_KEY_END;   break;
+            case 'P': e->as.term_key = BRENDA_TERM_KEY_F1;    break;
+            case 'Q': e->as.term_key = BRENDA_TERM_KEY_F2;    break;
+            case 'R': e->as.term_key = BRENDA_TERM_KEY_F3;    break;
+            case 'S': e->as.term_key = BRENDA_TERM_KEY_F4;    break;
+            default: return false;
         }
+
+        e->type = BRENDA_EVENT_TERM_KEY;
+        *p = start + 3;
+        return true;
     }
 
-    return false;
+    byte *final = start + 2;
+    while (final < end && !('@' <= *final && *final <= '~')) final++;
+    if (final == end) return false;
+
+    u32 parameters[2] = {0};
+    usize parameter_count = 0;
+    byte *cursor = start + 2;
+    while (cursor < final) {
+        if (parameter_count == ARRAY_SIZE(parameters) || *cursor < '0' || *cursor > '9') return false;
+
+        u32 value = 0;
+        while (cursor < final && '0' <= *cursor && *cursor <= '9') {
+            value = value * 10 + (*cursor - '0');
+            cursor++;
+        }
+        parameters[parameter_count++] = value;
+
+        if (cursor == final) break;
+        if (*cursor != ';') return false;
+        cursor++;
+    }
+
+    u32 modifier_parameter = parameter_count == 2 ? parameters[1] : 1;
+    if (modifier_parameter == 0) return false;
+    u32 modifier_bits = modifier_parameter - 1;
+    if (modifier_bits & 1) e->modifiers |= BRENDA_MODIFIER_SHIFT;
+    if (modifier_bits & 2) e->modifiers |= BRENDA_MODIFIER_ALT;
+    if (modifier_bits & 4) e->modifiers |= BRENDA_MODIFIER_CTRL;
+
+    switch (*final) {
+        case 'A': e->as.term_key = BRENDA_TERM_KEY_UP;    break;
+        case 'B': e->as.term_key = BRENDA_TERM_KEY_DOWN;  break;
+        case 'C': e->as.term_key = BRENDA_TERM_KEY_RIGHT; break;
+        case 'D': e->as.term_key = BRENDA_TERM_KEY_LEFT;  break;
+        case 'H': e->as.term_key = BRENDA_TERM_KEY_HOME;  break;
+        case 'F': e->as.term_key = BRENDA_TERM_KEY_END;   break;
+        case 'P': e->as.term_key = BRENDA_TERM_KEY_F1;    break;
+        case 'Q': e->as.term_key = BRENDA_TERM_KEY_F2;    break;
+        case 'R': e->as.term_key = BRENDA_TERM_KEY_F3;    break;
+        case 'S': e->as.term_key = BRENDA_TERM_KEY_F4;    break;
+        case 'Z':
+            e->as.term_key = BRENDA_TERM_KEY_TAB;
+            e->modifiers |= BRENDA_MODIFIER_SHIFT;
+            break;
+        case '~':
+            if (parameter_count == 0) return false;
+            switch (parameters[0]) {
+                case 1:
+                case 7:  e->as.term_key = BRENDA_TERM_KEY_HOME;      break;
+                case 2:  e->as.term_key = BRENDA_TERM_KEY_INSERT;    break;
+                case 3:  e->as.term_key = BRENDA_TERM_KEY_DELETE;    break;
+                case 4:
+                case 8:  e->as.term_key = BRENDA_TERM_KEY_END;       break;
+                case 5:  e->as.term_key = BRENDA_TERM_KEY_PAGE_UP;   break;
+                case 6:  e->as.term_key = BRENDA_TERM_KEY_PAGE_DOWN; break;
+                case 15: e->as.term_key = BRENDA_TERM_KEY_F5;        break;
+                case 17: e->as.term_key = BRENDA_TERM_KEY_F6;        break;
+                case 18: e->as.term_key = BRENDA_TERM_KEY_F7;        break;
+                case 19: e->as.term_key = BRENDA_TERM_KEY_F8;        break;
+                case 20: e->as.term_key = BRENDA_TERM_KEY_F9;        break;
+                case 21: e->as.term_key = BRENDA_TERM_KEY_F10;       break;
+                case 23: e->as.term_key = BRENDA_TERM_KEY_F11;       break;
+                case 24: e->as.term_key = BRENDA_TERM_KEY_F12;       break;
+                default: return false;
+            }
+            break;
+        default: return false;
+    }
+
+    e->type = BRENDA_EVENT_TERM_KEY;
+    *p = final + 1;
+    return true;
 }
 
+// One UTF-8 encoded text unit.
 static b32 text_parse(byte **p, byte *end, Brenda_Event *e) {
     byte *start = *p;
     u8 expected_length = utf8_expected_length(*start);
