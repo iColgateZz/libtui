@@ -113,9 +113,9 @@ void brenda_terminal_set_fps(i32 fps);
 u32 brenda_terminal_get_width(void);
 u32 brenda_terminal_get_height(void);
 
-// void brenda_cursor_show(void);
-// void brenda_cursor_hide(void);
-// void brenda_cursor_set_position(i32 x, i32 y);
+void brenda_cursor_show(void);
+void brenda_cursor_hide(void);
+void brenda_cursor_set_position(i32 x, i32 y);
 
 void brenda_frame_begin(void);
 void brenda_frame_end(void);

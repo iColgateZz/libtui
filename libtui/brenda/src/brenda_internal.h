@@ -53,6 +53,13 @@ list_def(byte)
 list_def(Brenda_Event)
 
 typedef struct {
+    i32 x, y;
+    b32 is_visible;
+    b32 terminal_is_visible;
+    b32 position_needs_update;
+} CursorState;
+
+typedef struct {
     struct termios original_terminal;
     struct sigaction original_winch_action;
     Brenda_TerminalConfig terminal_config;
@@ -69,6 +76,7 @@ typedef struct {
     List(Brenda_Rectangle) clips;
     u32 width;
     u32 height;
+    CursorState cursor;
     b32 alreadly_deinited;
 } State;
 

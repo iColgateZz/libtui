@@ -124,26 +124,12 @@ void brenda_terminal_deinit(void) {
     state.alreadly_deinited = true;
 }
 
-//TODO: this should be drawn in frame_end()
-// void brenda_cursor_show(void) {
-//     assert(state.terminal_is_initialized);
-//     write_string("\33[?25h");
-// }
-
-// void brenda_cursor_hide(void) {
-//     assert(state.terminal_is_initialized);
-//     write_string("\33[?25l");
-// }
-
-// void brenda_cursor_set_position(i32 x, i32 y) {
-//     assert(state.terminal_is_initialized);
-//     assert(x >= 0 && y >= 0);
-
-//     byte buffer[32];
-//     byte *end = brenda_format(buffer, buffer + sizeof buffer, "\33[%d;%dH", y + 1, x + 1);
-//     assert(end <= buffer + sizeof buffer);
-//     output_write(buffer, end - buffer);
-// }
+void brenda_cursor_show(void) { state.cursor.is_visible = true; }
+void brenda_cursor_hide(void) { state.cursor.is_visible = false; }
+void brenda_cursor_set_position(i32 x, i32 y) {
+    state.cursor.x = x;
+    state.cursor.y = y;
+}
 
 //TODO: this should only write to pipe, other stuff should be handled after read.
 //      Code here is not async-safe.
@@ -197,6 +183,16 @@ static i64 time_get_ms(void) {
 
 void brenda_frame_end(void) {
     frame_render();
+
+    s8 cursor_visibility;
+    if (state.cursor.is_visible) {
+        cursor_move_emit(&state.frame_commands, state.cursor.y, state.cursor.x);
+        cursor_visibility = s8("\33[?25h");
+    } else {
+        cursor_visibility = s8("\33[?25l");
+    }
+    list_append_many(&state.frame_commands, cursor_visibility.s, cursor_visibility.len);
+
     output_write(state.frame_commands.items, state.frame_commands.count);
     state.delta_time = time_get_ms() - state.saved_time;
 }
