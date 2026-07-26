@@ -7,6 +7,7 @@
 #include "psh_core.h"
 
 #include <stdarg.h>
+#include <signal.h>
 #include <termios.h>
 
 enum {
@@ -53,6 +54,8 @@ list_def(Brenda_Event)
 
 typedef struct {
     struct termios original_terminal;
+    struct sigaction original_winch_action;
+    Brenda_TerminalConfig terminal_config;
     Unix_Pipe pipe;
     List(Brenda_Event) events;
     List(byte) input_bytes;
@@ -78,7 +81,6 @@ static void effect_merge(Effect *effect, Effect new_effect);
 static Cell cell(TerminalTextUnit text_unit, Effect effect);
 static Cell cell_empty(void);
 static b32 cell_equal(Cell a, Cell b);
-static void terminal_restore(void);
 static void screen_dimensions_update(void);
 static void signal_winch_handle(i32 signal_number);
 static i64 time_get_ms(void);

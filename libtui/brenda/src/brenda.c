@@ -26,42 +26,49 @@ Brenda_EventSlice brenda_events_get(void) {
 
 static void output_write(byte *text, usize length) { write(STDOUT_FILENO, text, length); }
 
-void brenda_terminal_init(void) {
+void brenda_terminal_init(Brenda_TerminalConfig config) {
     assert(tcgetattr(STDIN_FILENO, &state.original_terminal) == 0);
-    
-    //TODO: make more of this configurable
+    assert(sigaction(SIGWINCH, NULL, &state.original_winch_action) == 0);
+
     struct termios raw = state.original_terminal;
-    raw.c_iflag &= ~(BRKINT | ICRNL | INPCK | ISTRIP | IXON);
-    raw.c_oflag &= ~(OPOST);
-    raw.c_cflag |= (CS8);
-    raw.c_lflag &= ~(ECHO | ICANON | IEXTEN | ISIG);
+    raw.c_iflag &= ~(IGNBRK | BRKINT | PARMRK | INPCK | ISTRIP | INLCR | IGNCR | ICRNL | IXON);
+    raw.c_oflag &= ~OPOST;
+    raw.c_cflag &= ~(CSIZE | PARENB);
+    raw.c_cflag |= CS8;
+    raw.c_lflag &= ~(ECHO | ECHONL | ICANON | IEXTEN | ISIG);
     raw.c_cc[VMIN] = 0;
     raw.c_cc[VTIME] = 0;
 
     assert(tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw) == 0);
-    //TODO: maybe add something to deal with the cursor on the user side
-    //      so that the user can manipulate the cursor position maybe
 
+    state.terminal_config = config;
     write_string("\33[?2004l");                 // disable bracketed paste mode
-    write_string("\33[?1049h");                 // use alternate buffer
+    if (config.screen_mode == BRENDA_SCREEN_ALTERNATE)
+        write_string("\33[?1049h");             // use alternate buffer
+
     write_string("\33[?25l");                   // hide cursor
-    write_string("\33[?1000h");                 // enable mouse press/release
-    write_string("\33[?1002h");                 // enable mouse press/release + drag
-    write_string("\33[?1003h");                 // enable mouse press/release + drag + hover
-    write_string("\33[?1006h");                 // use mouse sgr protocol
+
+    switch (config.mouse_tracking) {
+        case BRENDA_MOUSE_TRACKING_ALL_MOTION: write_string("\33[?1003h"); break;
+        case BRENDA_MOUSE_TRACKING_DRAG:       write_string("\33[?1002h"); break;
+        case BRENDA_MOUSE_TRACKING_CLICKS:     write_string("\33[?1000h"); break;
+        case BRENDA_MOUSE_TRACKING_DISABLED: break;
+    }
+
+    if (config.mouse_tracking != BRENDA_MOUSE_TRACKING_DISABLED) 
+        write_string("\33[?1006h");             // use mouse sgr protocol
     write_string("\33[0m");                     // reset text attributes
     write_string("\33[2J");                     // clear screen
     write_string("\33[H");                      // move cursor to home position
 
     screen_dimensions_update();
-    //TODO: make restore public?
-    atexit(terminal_restore);
+    assert(atexit(brenda_terminal_deinit) == 0);
     assert(pipe_open(&state.pipe));
 
     struct sigaction sa = {0};
     sa.sa_handler = signal_winch_handle;
     sa.sa_flags = SA_RESTART;
-    sigaction(SIGWINCH, &sa, NULL);
+    assert(sigaction(SIGWINCH, &sa, NULL) == 0);
 
     list_resize(&state.back_buffer, state.width * state.height);
     list_resize(&state.front_buffer, state.width * state.height);
@@ -87,15 +94,19 @@ static void root_clip_update(void) {
     state.clips.items[0] = r;
 }
 
-static void terminal_restore(void) {
+void brenda_terminal_deinit(void) {
+    assert(sigaction(SIGWINCH, &state.original_winch_action, NULL) == 0);
     assert(tcsetattr(STDIN_FILENO, TCSAFLUSH, &state.original_terminal) == 0);
 
-    write_string("\33[?1000l");                     // disable mouse
-    write_string("\33[?1002l");                     // disable mouse
-    write_string("\33[?1003l");                     // disable mouse
-    write_string("\33[0m");                         // reset text attributes
-    write_string("\33[?25h");                       // show cursor
-    write_string("\33[?1049l");                     // exit alternate buffer
+    if (state.terminal_config.mouse_tracking != BRENDA_MOUSE_TRACKING_DISABLED) {
+        write_string("\33[?1000l");             // disable mouse
+        write_string("\33[?1002l");             // disable mouse
+        write_string("\33[?1003l");             // disable mouse
+    }
+
+    write_string("\33[0m");                     // reset text attributes
+    write_string("\33[?25h");                   // show cursor
+    if (state.terminal_config.screen_mode == BRENDA_SCREEN_ALTERNATE) write_string("\33[?1049l");
 
     fd_close(state.pipe.read_fd);
     fd_close(state.pipe.write_fd);
@@ -110,6 +121,29 @@ static void terminal_restore(void) {
     arena_destroy(state.tmp);
 }
 
+//TODO: this should be drawn in frame_end()
+// void brenda_cursor_show(void) {
+//     assert(state.terminal_is_initialized);
+//     write_string("\33[?25h");
+// }
+
+// void brenda_cursor_hide(void) {
+//     assert(state.terminal_is_initialized);
+//     write_string("\33[?25l");
+// }
+
+// void brenda_cursor_set_position(i32 x, i32 y) {
+//     assert(state.terminal_is_initialized);
+//     assert(x >= 0 && y >= 0);
+
+//     byte buffer[32];
+//     byte *end = brenda_format(buffer, buffer + sizeof buffer, "\33[%d;%dH", y + 1, x + 1);
+//     assert(end <= buffer + sizeof buffer);
+//     output_write(buffer, end - buffer);
+// }
+
+//TODO: this should only write to pipe, other stuff should be handled after read.
+//      Code here is not async-safe.
 static void signal_winch_handle(i32 signo) {
     screen_dimensions_update();
 
@@ -302,6 +336,10 @@ static void events_handle_available(i32 timeout_ms) {
     }
 }
 
+//TODO: handle ctrl/shift/alt modifiers, function key
+//TODO: support extended keyboard protocol
+//TODO: add syncronized output
+//TODO: support OSC 8 hyperlinks
 static void input_parse_pending(void) {
     byte *start = state.input_bytes.items;
     byte *p = start;

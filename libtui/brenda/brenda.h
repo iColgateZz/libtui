@@ -3,8 +3,6 @@
 
 #include "psh_core.h"
 
-// #define BRENDA_CTRL(value) psh_cp_from_byte((value) & 0x1F)
-
 typedef struct {
     u8 r, g, b;
 } Brenda_RGB;
@@ -22,6 +20,23 @@ typedef struct {
     Brenda_RGB color;
     u8 flags;
 } Brenda_TextEffect;
+
+typedef enum {
+    BRENDA_SCREEN_ALTERNATE,
+    BRENDA_SCREEN_PRIMARY,
+} Brenda_ScreenMode;
+
+typedef enum {
+    BRENDA_MOUSE_TRACKING_ALL_MOTION,
+    BRENDA_MOUSE_TRACKING_DRAG,
+    BRENDA_MOUSE_TRACKING_CLICKS,
+    BRENDA_MOUSE_TRACKING_DISABLED,
+} Brenda_MouseTracking;
+
+typedef struct {
+    Brenda_ScreenMode screen_mode;
+    Brenda_MouseTracking mouse_tracking;
+} Brenda_TerminalConfig;
 
 typedef enum {
     BRENDA_TERM_KEY_BACKSPACE = 8,
@@ -92,16 +107,22 @@ void brenda_clip_push_rectangle(Brenda_Rectangle rectangle);
 Brenda_Rectangle brenda_clip_pop(void);
 Brenda_Rectangle brenda_clip_peek(void);
 
-void brenda_terminal_init(void);
+void brenda_terminal_init(Brenda_TerminalConfig config);
+void brenda_terminal_deinit(void);
 void brenda_terminal_set_fps(i32 fps);
 u32 brenda_terminal_get_width(void);
 u32 brenda_terminal_get_height(void);
+
+// void brenda_cursor_show(void);
+// void brenda_cursor_hide(void);
+// void brenda_cursor_set_position(i32 x, i32 y);
 
 void brenda_frame_begin(void);
 void brenda_frame_end(void);
 u64 brenda_frame_get_delta_time(void);
 
 i32 brenda_text_measure_width(byte *text, isize length);
+//TODO: there should be a way to represent no color/terminal's default color
 void brenda_text_draw(i32 x, i32 y, byte *text, isize length, Brenda_TextEffect effect);
 void brenda_line_draw(i32 x0, i32 y0, i32 x1, i32 y1, byte *utf8, isize byte_count, Brenda_TextEffect effect);
 void brenda_box_draw(Brenda_Rectangle rectangle, Brenda_TextEffect effect);

@@ -43,7 +43,7 @@ static b32 button(Layla_ElementID id, Layla_TextSlice label) {
 
 i32 main(void) {
     layla_state_set_text_measure_function(text_measure, NULL);
-    brenda_terminal_init();
+    brenda_terminal_init((Brenda_TerminalConfig) {0});
     brenda_terminal_set_fps(60);
 
     b32 quit = false;
@@ -205,5 +205,6 @@ i32 main(void) {
         brenda_frame_end();
     }
 
+    brenda_terminal_deinit();
     return 0;
 }
