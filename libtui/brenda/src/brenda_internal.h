@@ -69,6 +69,7 @@ typedef struct {
     List(Brenda_Rectangle) clips;
     u32 width;
     u32 height;
+    b32 alreadly_deinited;
 } State;
 
 static TerminalTextUnit text_unit_from_bytes(byte *utf8, u8 utf8_length, u8 cell_width);

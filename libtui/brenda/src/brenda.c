@@ -95,6 +95,8 @@ static void root_clip_update(void) {
 }
 
 void brenda_terminal_deinit(void) {
+    if (state.alreadly_deinited) return;
+
     assert(sigaction(SIGWINCH, &state.original_winch_action, NULL) == 0);
     assert(tcsetattr(STDIN_FILENO, TCSAFLUSH, &state.original_terminal) == 0);
 
@@ -119,6 +121,7 @@ void brenda_terminal_deinit(void) {
     list_free(state.input_bytes);
 
     arena_destroy(state.tmp);
+    state.alreadly_deinited = true;
 }
 
 //TODO: this should be drawn in frame_end()
