@@ -910,14 +910,26 @@ static inline void hover_test(void) {
     Layla_Rectangle screen = rect_from_node(root);
     state.hovered_element_ids.count = 0;
 
-    for (isize i = state.floating_roots.count; i > 0; --i) {
-        TempID floating_root = state.floating_roots.items[i - 1];
-        Node *node = node_from_temp_id(floating_root);
-        b32 hit = node_hit_test(node, screen, state.cursor.x, state.cursor.y);
-        if (hit && node->as.container.floating.cursor_capture_mode == LAYLA_CURSOR_CAPTURE) return;
-    }
-
     node_hit_test(root, screen, state.cursor.x, state.cursor.y);
+
+    for (isize i = 0; i < state.floating_roots.count; ++i) {
+        Node *floating = node_from_temp_id(state.floating_roots.items[i]);
+        isize floating_hits_start = state.hovered_element_ids.count;
+
+        b32 hit = node_hit_test(floating, screen, state.cursor.x, state.cursor.y);
+
+        if (hit && floating->as.container.floating.cursor_capture_mode == LAYLA_CURSOR_CAPTURE) {
+            isize floating_hit_count = state.hovered_element_ids.count - floating_hits_start;
+
+            memmove(
+                state.hovered_element_ids.items,
+                state.hovered_element_ids.items + floating_hits_start,
+                floating_hit_count * sizeof(Layla_ElementID)
+            );
+
+            state.hovered_element_ids.count = floating_hit_count;
+        }
+    }
 }
 
 static inline b32 node_hit_test(Node *node, Layla_Rectangle parent_clip, i32 x, i32 y) {
