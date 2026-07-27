@@ -98,7 +98,6 @@ typedef struct {
     u32 completed_generation;
     i32 width, height;
     Layla_CursorState cursor;
-    TempID hovered_temp_id;
     Layla_TextMeasureFunction text_measure_function;
     void *text_measure_userdata;
     Layla_ErrorHandler error_handler;

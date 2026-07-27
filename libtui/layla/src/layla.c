@@ -123,7 +123,6 @@ void layla_state_set_cursor_state(i32 x, i32 y, b32 is_down) {
     }
 
     if (state.nodes.count == 0) {
-        state.hovered_temp_id = LAYLA_TEMP_ID_NONE;
         state.hovered_element_ids.count = 0;
         return;
     }
@@ -152,7 +151,6 @@ void layla_layout_begin(void) {
     state.frame_children.count = 0;
     state.floating_roots.count = 0;
     state.commands.count = 0;
-    state.hovered_temp_id = LAYLA_TEMP_ID_NONE;
     state.errors.count = 0;
 
     if (state.width <= 0 || state.height <= 0) {
@@ -355,23 +353,6 @@ i32 layla_scroll_offset_get_by_id(Layla_ElementID id) {
 
 i32 layla_scroll_max_offset_get_by_id(Layla_ElementID id) {
     return scroll_state_get_by_id(id)->max_y;
-}
-
-void layla_scroll_offset_update_on_hovered_element(i32 delta_y) {
-    TempID current_id = state.hovered_temp_id;
-    if (delta_y == 0 || current_id == LAYLA_TEMP_ID_NONE) return;
-
-    for (;;) {
-        Node *current = node_from_temp_id(current_id);
-        if (node_is_scroll_y(current)) {
-            layla_scroll_offset_update_by_id(current->id, delta_y);
-            return;
-        }
-
-        if (node_is_floating(current)) break;
-        if (current_id == LAYLA_ROOT_TEMP_ID) break;
-        current_id = current->parent;
-    }
 }
 
 static inline void floating_layout(Node *node) {
@@ -927,7 +908,6 @@ void append_text_command(Node *node, isize line_start_byte, isize line_end_byte,
 static inline void hover_test(void) {
     Node *root = node_from_temp_id(LAYLA_ROOT_TEMP_ID);
     Layla_Rectangle screen = rect_from_node(root);
-    state.hovered_temp_id = LAYLA_TEMP_ID_NONE;
     state.hovered_element_ids.count = 0;
 
     for (isize i = state.floating_roots.count; i > 0; --i) {
@@ -954,7 +934,6 @@ static inline b32 node_hit_test(Node *node, Layla_Rectangle parent_clip, i32 x, 
 
     b32 found = false;
     if (node_contains) {
-        state.hovered_temp_id = (TempID)(node - state.nodes.items);
         layla_list_append(&state.hovered_element_ids, node->id);
         found = true;
     }

@@ -335,7 +335,6 @@ void layla_state_set_screen_dimensions(i32 w, i32 h);
 void layla_state_set_cursor_state(i32 x, i32 y, b32 is_down);
 Layla_CursorState layla_state_get_cursor_state(void);
 
-void layla_scroll_offset_update_on_hovered_element(i32 delta_y);
 void layla_scroll_offset_set_by_id(Layla_ElementID id, i32 offset_y);
 void layla_scroll_offset_update_by_id(Layla_ElementID id, i32 delta_y);
 i32 layla_scroll_offset_get_by_id(Layla_ElementID id);
