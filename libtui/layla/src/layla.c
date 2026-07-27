@@ -204,10 +204,19 @@ Layla_CommandSlice layla_layout_end(void) {
 
     for (isize i = 0; i < state.nodes.count; ++i) {
         Node node = state.nodes.items[i];
+        Layla_ElementID parent_id = i == LAYLA_ROOT_TEMP_ID ? LAYLA_ELEMENT_ID_NONE : node_from_temp_id(node.parent)->id;
+
+        u8 flags = node.type == LAYLA_NODE_CONTAINER ? LAYLA_ELEMENT_CONTAINER : LAYLA_ELEMENT_TEXT;
+        if (node_is_scroll_y(&node)) flags |= LAYLA_ELEMENT_SCROLL_Y;
+        if (node_is_floating(&node)) flags |= LAYLA_ELEMENT_FLOATING;
+
         hash_map_insert(&state.element_records, node.id, ((ElementRecord) {
             .generation = next_generation,
             .data = {
+                .id = node.id,
+                .parent_id = parent_id,
                 .rectangle = rect_from_node(&node),
+                .flags = flags,
                 .found = true,
             },
         }));

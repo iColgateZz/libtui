@@ -146,8 +146,18 @@ typedef LAYLA_PACKED_ENUM {
 typedef u32 Layla_ElementID;
 #define LAYLA_ELEMENT_ID_NONE 0
 
+enum {
+    LAYLA_ELEMENT_CONTAINER = 1 << 0,
+    LAYLA_ELEMENT_TEXT      = 1 << 1,
+    LAYLA_ELEMENT_SCROLL_Y  = 1 << 2,
+    LAYLA_ELEMENT_FLOATING  = 1 << 3,
+};
+
 typedef struct {
+    Layla_ElementID id;
+    Layla_ElementID parent_id;
     Layla_Rectangle rectangle;
+    u8 flags;
     b32 found;
 } Layla_ElementData;
 
@@ -342,7 +352,8 @@ i32 layla_scroll_max_offset_get_by_id(Layla_ElementID id);
 
 b32 layla_state_is_element_hovered(void);
 b32 layla_state_is_element_hovered_by_id(Layla_ElementID id);
-// The returned slice remains valid until the cursor state is set again.
+// The returned IDs are ordered back to front.
+// The slice remains valid until the cursor state is set again.
 Layla_ElementIDSlice layla_state_get_hovered_element_ids(void);
 Layla_ElementID layla_element_get_open_id(void);
 // Returns data from the last completed layout. During layout construction, this is the preceding frame's data.
