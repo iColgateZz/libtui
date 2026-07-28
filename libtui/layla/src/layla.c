@@ -134,7 +134,7 @@ Layla_CursorState layla_state_get_cursor_state(void) {
     return state.cursor;
 }
 
-Layla_ElementData layla_element_data_get_by_id(Layla_ElementID id) {
+Layla_ElementData layla_state_get_element_data(Layla_ElementID id) {
     ElementRecord *record = NULL;
     hash_map_get(&state.element_records, id, &record);
     if (record == NULL || record->generation != state.completed_generation) {
@@ -340,27 +340,27 @@ b32 layla_state_is_element_hovered_by_id(Layla_ElementID id) {
     return false;
 }
 
-Layla_ElementID layla_element_get_open_id(void) {
+Layla_ElementID layla_state_get_open_element_id(void) {
     assert(state.open_node_stack.count > 0);
     return node_from_temp_id(layla_list_last(&state.open_node_stack))->id;
 }
 
-void layla_scroll_offset_set_by_id(Layla_ElementID id, i32 offset_y) {
+void layla_state_set_scroll_offset(Layla_ElementID id, i32 offset_y) {
     scroll_state_get_by_id(id)->y = offset_y;
 }
 
-void layla_scroll_offset_update_by_id(Layla_ElementID id, i32 delta_y) {
+void layla_state_update_scroll_offset(Layla_ElementID id, i32 delta_y) {
     if (delta_y == 0) return;
     ScrollState *scroll = scroll_state_get_by_id(id);
     i64 offset_y = (i64)scroll->y + (i64)delta_y;
     scroll->y = (i32)CLAMP(offset_y, (i64)INT32_MIN, (i64)INT32_MAX);
 }
 
-i32 layla_scroll_offset_get_by_id(Layla_ElementID id) {
+i32 layla_state_get_scroll_offset(Layla_ElementID id) {
     return scroll_state_get_by_id(id)->y;
 }
 
-i32 layla_scroll_max_offset_get_by_id(Layla_ElementID id) {
+i32 layla_state_get_max_scroll_offset(Layla_ElementID id) {
     return scroll_state_get_by_id(id)->max_y;
 }
 

@@ -250,6 +250,10 @@ typedef struct {
 
 #define LAYLA_TEXT_SLICE(s) ((Layla_TextSlice) {.items = (byte *)(s), .count = sizeof(s) - 1})
 
+// Return the width of the borrowed UTF-8 span in layout units.
+// The function must handle empty spans and return a non-negative value.
+typedef i32 (*Layla_TextMeasureFunction)(Layla_TextSlice text, void *userdata);
+
 typedef LAYLA_PACKED_ENUM {
     LAYLA_TEXT_WRAP_WORD,
 } Layla_TextWrapPolicy;
@@ -332,32 +336,30 @@ typedef struct {
     isize count;
 } Layla_CommandSlice;
 
-// Return the width of the borrowed UTF-8 span in layout units.
-// The function must handle empty spans and return a non-negative value.
-typedef i32 (*Layla_TextMeasureFunction)(Layla_TextSlice text, void *userdata);
-
 void layla_state_set_error_handler(Layla_ErrorHandler handler, void *userdata);
 Layla_ErrorSlice layla_state_get_errors(void);
 
 void layla_state_set_text_measure_function(Layla_TextMeasureFunction function, void *userdata);
 void layla_state_set_screen_dimensions(i32 w, i32 h);
+
 // Call once per frame before layla_layout_begin(). Hit-tests the last completed layout and updates interaction_state.
 void layla_state_set_cursor_state(i32 x, i32 y, b32 is_down);
 Layla_CursorState layla_state_get_cursor_state(void);
 
-void layla_scroll_offset_set_by_id(Layla_ElementID id, i32 offset_y);
-void layla_scroll_offset_update_by_id(Layla_ElementID id, i32 delta_y);
-i32 layla_scroll_offset_get_by_id(Layla_ElementID id);
-i32 layla_scroll_max_offset_get_by_id(Layla_ElementID id);
+void layla_state_set_scroll_offset(Layla_ElementID id, i32 offset_y);
+void layla_state_update_scroll_offset(Layla_ElementID id, i32 delta_y);
+i32 layla_state_get_scroll_offset(Layla_ElementID id);
+i32 layla_state_get_max_scroll_offset(Layla_ElementID id);
 
 b32 layla_state_is_element_hovered(void);
 b32 layla_state_is_element_hovered_by_id(Layla_ElementID id);
 // The returned IDs are ordered back to front.
 // The slice remains valid until the cursor state is set again.
 Layla_ElementIDSlice layla_state_get_hovered_element_ids(void);
-Layla_ElementID layla_element_get_open_id(void);
+
+Layla_ElementID layla_state_get_open_element_id(void);
 // Returns data from the last completed layout. During layout construction, this is the preceding frame's data.
-Layla_ElementData layla_element_data_get_by_id(Layla_ElementID id);
+Layla_ElementData layla_state_get_element_data(Layla_ElementID id);
 
 void layla_layout_begin(void);
 Layla_CommandSlice layla_layout_end(void);
