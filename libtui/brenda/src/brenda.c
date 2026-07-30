@@ -430,7 +430,8 @@ static b32 mouse_parse(byte **p, byte *end, Brenda_Event *e) {
 
     byte *terminator_m = memchr(start, 'm', n);
     byte *terminator_M = memchr(start, 'M', n);
-    byte *terminator = MAX(terminator_m, terminator_M);
+    byte *terminator = terminator_m;
+    if (terminator == NULL || (terminator_M != NULL && terminator_M < terminator)) terminator = terminator_M;
     if (!terminator) return false;
 
     byte *cursor        = start;
