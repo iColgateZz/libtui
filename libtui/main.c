@@ -80,7 +80,7 @@ i32 main(void) {
         if (left_mouse_pressed) tooltip_open = false;
         if (right_mouse_pressed) tooltip_open = layla_state_is_element_hovered_by_id(BUTTON_QUIT_ID);
         layla_state_set_cursor_state(cursor.x, cursor.y, cursor_is_down);
-        layla_scroll_offset_update_on_hovered_element(scroll_delta_y);
+        layla_state_set_scroll_offset(SCROLL_PANEL_ID, scroll_delta_y);
 
         {
             u32 w = brenda_terminal_get_width();
