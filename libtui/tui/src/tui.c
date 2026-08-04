@@ -150,35 +150,23 @@ Tui_TextInputResult tui_text_input_draw(Tui_TextInputConfig config) {
     if (focused) {
         config.style.background = config.focused_background;
         text_input_events_handle(config.state, &result);
+        state.text_input_cursor_id = id;
+        state.text_input_cursor_text = (Layla_TextSlice) {
+            .items = config.state->items,
+            .count = config.state->count,
+        };
+        state.text_input_cursor_byte = config.state->cursor;
     }
 
     layla_container_element_configure((Layla_ContainerConfig) {.style = config.style});
-    if (config.state->count == 0) {
-        if (focused) Tui_Text(.text = LAYLA_TEXT_SLICE("_"), .style = config.text_style);
-        else Tui_Text(.text = config.placeholder, .style = config.placeholder_style);
-    } else if (focused) {
-        if (config.state->cursor > 0) {
-            Tui_Text(
-                .text = {.items = config.state->items, .count = config.state->cursor},
-                .style = config.text_style,
-            );
-        }
-        Tui_Text(.text = LAYLA_TEXT_SLICE("_"), .style = config.text_style);
-        if (config.state->cursor < config.state->count) {
-            Tui_Text(
-                .style = config.text_style,
-                .text = {
-                    .items = config.state->items + config.state->cursor,
-                    .count = config.state->count - config.state->cursor,
-                },
-            );
-        }
-    } else {
-        Tui_Text(
-            .text = {.items = config.state->items, .count = config.state->count},
-            .style = config.text_style,
-        );
+    Layla_TextSlice text = {.items = config.state->items, .count = config.state->count};
+    Layla_TextStyle style = config.text_style;
+    if (config.state->count == 0 && focused) text = LAYLA_TEXT_SLICE(" ");
+    if (config.state->count == 0 && !focused) {
+        text = config.placeholder;
+        style = config.placeholder_style;
     }
+    Tui_Text(.text = text, .style = style);
 
     layla_element_close();
     return result;
@@ -223,6 +211,7 @@ static inline Layla_ElementID interaction_target_get(u8 required_flags) {
 
 static inline void interactions_begin(Brenda_EventSlice events) {
     state.clicked_id = LAYLA_ELEMENT_ID_NONE;
+    state.text_input_cursor_id = LAYLA_ELEMENT_ID_NONE;
 
     Layla_CursorState cursor = layla_state_get_cursor_state();
     b32 cursor_is_down = cursor.interaction_state == LAYLA_CURSOR_PRESSED_THIS_FRAME
@@ -383,6 +372,11 @@ static inline void commands_draw(Layla_CommandSlice commands) {
                     .color = {.r = text.color.r, .g = text.color.g, .b = text.color.b},
                 };
                 brenda_text_draw(text.x, text.y, text.slice.items, text.slice.count, effect);
+
+                Layla_ElementData text_data = layla_state_get_element_data(command.id);
+                if (text_data.parent_id == state.text_input_cursor_id) {
+                    text_input_cursor_draw(text, state.text_input_cursor_text, state.text_input_cursor_byte);
+                }
                 break;
             }
             case LAYLA_CMD_BORDER: {
@@ -403,6 +397,34 @@ static inline void commands_draw(Layla_CommandSlice commands) {
             case LAYLA_CMD_CUSTOM: break;
         }
     }
+}
+
+static inline void text_input_cursor_draw(Layla_CommandText text, Layla_TextSlice input, isize cursor_byte) {
+    Brenda_TextEffect effect = {
+        .color = {.r = text.color.r, .g = text.color.g, .b = text.color.b},
+        .flags = BRENDA_TEXT_EFFECT_UNDERLINE,
+    };
+
+    if (input.count == 0) {
+        brenda_text_draw(text.x, text.y, (byte *)" ", 1, effect);
+        return;
+    }
+
+    byte *cursor = input.items + cursor_byte;
+    byte *line_start = text.slice.items;
+    byte *line_end = line_start + text.slice.count;
+    if (cursor < line_start || cursor > line_end) return;
+    if (cursor == line_end && cursor_byte < input.count) return;
+
+    i32 cursor_x = text.x + brenda_text_measure_width(line_start, cursor - line_start);
+    if (cursor_byte == input.count) {
+        brenda_text_draw(cursor_x, text.y, " ", 1, effect);
+        return;
+    }
+
+    isize next = cursor_byte + 1;
+    while (next < input.count && ((u8)input.items[next] & 0xc0) == 0x80) next++;
+    brenda_text_draw(cursor_x, text.y, cursor, next - cursor_byte, effect);
 }
 
 static inline void text_input_events_handle(Tui_TextInputState *input, Tui_TextInputResult *result) {
