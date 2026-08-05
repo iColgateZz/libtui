@@ -132,7 +132,10 @@ void tui_text_input_state_set_text(Tui_TextInputState *state, Layla_TextSlice te
         .direction = LAYLA_DIR_ROW,                                                                  \
         .overflow = LAYLA_OVERFLOW_HIDDEN,                                                           \
     },                                                                                               \
-    .text_style = {.color = LAYLA_COLOR(255, 255, 255)},                                             \
+    .text_style = {                                                                                  \
+        .color = LAYLA_COLOR(255, 255, 255),                                                        \
+        .wrap_policy = LAYLA_TEXT_WRAP_CHARACTER,                                                   \
+    },                                                                                              \
     .placeholder_style = {.color = LAYLA_COLOR(120, 120, 120)},                                     \
     .focused_background = LAYLA_COLOR(45, 45, 45),                                                   \
     __VA_ARGS__                                                                                      \
