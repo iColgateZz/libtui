@@ -105,7 +105,7 @@ void tui_text_input_state_set_text(Tui_TextInputState *state, Layla_TextSlice te
     }), 0); _tui_latch < 1; _tui_latch = 1, layla_element_close())
 
 #define Tui_Text(...) tui_text_draw((Tui_TextConfig) {                                               \
-    .style.color = LAYLA_RGB(255, 255, 255),                                                         \
+    .style.color = LAYLA_COLOR(255, 255, 255),                                                       \
     __VA_ARGS__                                                                                      \
 })
 
@@ -114,9 +114,9 @@ void tui_text_input_state_set_text(Tui_TextInputState *state, Layla_TextSlice te
         .size = {.w = LAYLA_FIT(), .h = LAYLA_FIT()},                                               \
         .background = LAYLA_COLOR(70, 90, 180),                                                      \
         .padding = {.left = 1, .right = 1},                                                          \
-        .border = {.width = 1, .color = LAYLA_RGB(255, 255, 255)},                                   \
+        .border = {.width = 1, .color = LAYLA_COLOR(255, 255, 255)},                                 \
     },                                                                                               \
-    .text_style = {.color = LAYLA_RGB(255, 255, 255), .alignment = LAYLA_ALIGN_CENTER},              \
+    .text_style = {.color = LAYLA_COLOR(255, 255, 255), .alignment = LAYLA_ALIGN_CENTER},            \
     .hovered_background = LAYLA_COLOR(100, 120, 220),                                                \
     .pressed_background = LAYLA_COLOR(45, 60, 130),                                                  \
     .focused_background = LAYLA_COLOR(100, 120, 220),                                                \
@@ -128,12 +128,12 @@ void tui_text_input_state_set_text(Tui_TextInputState *state, Layla_TextSlice te
         .size = {.w = LAYLA_FILL(.min = 8), .h = LAYLA_FIT()},                                      \
         .background = LAYLA_COLOR(30, 30, 30),                                                       \
         .padding = {.left = 1, .right = 1},                                                          \
-        .border = {.width = 1, .color = LAYLA_RGB(140, 140, 140)},                                   \
+        .border = {.width = 1, .color = LAYLA_COLOR(140, 140, 140)},                                 \
         .direction = LAYLA_DIR_ROW,                                                                  \
         .overflow = LAYLA_OVERFLOW_HIDDEN,                                                           \
     },                                                                                               \
-    .text_style = {.color = LAYLA_RGB(255, 255, 255)},                                               \
-    .placeholder_style = {.color = LAYLA_RGB(120, 120, 120)},                                        \
+    .text_style = {.color = LAYLA_COLOR(255, 255, 255)},                                             \
+    .placeholder_style = {.color = LAYLA_COLOR(120, 120, 120)},                                     \
     .focused_background = LAYLA_COLOR(45, 45, 45),                                                   \
     __VA_ARGS__                                                                                      \
 })

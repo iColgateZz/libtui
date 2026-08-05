@@ -5,7 +5,11 @@
 
 typedef struct {
     u8 r, g, b;
-} Brenda_RGB;
+    u8 is_set;
+} Brenda_Color;
+
+#define BRENDA_COLOR(red, green, blue) \
+    ((Brenda_Color) {.r = (red), .g = (green), .b = (blue), .is_set = true})
 
 enum {
     BRENDA_TEXT_EFFECT_BOLD          = 1 << 0,
@@ -17,7 +21,7 @@ enum {
 };
 
 typedef struct {
-    Brenda_RGB color;
+    Brenda_Color color;
     u8 flags;
 } Brenda_TextEffect;
 
@@ -141,11 +145,10 @@ void brenda_frame_end(void);
 u64 brenda_frame_get_delta_time(void);
 
 i32 brenda_text_measure_width(byte *text, isize length);
-//TODO: there should be a way to represent no color/terminal's default color
 void brenda_text_draw(i32 x, i32 y, byte *text, isize length, Brenda_TextEffect effect);
 void brenda_line_draw(i32 x0, i32 y0, i32 x1, i32 y1, byte *utf8, isize byte_count, Brenda_TextEffect effect);
 void brenda_box_draw(Brenda_Rectangle rectangle, Brenda_TextEffect effect);
-void brenda_rectangle_fill(Brenda_Rectangle rectangle, Brenda_RGB color);
+void brenda_rectangle_fill(Brenda_Rectangle rectangle, Brenda_Color color);
 
 byte *brenda_format(byte *cursor, byte *end, byte *format, ...);
 Brenda_Stream brenda_stream_start(byte *buffer, usize size);

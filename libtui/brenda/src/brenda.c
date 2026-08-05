@@ -237,7 +237,7 @@ static void cells_emit(List(byte) *out, Cell *cells, usize start, usize len) {
 }
 
 static void effect_emit(List(byte) *out, Effect e) {
-    if (e.flags == 0) return;
+    if (e.flags == 0 && !e.fg.is_set && !e.bg.is_set) return;
 
     Brenda_Stream s = brenda_stream_start_from_arena(&state.tmp, 64);
     brenda_stream_format(&s, "\33[");
@@ -249,9 +249,9 @@ static void effect_emit(List(byte) *out, Effect e) {
     if (e.flags & EFFECT_INVERSE)       brenda_stream_format(&s, "7;");
     if (e.flags & EFFECT_STRIKETHROUGH) brenda_stream_format(&s, "9;");
 
-    if (e.flags & EFFECT_FG)
+    if (e.fg.is_set)
         brenda_stream_format(&s, "38;2;%u;%u;%u;", e.fg.r, e.fg.g, e.fg.b);
-    if (e.flags & EFFECT_BG)
+    if (e.bg.is_set)
         brenda_stream_format(&s, "48;2;%u;%u;%u;", e.bg.r, e.bg.g, e.bg.b);
 
     // replace ';' with 'm'
@@ -578,14 +578,14 @@ static b32 text_parse(byte **p, byte *end, Brenda_Event *e) {
 static inline Effect effect_from_text_effect(Brenda_TextEffect text_effect) {
     return (Effect) {
         .fg = text_effect.color,
-        .flags = EFFECT_FG | text_effect.flags,
+        .flags = text_effect.flags,
     };
 }
 
 static void effect_merge(Effect *effect, Effect new_effect) {
     effect->flags |= new_effect.flags;
-    if (new_effect.flags & EFFECT_FG) effect->fg = new_effect.fg;
-    if (new_effect.flags & EFFECT_BG) effect->bg = new_effect.bg;
+    if (new_effect.fg.is_set) effect->fg = new_effect.fg;
+    if (new_effect.bg.is_set) effect->bg = new_effect.bg;
 }
 
 static Cell cell(TerminalTextUnit text_unit, Effect effect) {
@@ -895,8 +895,8 @@ void brenda_box_draw(Brenda_Rectangle r, Brenda_TextEffect effect) {
     brenda_line_draw(x1, y0 + 1, x1, y1 - 1, (byte *)"│", sizeof("│") - 1, effect);
 }
 
-void brenda_rectangle_fill(Brenda_Rectangle r, Brenda_RGB color) {
-    Effect effect = {.bg = color, .flags = EFFECT_BG};
+void brenda_rectangle_fill(Brenda_Rectangle r, Brenda_Color color) {
+    Effect effect = {.bg = color};
     Brenda_Rectangle clip = brenda_clip_peek();
     Brenda_Rectangle rectangle = rectangle_intersect(r, clip);
     Cell *cells = state.back_buffer.items;

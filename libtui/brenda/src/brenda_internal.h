@@ -23,8 +23,6 @@ enum {
     EFFECT_UNDERLINE     = BRENDA_TEXT_EFFECT_UNDERLINE,
     EFFECT_INVERSE       = BRENDA_TEXT_EFFECT_INVERSE,
     EFFECT_STRIKETHROUGH = BRENDA_TEXT_EFFECT_STRIKETHROUGH,
-    EFFECT_FG            = 1 << 6,
-    EFFECT_BG            = 1 << 7,
 };
 
 typedef u32 Unicode;
@@ -36,8 +34,8 @@ typedef struct {
 } TerminalTextUnit;
 
 typedef struct {
-    Brenda_RGB fg;
-    Brenda_RGB bg;
+    Brenda_Color fg;
+    Brenda_Color bg;
     u8 flags;
 } Effect;
 

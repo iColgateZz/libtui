@@ -45,7 +45,7 @@ i32 main(void) {
             Tui_Text(
                 .text = LAYLA_TEXT_SLICE("TUI high-level example"), 
                 .style = {
-                    .color = LAYLA_RGB(140, 190, 255),
+                    .color = LAYLA_COLOR(140, 190, 255),
                 }
             );
 
@@ -67,7 +67,7 @@ i32 main(void) {
                     .size = {.w = LAYLA_FILL(), .h = LAYLA_FIXED(5)},
                     .background = LAYLA_COLOR(35, 42, 55),
                     .padding = {.left = 1, .right = 1},
-                    .border = {.width = 1, .color = LAYLA_RGB(90, 105, 130)},
+                    .border = {.width = 1, .color = LAYLA_COLOR(90, 105, 130)},
                     .direction = LAYLA_DIR_COL,
                     .scroll = LAYLA_SCROLL_Y,
                 },

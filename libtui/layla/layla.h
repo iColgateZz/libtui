@@ -101,19 +101,11 @@ typedef struct {
 
 typedef struct {
     u8 r, g, b;
-} Layla_RGB;
-
-#define LAYLA_RGB(r, g, b) ((Layla_RGB) {(r), (g), (b)})
-
-typedef struct {
-    Layla_RGB color;
-    b32 is_set;
+    u8 is_set;
 } Layla_Color;
 
-#define LAYLA_COLOR(r, g, b) ((Layla_Color) { \
-    .color = LAYLA_RGB((r), (g), (b)),                  \
-    .is_set = true,                                     \
-})
+#define LAYLA_COLOR(red, green, blue) \
+    ((Layla_Color) {.r = (red), .g = (green), .b = (blue), .is_set = true})
 
 typedef struct {
     i32 x, y, w, h;
@@ -128,7 +120,7 @@ typedef struct {
 
 typedef struct {
     u8 width;
-    Layla_RGB color;
+    Layla_Color color;
     void *userdata;
 } Layla_BorderStyle;
 
@@ -259,7 +251,7 @@ typedef LAYLA_PACKED_ENUM {
 } Layla_TextWrapPolicy;
 
 typedef struct {
-    Layla_RGB color;
+    Layla_Color color;
     Layla_Alignment alignment;
     Layla_TextWrapPolicy wrap_policy;
 } Layla_TextStyle;
@@ -302,12 +294,12 @@ typedef struct {
     union {
         struct Layla_CommandRectangle {
             i32 x, y, w, h;
-            Layla_RGB color;
+            Layla_Color color;
         } rectangle;
         struct Layla_CommandText {
             i32 x, y;
             Layla_TextSlice slice;
-            Layla_RGB color;
+            Layla_Color color;
             void *userdata;
         } text;
         struct Layla_CommandClipStart {
@@ -315,7 +307,7 @@ typedef struct {
         } clip_start;
         struct Layla_CommandBorder {
             i32 x, y, w, h;
-            Layla_RGB color;
+            Layla_Color color;
             void *userdata;
         } border;
         struct Layla_CommandCustom {

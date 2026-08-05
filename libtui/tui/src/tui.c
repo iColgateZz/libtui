@@ -2,6 +2,9 @@
 
 static inline u64 element_id_hash(Layla_ElementID id) { return id; }
 static inline b32 element_id_equal(Layla_ElementID a, Layla_ElementID b) { return a == b; }
+static inline Brenda_Color color_from_layla(Layla_Color color) {
+    return (Brenda_Color) {.r = color.r, .g = color.g, .b = color.b, .is_set = color.is_set};
+}
 static inline i32 text_measure(Layla_TextSlice text, void *userdata) {
     UNUSED(userdata);
     return brenda_text_measure_width(text.items, text.count);
@@ -362,14 +365,14 @@ static inline void commands_draw(Layla_CommandSlice commands) {
                 Layla_CommandRectangle rectangle = command.as.rectangle;
                 brenda_rectangle_fill(
                     (Brenda_Rectangle) {.x = rectangle.x, .y = rectangle.y, .w = rectangle.w, .h = rectangle.h},
-                    (Brenda_RGB) {.r = rectangle.color.r, .g = rectangle.color.g, .b = rectangle.color.b}
+                    color_from_layla(rectangle.color)
                 );
                 break;
             }
             case LAYLA_CMD_TEXT: {
                 Layla_CommandText text = command.as.text;
                 Brenda_TextEffect effect = {
-                    .color = {.r = text.color.r, .g = text.color.g, .b = text.color.b},
+                    .color = color_from_layla(text.color),
                 };
                 brenda_text_draw(text.x, text.y, text.slice.items, text.slice.count, effect);
 
@@ -383,7 +386,7 @@ static inline void commands_draw(Layla_CommandSlice commands) {
                 Layla_CommandBorder border = command.as.border;
                 Brenda_Rectangle rectangle = {.x = border.x, .y = border.y, .w = border.w, .h = border.h};
                 Brenda_TextEffect effect = {
-                    .color = {.r = border.color.r, .g = border.color.g, .b = border.color.b},
+                    .color = color_from_layla(border.color),
                 };
                 brenda_box_draw(rectangle, effect);
                 break;
@@ -401,7 +404,7 @@ static inline void commands_draw(Layla_CommandSlice commands) {
 
 static inline void text_input_cursor_draw(Layla_CommandText text, Layla_TextSlice input, isize cursor_byte) {
     Brenda_TextEffect effect = {
-        .color = {.r = text.color.r, .g = text.color.g, .b = text.color.b},
+        .color = color_from_layla(text.color),
         .flags = BRENDA_TEXT_EFFECT_UNDERLINE,
     };
 

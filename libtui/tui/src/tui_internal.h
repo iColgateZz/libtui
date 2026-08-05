@@ -31,6 +31,7 @@ typedef struct {
 
 static inline u64 element_id_hash(Layla_ElementID id);
 static inline b32 element_id_equal(Layla_ElementID a, Layla_ElementID b);
+static inline Brenda_Color color_from_layla(Layla_Color color);
 static inline i32 text_measure(Layla_TextSlice text, void *userdata);
 static inline InteractionRecord *interaction_record_get(Layla_ElementID id);
 static inline Layla_ElementID interaction_target_get(u8 required_flags);

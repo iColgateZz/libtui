@@ -26,13 +26,13 @@ static b32 button(Layla_ElementID id, Layla_TextSlice label) {
             ? LAYLA_COLOR(120, 150, 255)
             : LAYLA_COLOR(70, 90, 180),
         .padding = {.left = 1, .right = 1},
-        .border = {.width = 1, .color = LAYLA_RGB(255, 255, 255)},
+        .border = {.width = 1, .color = LAYLA_COLOR(255, 255, 255)},
         .align_self = LAYLA_ALIGN_CENTER,
         .size = {.w = LAYLA_FIT(), .h = LAYLA_FIT()},
     }) {
         hovered = layla_state_is_element_hovered();
         Layla_Text(.text = label, .style = {
-            .color = LAYLA_RGB(255, 255, 255),
+            .color = LAYLA_COLOR(255, 255, 255),
             .alignment = LAYLA_ALIGN_CENTER,
         });
     }
@@ -111,7 +111,7 @@ i32 main(void) {
                 }) {
                     Layla_Text(.text = LAYLA_TEXT_SLICE("LibTUI text wraps inside containers. LibTUI text wraps inside containers."),
                         .style = {
-                            .color = {255, 255, 255},
+                            .color = LAYLA_COLOR(255, 255, 255),
                             .alignment = LAYLA_ALIGN_CENTER,
                         },
                     );
@@ -128,7 +128,7 @@ i32 main(void) {
                         .style = {
                             .background = LAYLA_COLOR(30, 30, 30),
                             .padding = {.left = 1, .right = 1},
-                            .border = {.width = 1, .color = LAYLA_RGB(255, 255, 255)},
+                            .border = {.width = 1, .color = LAYLA_COLOR(255, 255, 255)},
                             .size = {.w = LAYLA_FIT(), .h = LAYLA_FIT()},
                         },
                         .floating = {
@@ -145,7 +145,7 @@ i32 main(void) {
                     ) {
                         Layla_Text(
                             .text = LAYLA_TEXT_SLICE("Right-click tooltip"),
-                            .style.color = LAYLA_RGB(255, 255, 255),
+                            .style.color = LAYLA_COLOR(255, 255, 255),
                         );
                     }
                 }
@@ -164,13 +164,13 @@ i32 main(void) {
                 switch (cmd.type) {
                     case LAYLA_CMD_RECTANGLE: {
                         Layla_CommandRectangle rectangle = cmd.as.rectangle;
-                        brenda_rectangle_fill(*(Brenda_Rectangle *)&rectangle, *(Brenda_RGB *)&rectangle.color);
+                        brenda_rectangle_fill(*(Brenda_Rectangle *)&rectangle, *(Brenda_Color *)&rectangle.color);
                         break;
                     }
 
                     case LAYLA_CMD_TEXT: {
                         Layla_CommandText text = cmd.as.text;
-                        Brenda_TextEffect effect = { .color = *(Brenda_RGB *)&text.color, };
+                        Brenda_TextEffect effect = { .color = *(Brenda_Color *)&text.color, };
                         brenda_text_draw(text.x, text.y, text.slice.items, text.slice.count, effect);
                         break;
                     }
@@ -178,7 +178,7 @@ i32 main(void) {
                     case LAYLA_CMD_BORDER: {
                         Layla_CommandBorder border = cmd.as.border;
                         Brenda_Rectangle rectangle = *(Brenda_Rectangle *)&border;
-                        Brenda_TextEffect effect = { .color = *(Brenda_RGB *)&border.color, };
+                        Brenda_TextEffect effect = { .color = *(Brenda_Color *)&border.color, };
                         brenda_box_draw(rectangle, effect);
                         break;
                     }

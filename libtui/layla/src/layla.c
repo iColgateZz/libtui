@@ -680,7 +680,7 @@ static inline void container_commands(Node *node, Layla_Rectangle active_clip) {
     if (node_is_visible && style.background.is_set) {
         layla_list_append(&state.commands,
             ((Layla_Command) {.type = LAYLA_CMD_RECTANGLE, .id = node->id, .as.rectangle = {
-                .x = node->x, .y = node->y, .w = node->w, .h = node->h, .color = style.background.color,
+                .x = node->x, .y = node->y, .w = node->w, .h = node->h, .color = style.background,
             }})
         );
     }
