@@ -778,6 +778,7 @@ static inline TextMeasurement text_process(Node *node, i32 wrap_width, b32 emit_
 
     switch (style.wrap_policy) {
         case LAYLA_TEXT_WRAP_WORD: break;
+        case LAYLA_TEXT_WRAP_CHARACTER: break;
         default: UNREACHABLE("Unknown text wrapping policy");
     }
 
@@ -786,7 +787,7 @@ static inline TextMeasurement text_process(Node *node, i32 wrap_width, b32 emit_
     isize line_start_byte = 0;
     isize line_end_byte = 0;
     i32 line_width = 0;
-    b32 line_has_word = false;
+    b32 line_has_unit = false;
 
     while (cursor_byte < source.count) {
         if (source.items[cursor_byte] == '\n') {
@@ -813,50 +814,55 @@ static inline TextMeasurement text_process(Node *node, i32 wrap_width, b32 emit_
             line_start_byte = cursor_byte;
             line_end_byte = cursor_byte;
             line_width = 0;
-            line_has_word = false;
+            line_has_unit = false;
             continue;
         }
 
-        if (source.items[cursor_byte] == ' ') {
+        if (style.wrap_policy == LAYLA_TEXT_WRAP_WORD && source.items[cursor_byte] == ' ') {
             while (cursor_byte < source.count && source.items[cursor_byte] == ' ') cursor_byte++;
             continue;
         }
 
-        isize word_start_byte = cursor_byte;
-        while (cursor_byte < source.count &&
-               source.items[cursor_byte] != ' ' &&
-               source.items[cursor_byte] != '\n') {
+        isize unit_start_byte = cursor_byte;
+        if (style.wrap_policy == LAYLA_TEXT_WRAP_WORD) {
+            while (cursor_byte < source.count &&
+                   source.items[cursor_byte] != ' ' &&
+                   source.items[cursor_byte] != '\n') {
+                cursor_byte++;
+            }
+        } else {
             cursor_byte++;
+            while (cursor_byte < source.count && ((u8)source.items[cursor_byte] & 0xc0) == 0x80) cursor_byte++;
         }
 
-        Layla_TextSlice word = {
-            .items = source.items + word_start_byte,
-            .count = cursor_byte - word_start_byte,
+        Layla_TextSlice unit = {
+            .items = source.items + unit_start_byte,
+            .count = cursor_byte - unit_start_byte,
         };
-        i32 word_width = text_slice_measure(node->id, word);
-        measurement.minimum_width = MAX(measurement.minimum_width, word_width);
+        i32 unit_width = text_slice_measure(node->id, unit);
+        measurement.minimum_width = MAX(measurement.minimum_width, unit_width);
 
-        Layla_TextSlice line_with_word = {
+        Layla_TextSlice line_with_unit = {
             .items = source.items + line_start_byte,
             .count = cursor_byte - line_start_byte,
         };
-        i32 width_with_word = text_slice_measure(node->id, line_with_word);
-        b32 word_overflows_line = wrap_width > 0 && line_has_word && width_with_word > wrap_width;
-        if (word_overflows_line) {
+        i32 width_with_unit = text_slice_measure(node->id, line_with_unit);
+        b32 unit_overflows_line = wrap_width > 0 && line_has_unit && width_with_unit > wrap_width;
+        if (unit_overflows_line) {
             if (emit_commands) {
                 i32 line_x = node->x + align_offset(style.alignment, node->w, ((PaddingSides) {0}), line_width);
                 append_text_command(node, line_start_byte, line_end_byte, line_x, node->y + measurement.line_count, line_width, active_clip);
             }
 
             measurement.line_count++;
-            line_start_byte = word_start_byte;
-            line_width = word_width;
+            line_start_byte = unit_start_byte;
+            line_width = unit_width;
         } else {
-            line_width = width_with_word;
+            line_width = width_with_unit;
         }
 
         line_end_byte = cursor_byte;
-        line_has_word = true;
+        line_has_unit = true;
     }
 
     Layla_TextSlice explicit_line = {

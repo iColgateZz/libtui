@@ -248,6 +248,7 @@ typedef i32 (*Layla_TextMeasureFunction)(Layla_TextSlice text, void *userdata);
 
 typedef LAYLA_PACKED_ENUM {
     LAYLA_TEXT_WRAP_WORD,
+    LAYLA_TEXT_WRAP_CHARACTER,
 } Layla_TextWrapPolicy;
 
 typedef struct {
