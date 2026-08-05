@@ -6,6 +6,10 @@
 #define PSH_CORE_NO_PREFIX
 #include "psh_core.h"
 
+enum {
+    ELEMENT_TEXT_INPUT = 1 << 5,
+};
+
 typedef struct {
     Tui_ElementConfig config;
     u32 generation;
@@ -22,9 +26,6 @@ typedef struct {
     Layla_ElementID pressed_id;
     Layla_ElementID clicked_id;
     Layla_ElementID focused_id;
-    Layla_ElementID text_input_cursor_id;
-    Layla_TextSlice text_input_cursor_text;
-    isize text_input_cursor_byte;
     u32 generation;
     isize registered_count;
 } State;
@@ -40,7 +41,7 @@ static inline void interactions_end(void);
 static inline void focus_move(i32 direction);
 static inline b32 event_is_activation(Brenda_Event event);
 static inline void commands_draw(Layla_CommandSlice commands);
-static inline void text_input_cursor_draw(Layla_CommandText text, Layla_TextSlice input, isize cursor_byte);
+static inline void text_input_cursor_draw(Layla_CommandText text, Tui_TextInputState *input);
 static inline void text_input_events_handle(Tui_TextInputState *input, Tui_TextInputResult *result);
 static inline isize utf8_previous_byte(Tui_TextInputState *input);
 static inline isize utf8_next_byte(Tui_TextInputState *input);

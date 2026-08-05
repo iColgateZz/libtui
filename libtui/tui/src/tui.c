@@ -145,7 +145,7 @@ Tui_TextInputResult tui_text_input_draw(Tui_TextInputConfig config) {
     else layla_container_element_open_with_id(config.id);
 
     Layla_ElementID id = layla_state_get_open_element_id();
-    u8 flags = TUI_ELEMENT_HOVERABLE | TUI_ELEMENT_CLICKABLE | TUI_ELEMENT_FOCUSABLE;
+    u8 flags = TUI_ELEMENT_HOVERABLE | TUI_ELEMENT_CLICKABLE | TUI_ELEMENT_FOCUSABLE | ELEMENT_TEXT_INPUT;
     if (config.disabled) flags |= TUI_ELEMENT_DISABLED;
     tui_element_register(id, (Tui_ElementConfig) {.flags = flags});
 
@@ -153,12 +153,6 @@ Tui_TextInputResult tui_text_input_draw(Tui_TextInputConfig config) {
     if (focused) {
         config.style.background = config.focused_background;
         text_input_events_handle(config.state, &result);
-        state.text_input_cursor_id = id;
-        state.text_input_cursor_text = (Layla_TextSlice) {
-            .items = config.state->items,
-            .count = config.state->count,
-        };
-        state.text_input_cursor_byte = config.state->cursor;
     }
 
     layla_container_element_configure((Layla_ContainerConfig) {.style = config.style});
@@ -169,7 +163,7 @@ Tui_TextInputResult tui_text_input_draw(Tui_TextInputConfig config) {
         text = config.placeholder;
         style = config.placeholder_style;
     }
-    Tui_Text(.text = text, .style = style);
+    Tui_Text(.text = text, .style = style, .userdata = focused ? config.state : NULL);
 
     layla_element_close();
     return result;
@@ -214,7 +208,6 @@ static inline Layla_ElementID interaction_target_get(u8 required_flags) {
 
 static inline void interactions_begin(Brenda_EventSlice events) {
     state.clicked_id = LAYLA_ELEMENT_ID_NONE;
-    state.text_input_cursor_id = LAYLA_ELEMENT_ID_NONE;
 
     Layla_CursorState cursor = layla_state_get_cursor_state();
     b32 cursor_is_down = cursor.interaction_state == LAYLA_CURSOR_PRESSED_THIS_FRAME
@@ -377,8 +370,9 @@ static inline void commands_draw(Layla_CommandSlice commands) {
                 brenda_text_draw(text.x, text.y, text.slice.items, text.slice.count, effect);
 
                 Layla_ElementData text_data = layla_state_get_element_data(command.id);
-                if (text_data.parent_id == state.text_input_cursor_id) {
-                    text_input_cursor_draw(text, state.text_input_cursor_text, state.text_input_cursor_byte);
+                InteractionRecord *parent = interaction_record_get(text_data.parent_id);
+                if (text.userdata != NULL && parent != NULL && (parent->config.flags & ELEMENT_TEXT_INPUT)) {
+                    text_input_cursor_draw(text, text.userdata);
                 }
                 break;
             }
@@ -402,32 +396,32 @@ static inline void commands_draw(Layla_CommandSlice commands) {
     }
 }
 
-static inline void text_input_cursor_draw(Layla_CommandText text, Layla_TextSlice input, isize cursor_byte) {
+static inline void text_input_cursor_draw(Layla_CommandText text, Tui_TextInputState *input) {
     Brenda_TextEffect effect = {
         .color = color_from_layla(text.color),
         .flags = BRENDA_TEXT_EFFECT_UNDERLINE,
     };
 
-    if (input.count == 0) {
+    if (input->count == 0) {
         brenda_text_draw(text.x, text.y, (byte *)" ", 1, effect);
         return;
     }
 
-    byte *cursor = input.items + cursor_byte;
+    byte *cursor = input->items + input->cursor;
     byte *line_start = text.slice.items;
     byte *line_end = line_start + text.slice.count;
     if (cursor < line_start || cursor > line_end) return;
-    if (cursor == line_end && cursor_byte < input.count) return;
+    if (cursor == line_end && input->cursor < input->count) return;
 
     i32 cursor_x = text.x + brenda_text_measure_width(line_start, cursor - line_start);
-    if (cursor_byte == input.count) {
+    if (input->cursor == input->count) {
         brenda_text_draw(cursor_x, text.y, " ", 1, effect);
         return;
     }
 
-    isize next = cursor_byte + 1;
-    while (next < input.count && ((u8)input.items[next] & 0xc0) == 0x80) next++;
-    brenda_text_draw(cursor_x, text.y, cursor, next - cursor_byte, effect);
+    isize next = input->cursor + 1;
+    while (next < input->count && ((u8)input->items[next] & 0xc0) == 0x80) next++;
+    brenda_text_draw(cursor_x, text.y, cursor, next - input->cursor, effect);
 }
 
 static inline void text_input_events_handle(Tui_TextInputState *input, Tui_TextInputResult *result) {
