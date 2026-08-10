@@ -148,13 +148,7 @@ void brenda_frame_begin(void) {
     for (isize i = 0; i < state.back_buffer.count; ++i)
         state.back_buffer.items[i] = cell_empty();
 
-    if (state.frame_interval_ns <= 0) {
-        events_handle_available(-1);
-        return;
-    }
-
-    i64 deadline = time_get_ns() + state.frame_interval_ns;
-    events_poll_until(deadline);
+    events_poll(state.frame_interval_ns);
 }
 
 static i64 time_get_ns(void) {
@@ -273,12 +267,27 @@ static void cursor_move_emit(List(byte) *a, u32 row, u32 col) {
     list_append_many(a, result.s, result.len);
 }
 
-static void events_poll_until(i64 deadline_ns) {
-    for (;;) {
-        i64 remaining_ns = deadline_ns - time_get_ns();
-        if (remaining_ns <= 0) break;
-        i32 timeout_ms = (remaining_ns + 999999) / 1000000;
-        events_handle_available(timeout_ms);
+static void events_poll(i64 interval_ns) {
+    if (interval_ns <= 0) {
+        events_handle_available(-1);
+        if (state.input_bytes.count == 1 && state.input_bytes.items[0] == BRENDA_TERM_KEY_ESCAPE)
+            events_handle_available(5);
+    } else {
+        i64 deadline_ns = time_get_ns() + interval_ns;
+        for (;;) {
+            i64 remaining_ns = deadline_ns - time_get_ns();
+            if (remaining_ns <= 0) break;
+            i32 timeout_ms = (remaining_ns + 999999) / 1000000;
+            events_handle_available(timeout_ms);
+        }
+    }
+
+    if (state.input_bytes.count == 1 && state.input_bytes.items[0] == BRENDA_TERM_KEY_ESCAPE) {
+        list_append(&state.events, ((Brenda_Event) {
+            .type = BRENDA_EVENT_TERM_KEY,
+            .as.term_key = BRENDA_TERM_KEY_ESCAPE,
+        }));
+        list_clear(&state.input_bytes);
     }
 }
 
