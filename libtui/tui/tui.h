@@ -15,9 +15,53 @@ enum {
 // Returning true indicates that command was handled.
 typedef b32 (*Tui_CommandHandler)(Layla_Command command, void *userdata);
 
+typedef enum {
+    TUI_BINDING_USE_DEFAULT,
+    TUI_BINDING_DISABLED,
+    TUI_BINDING_TERM_KEY,
+    TUI_BINDING_CHARACTER,
+} Tui_BindingType;
+
+typedef struct {
+    Tui_BindingType type;
+    u8 modifiers;
+    union {
+        Brenda_TermKey term_key;
+        byte character;
+    } as;
+} Tui_Binding;
+
+#define TUI_BINDING_KEY(key_value, modifier_flags) \
+    ((Tui_Binding) {.type = TUI_BINDING_TERM_KEY, .modifiers = (modifier_flags), .as.term_key = (key_value)})
+#define TUI_BINDING_CHAR(character_value, modifier_flags) \
+    ((Tui_Binding) {.type = TUI_BINDING_CHARACTER, .modifiers = (modifier_flags), .as.character = (character_value)})
+#define TUI_BINDING_NONE ((Tui_Binding) {.type = TUI_BINDING_DISABLED})
+
+typedef struct {
+    Tui_Binding delete_left;
+    Tui_Binding delete_right;
+    Tui_Binding cursor_left;
+    Tui_Binding cursor_right;
+    Tui_Binding cursor_up;
+    Tui_Binding cursor_down;
+    Tui_Binding cursor_home;
+    Tui_Binding cursor_end;
+    Tui_Binding submit;
+} Tui_TextInputBindings;
+
+typedef struct {
+    Tui_Binding focus_next;
+    Tui_Binding focus_previous;
+    Tui_Binding focus_clear;
+    Tui_Binding activate;
+    Tui_Binding activate_alternate;
+    Tui_TextInputBindings text_input;
+} Tui_Bindings;
+
 typedef struct {
     Brenda_TerminalConfig terminal;
     i32 fps;
+    Tui_Bindings bindings;
     Tui_CommandHandler command_handler;
     void *command_handler_userdata;
 } Tui_Config;

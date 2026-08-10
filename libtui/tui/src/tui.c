@@ -17,8 +17,47 @@ static State state = {
     },
 };
 
+static inline Tui_Binding binding_resolve(Tui_Binding binding, Tui_Binding default_binding) {
+    return binding.type == TUI_BINDING_USE_DEFAULT ? default_binding : binding;
+}
+
+static inline b32 binding_matches_event(Tui_Binding binding, Brenda_Event event) {
+    if (binding.modifiers != event.modifiers) return false;
+
+    switch (binding.type) {
+        case TUI_BINDING_TERM_KEY:
+            return event.type == BRENDA_EVENT_TERM_KEY && event.as.term_key == binding.as.term_key;
+        case TUI_BINDING_CHARACTER:
+            return event.type == BRENDA_EVENT_UTF8
+                && event.as.utf8.length == 1
+                && event.as.utf8.bytes[0] == binding.as.character;
+        case TUI_BINDING_USE_DEFAULT:
+        case TUI_BINDING_DISABLED: return false;
+    }
+
+    return false;
+}
+
 void tui_init(Tui_Config config) {
     state.config = config;
+    Tui_Bindings *bindings = &state.config.bindings;
+    bindings->focus_next = binding_resolve(bindings->focus_next, TUI_BINDING_KEY(BRENDA_TERM_KEY_TAB, 0));
+    bindings->focus_previous = binding_resolve(bindings->focus_previous, TUI_BINDING_KEY(BRENDA_TERM_KEY_TAB, BRENDA_MODIFIER_SHIFT));
+    bindings->focus_clear = binding_resolve(bindings->focus_clear, TUI_BINDING_KEY(BRENDA_TERM_KEY_ESCAPE, 0));
+    bindings->activate = binding_resolve(bindings->activate, TUI_BINDING_KEY(BRENDA_TERM_KEY_ENTER, 0));
+    bindings->activate_alternate = binding_resolve(bindings->activate_alternate, TUI_BINDING_CHAR(' ', 0));
+
+    Tui_TextInputBindings *text_input = &bindings->text_input;
+    text_input->delete_left = binding_resolve(text_input->delete_left, TUI_BINDING_KEY(BRENDA_TERM_KEY_BACKSPACE, 0));
+    text_input->delete_right = binding_resolve(text_input->delete_right, TUI_BINDING_KEY(BRENDA_TERM_KEY_DELETE, 0));
+    text_input->cursor_left = binding_resolve(text_input->cursor_left, TUI_BINDING_KEY(BRENDA_TERM_KEY_LEFT, 0));
+    text_input->cursor_right = binding_resolve(text_input->cursor_right, TUI_BINDING_KEY(BRENDA_TERM_KEY_RIGHT, 0));
+    text_input->cursor_up = binding_resolve(text_input->cursor_up, TUI_BINDING_KEY(BRENDA_TERM_KEY_UP, 0));
+    text_input->cursor_down = binding_resolve(text_input->cursor_down, TUI_BINDING_KEY(BRENDA_TERM_KEY_DOWN, 0));
+    text_input->cursor_home = binding_resolve(text_input->cursor_home, TUI_BINDING_KEY(BRENDA_TERM_KEY_HOME, 0));
+    text_input->cursor_end = binding_resolve(text_input->cursor_end, TUI_BINDING_KEY(BRENDA_TERM_KEY_END, 0));
+    text_input->submit = binding_resolve(text_input->submit, TUI_BINDING_KEY(BRENDA_TERM_KEY_ENTER, 0));
+
     brenda_terminal_init(config.terminal);
     brenda_terminal_set_fps(config.fps == 0 ? 60 : config.fps);
     layla_state_set_text_measure_function(text_measure, NULL);
@@ -79,6 +118,11 @@ b32 tui_element_is_focused(Layla_ElementID id) {
 }
 
 void tui_element_focus(Layla_ElementID id) {
+    if (id == LAYLA_ELEMENT_ID_NONE) {
+        state.focused_id = LAYLA_ELEMENT_ID_NONE;
+        return;
+    }
+
     InteractionRecord *record = interaction_record_get(id);
     if (record != NULL && (record->config.flags & TUI_ELEMENT_FOCUSABLE)
         && !(record->config.flags & TUI_ELEMENT_DISABLED)) {
@@ -152,7 +196,11 @@ Tui_TextInputResult tui_text_input_draw(Tui_TextInputConfig config) {
     b32 focused = tui_element_is_focused(id);
     if (focused) {
         config.style.background = config.focused_background;
-        text_input_events_handle(config.state, &result);
+        Layla_ElementData data = layla_state_get_element_data(id);
+        i32 horizontal_inset = config.style.padding.left + config.style.padding.right
+            + config.style.border.width * 2;
+        i32 wrap_width = data.found ? MAX(data.rectangle.w - horizontal_inset, 1) : 1;
+        text_input_events_handle(config.state, &result, wrap_width, config.text_style.wrap_policy);
     }
 
     layla_container_element_configure((Layla_ContainerConfig) {.style = config.style});
@@ -271,10 +319,16 @@ static inline void interactions_begin(Brenda_EventSlice events) {
                 break;
             }
             default:
-                if (event.type == BRENDA_EVENT_TERM_KEY && event.as.term_key == BRENDA_TERM_KEY_TAB
-                    && !(event.modifiers & (BRENDA_MODIFIER_CTRL | BRENDA_MODIFIER_ALT))) {
-                    focus_move(event.modifiers & BRENDA_MODIFIER_SHIFT ? -1 : 1);
-                } else if (event_is_activation(event) && state.focused_id != LAYLA_ELEMENT_ID_NONE) {
+                if (binding_matches_event(state.config.bindings.focus_clear, event)) {
+                    state.focused_id = LAYLA_ELEMENT_ID_NONE;
+                } else if (binding_matches_event(state.config.bindings.focus_next, event)) {
+                    focus_move(1);
+                } else if (binding_matches_event(state.config.bindings.focus_previous, event)) {
+                    focus_move(-1);
+                } else if ((binding_matches_event(state.config.bindings.activate, event)
+                            || binding_matches_event(state.config.bindings.activate_alternate, event))
+                           && state.focused_id != LAYLA_ELEMENT_ID_NONE)
+                {
                     InteractionRecord *record = interaction_record_get(state.focused_id);
                     if (record != NULL && (record->config.flags & TUI_ELEMENT_CLICKABLE))
                         state.clicked_id = state.focused_id;
@@ -337,12 +391,6 @@ static inline void focus_move(i32 direction) {
     }
 
     state.focused_id = LAYLA_ELEMENT_ID_NONE;
-}
-
-static inline b32 event_is_activation(Brenda_Event event) {
-    if (event.modifiers & (BRENDA_MODIFIER_CTRL | BRENDA_MODIFIER_ALT)) return false;
-    if (event.type == BRENDA_EVENT_TERM_KEY) return event.as.term_key == BRENDA_TERM_KEY_ENTER;
-    return event.type == BRENDA_EVENT_UTF8 && event.as.utf8.length == 1 && event.as.utf8.bytes[0] == ' ';
 }
 
 static inline void commands_draw(Layla_CommandSlice commands) {
@@ -424,12 +472,52 @@ static inline void text_input_cursor_draw(Layla_CommandText text, Tui_TextInputS
     brenda_text_draw(cursor_x, text.y, cursor, next - input->cursor, effect);
 }
 
-static inline void text_input_events_handle(Tui_TextInputState *input, Tui_TextInputResult *result) {
+static inline void text_input_events_handle(
+    Tui_TextInputState *input,
+    Tui_TextInputResult *result,
+    i32 wrap_width,
+    Layla_TextWrapPolicy wrap_policy
+) {
+    Tui_TextInputBindings bindings = state.config.bindings.text_input;
+
     for (isize i = 0; i < state.events.count; ++i) {
         Brenda_Event event = state.events.items[i];
 
-        if (event.type == BRENDA_EVENT_UTF8
-            && !(event.modifiers & (BRENDA_MODIFIER_CTRL | BRENDA_MODIFIER_ALT))) {
+        if (binding_matches_event(state.config.bindings.focus_next, event)
+            || binding_matches_event(state.config.bindings.focus_previous, event)
+            || binding_matches_event(state.config.bindings.focus_clear, event)) {
+            continue;
+        }
+
+        if (binding_matches_event(bindings.delete_left, event)) {
+            if (input->cursor == 0) continue;
+            isize previous = utf8_previous_byte(input);
+            memmove(input->items + previous, input->items + input->cursor, input->count - input->cursor);
+            input->count -= input->cursor - previous;
+            input->cursor = previous;
+            result->changed = true;
+        } else if (binding_matches_event(bindings.delete_right, event)) {
+            if (input->cursor == input->count) continue;
+            isize next = utf8_next_byte(input);
+            memmove(input->items + input->cursor, input->items + next, input->count - next);
+            input->count -= next - input->cursor;
+            result->changed = true;
+        } else if (binding_matches_event(bindings.cursor_left, event)) {
+            input->cursor = utf8_previous_byte(input);
+        } else if (binding_matches_event(bindings.cursor_right, event)) {
+            input->cursor = utf8_next_byte(input);
+        } else if (binding_matches_event(bindings.cursor_up, event)) {
+            text_input_cursor_move_vertical(input, wrap_width, wrap_policy, -1);
+        } else if (binding_matches_event(bindings.cursor_down, event)) {
+            text_input_cursor_move_vertical(input, wrap_width, wrap_policy, 1);
+        } else if (binding_matches_event(bindings.cursor_home, event)) {
+            input->cursor = 0;
+        } else if (binding_matches_event(bindings.cursor_end, event)) {
+            input->cursor = input->count;
+        } else if (binding_matches_event(bindings.submit, event)) {
+            result->submitted = true;
+        } else if (event.type == BRENDA_EVENT_UTF8
+                   && !(event.modifiers & (BRENDA_MODIFIER_CTRL | BRENDA_MODIFIER_ALT))) {
             if (input->count + event.as.utf8.length > input->capacity) continue;
             memmove(
                 input->items + input->cursor + event.as.utf8.length,
@@ -440,36 +528,106 @@ static inline void text_input_events_handle(Tui_TextInputState *input, Tui_TextI
             input->count += event.as.utf8.length;
             input->cursor += event.as.utf8.length;
             result->changed = true;
-            continue;
-        }
-
-        if (event.type != BRENDA_EVENT_TERM_KEY) continue;
-        switch (event.as.term_key) {
-            case BRENDA_TERM_KEY_BACKSPACE: {
-                if (input->cursor == 0) break;
-                isize previous = utf8_previous_byte(input);
-                memmove(input->items + previous, input->items + input->cursor, input->count - input->cursor);
-                input->count -= input->cursor - previous;
-                input->cursor = previous;
-                result->changed = true;
-                break;
-            }
-            case BRENDA_TERM_KEY_DELETE: {
-                if (input->cursor == input->count) break;
-                isize next = utf8_next_byte(input);
-                memmove(input->items + input->cursor, input->items + next, input->count - next);
-                input->count -= next - input->cursor;
-                result->changed = true;
-                break;
-            }
-            case BRENDA_TERM_KEY_LEFT: input->cursor = utf8_previous_byte(input); break;
-            case BRENDA_TERM_KEY_RIGHT: input->cursor = utf8_next_byte(input); break;
-            case BRENDA_TERM_KEY_HOME: input->cursor = 0; break;
-            case BRENDA_TERM_KEY_END: input->cursor = input->count; break;
-            case BRENDA_TERM_KEY_ENTER: result->submitted = true; break;
-            default: break;
         }
     }
+}
+
+static inline void text_input_cursor_move_vertical(
+    Tui_TextInputState *input,
+    i32 wrap_width,
+    Layla_TextWrapPolicy wrap_policy,
+    i32 direction
+) {
+    isize previous_line_start = -1;
+    isize current_line_start = 0;
+    isize current_line_end = 0;
+
+    while (current_line_start <= input->count) {
+        current_line_end = text_input_line_end(input, current_line_start, wrap_width, wrap_policy);
+        b32 cursor_is_on_line = input->cursor < current_line_end
+            || (input->cursor == current_line_end
+                && (current_line_end == input->count || input->items[current_line_end] == '\n'));
+        if (cursor_is_on_line) break;
+
+        previous_line_start = current_line_start;
+        current_line_start = current_line_end;
+        if (current_line_start < input->count && input->items[current_line_start] == '\n') current_line_start++;
+    }
+
+    isize target_line_start;
+    if (direction < 0) {
+        if (previous_line_start < 0) return;
+        target_line_start = previous_line_start;
+    } else {
+        if (current_line_end == input->count) return;
+        target_line_start = current_line_end;
+        if (input->items[target_line_start] == '\n') target_line_start++;
+    }
+
+    isize target_line_end = text_input_line_end(input, target_line_start, wrap_width, wrap_policy);
+    i32 target_column = brenda_text_measure_width(
+        input->items + current_line_start,
+        input->cursor - current_line_start
+    );
+
+    isize target_cursor = target_line_start;
+    while (target_cursor < target_line_end) {
+        isize next_cursor = target_cursor + 1;
+        while (next_cursor < target_line_end && ((u8)input->items[next_cursor] & 0xc0) == 0x80) next_cursor++;
+        i32 next_column = brenda_text_measure_width(
+            input->items + target_line_start,
+            next_cursor - target_line_start
+        );
+        if (next_column > target_column) break;
+        target_cursor = next_cursor;
+    }
+
+    input->cursor = target_cursor;
+}
+
+static inline isize text_input_line_end(
+    Tui_TextInputState *input,
+    isize line_start,
+    i32 wrap_width,
+    Layla_TextWrapPolicy wrap_policy
+) {
+    if (wrap_policy == LAYLA_TEXT_WRAP_WORD) {
+        isize cursor = line_start;
+        isize line_end = line_start;
+        b32 line_has_word = false;
+
+        while (cursor < input->count && input->items[cursor] != '\n') {
+            if (input->items[cursor] == ' ') {
+                while (cursor < input->count && input->items[cursor] == ' ') cursor++;
+                continue;
+            }
+
+            while (cursor < input->count && input->items[cursor] != ' ' && input->items[cursor] != '\n') cursor++;
+            i32 width = brenda_text_measure_width(input->items + line_start, cursor - line_start);
+            if (line_has_word && width > wrap_width) return line_end;
+
+            line_end = cursor;
+            line_has_word = true;
+        }
+
+        return cursor;
+    }
+
+    isize cursor = line_start;
+    isize line_end = line_start;
+
+    while (cursor < input->count && input->items[cursor] != '\n') {
+        isize next_cursor = cursor + 1;
+        while (next_cursor < input->count && ((u8)input->items[next_cursor] & 0xc0) == 0x80) next_cursor++;
+
+        i32 width = brenda_text_measure_width(input->items + line_start, next_cursor - line_start);
+        if (line_end > line_start && width > wrap_width) break;
+
+        cursor = next_cursor;
+        line_end = cursor;
+    }
+
+    return line_end;
 }
 
 static inline isize utf8_previous_byte(Tui_TextInputState *input) {
