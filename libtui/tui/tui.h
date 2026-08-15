@@ -97,35 +97,35 @@ typedef struct {
 void tui_init(Tui_Config config);
 void tui_deinit(void);
 // Returns events that TUI did not consume. The slice remains valid until the next frame begins.
-Tui_EventSlice tui_frame_begin(void);
+Tui_EventSlice tui_begin_frame(void);
 // Ends Layla, draws its commands through Brenda, and ends the Brenda frame.
-void tui_frame_end(void);
+void tui_end_frame(void);
 
-void tui_element_register(Layla_ElementID id, Tui_ElementConfig config);
-b32 tui_element_is_hovered(Layla_ElementID id);
-b32 tui_element_is_pressed(Layla_ElementID id);
-b32 tui_element_is_clicked(Layla_ElementID id);
-b32 tui_element_is_focused(Layla_ElementID id);
-void tui_element_focus(Layla_ElementID id);
-Layla_ElementID tui_element_get_focused_id(void);
+void tui_register_element(Layla_ElementID id, Tui_ElementConfig config);
+b32 tui_is_element_hovered(Layla_ElementID id);
+b32 tui_is_element_pressed(Layla_ElementID id);
+b32 tui_is_element_clicked(Layla_ElementID id);
+b32 tui_is_element_focused(Layla_ElementID id);
+void tui_focus_element(Layla_ElementID id);
+Layla_ElementID tui_get_focused_element_id(void);
 
-void tui_div_open(Tui_DivConfig config);
-void tui_text_draw(Tui_TextConfig config);
-b32 tui_button_draw(Tui_ButtonConfig config);
+void tui_open_div(Tui_DivConfig config);
+void tui_draw_text(Tui_TextConfig config);
+b32 tui_draw_button(Tui_ButtonConfig config);
 
 #define Tui_Div(...)                                                                                  \
-    for (u8 _tui_latch = (tui_div_open((Tui_DivConfig) {                                             \
+    for (u8 _tui_latch = (tui_open_div((Tui_DivConfig) {                                             \
         .style.size.w = LAYLA_FIT(),                                                                 \
         .style.size.h = LAYLA_FIT(),                                                                 \
         __VA_ARGS__                                                                                  \
     }), 0); _tui_latch < 1; _tui_latch = 1, layla_close_element())
 
-#define Tui_Text(...) tui_text_draw((Tui_TextConfig) {                                               \
+#define Tui_Text(...) tui_draw_text((Tui_TextConfig) {                                               \
     .style.color = LAYLA_COLOR(255, 255, 255),                                                       \
     __VA_ARGS__                                                                                      \
 })
 
-#define Tui_Button(...) tui_button_draw((Tui_ButtonConfig) {                                         \
+#define Tui_Button(...) tui_draw_button((Tui_ButtonConfig) {                                         \
     .style = {                                                                                       \
         .size = {.w = LAYLA_FIT(), .h = LAYLA_FIT()},                                               \
         .background = LAYLA_COLOR(70, 90, 180),                                                      \

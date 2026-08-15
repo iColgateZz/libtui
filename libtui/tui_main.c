@@ -19,7 +19,7 @@ i32 main(void) {
     b32 quit = false;
 
     while (!quit) {
-        Tui_EventSlice events = tui_frame_begin();
+        Tui_EventSlice events = tui_begin_frame();
         for (isize i = 0; i < events.count; ++i) {
             Brenda_Event event = events.items[i].event;
             if (event.type == BRENDA_EVENT_UTF8 && event.as.utf8.length == 1
@@ -70,7 +70,7 @@ i32 main(void) {
             }
         }
 
-        tui_frame_end();
+        tui_end_frame();
     }
 
     tui_deinit();
