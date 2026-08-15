@@ -38,24 +38,11 @@ typedef struct {
 #define TUI_BINDING_NONE ((Tui_Binding) {.type = TUI_BINDING_DISABLED})
 
 typedef struct {
-    Tui_Binding delete_left;
-    Tui_Binding delete_right;
-    Tui_Binding cursor_left;
-    Tui_Binding cursor_right;
-    Tui_Binding cursor_up;
-    Tui_Binding cursor_down;
-    Tui_Binding cursor_home;
-    Tui_Binding cursor_end;
-    Tui_Binding submit;
-} Tui_TextInputBindings;
-
-typedef struct {
     Tui_Binding focus_next;
     Tui_Binding focus_previous;
     Tui_Binding focus_clear;
     Tui_Binding activate;
     Tui_Binding activate_alternate;
-    Tui_TextInputBindings text_input;
 } Tui_Bindings;
 
 typedef struct {
@@ -98,29 +85,6 @@ typedef struct {
 } Tui_ButtonConfig;
 
 typedef struct {
-    byte *items;
-    isize count;
-    isize capacity;
-    isize cursor;
-} Tui_TextInputState;
-
-typedef struct {
-    Layla_ElementID id;
-    Tui_TextInputState *state;
-    Layla_TextSlice placeholder;
-    Layla_ContainerStyle style;
-    Layla_TextStyle text_style;
-    Layla_TextStyle placeholder_style;
-    Layla_Color focused_background;
-    b32 disabled;
-} Tui_TextInputConfig;
-
-typedef struct {
-    b32 changed;
-    b32 submitted;
-} Tui_TextInputResult;
-
-typedef struct {
     Layla_ElementID target_id;
     Brenda_Event event;
 } Tui_Event;
@@ -148,8 +112,6 @@ Layla_ElementID tui_element_get_focused_id(void);
 void tui_div_open(Tui_DivConfig config);
 void tui_text_draw(Tui_TextConfig config);
 b32 tui_button_draw(Tui_ButtonConfig config);
-Tui_TextInputResult tui_text_input_draw(Tui_TextInputConfig config);
-void tui_text_input_state_set_text(Tui_TextInputState *state, Layla_TextSlice text);
 
 #define Tui_Div(...)                                                                                  \
     for (u8 _tui_latch = (tui_div_open((Tui_DivConfig) {                                             \
@@ -174,24 +136,6 @@ void tui_text_input_state_set_text(Tui_TextInputState *state, Layla_TextSlice te
     .hovered_background = LAYLA_COLOR(100, 120, 220),                                                \
     .pressed_background = LAYLA_COLOR(45, 60, 130),                                                  \
     .focused_background = LAYLA_COLOR(100, 120, 220),                                                \
-    __VA_ARGS__                                                                                      \
-})
-
-#define Tui_TextInput(...) tui_text_input_draw((Tui_TextInputConfig) {                               \
-    .style = {                                                                                       \
-        .size = {.w = LAYLA_FILL(.min = 8), .h = LAYLA_FIT()},                                      \
-        .background = LAYLA_COLOR(30, 30, 30),                                                       \
-        .padding = {.left = 1, .right = 1},                                                          \
-        .border = {.width = 1, .color = LAYLA_COLOR(140, 140, 140)},                                 \
-        .direction = LAYLA_DIR_ROW,                                                                  \
-        .overflow = LAYLA_OVERFLOW_HIDDEN,                                                           \
-    },                                                                                               \
-    .text_style = {                                                                                  \
-        .color = LAYLA_COLOR(255, 255, 255),                                                        \
-        .wrap_policy = LAYLA_TEXT_WRAP_CHARACTER,                                                   \
-    },                                                                                              \
-    .placeholder_style = {.color = LAYLA_COLOR(120, 120, 120)},                                     \
-    .focused_background = LAYLA_COLOR(45, 45, 45),                                                   \
     __VA_ARGS__                                                                                      \
 })
 

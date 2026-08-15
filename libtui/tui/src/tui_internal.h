@@ -6,16 +6,8 @@
 #define PSH_CORE_NO_PREFIX
 #include "psh_core.h"
 
-enum {
-    ELEMENT_TEXT_INPUT = 1 << 5,
-};
-
 typedef struct {
     Tui_ElementConfig config;
-    Tui_TextInputState *text_input;
-    Tui_TextInputResult text_input_result;
-    Layla_TextWrapPolicy text_input_wrap_policy;
-    i32 text_input_wrap_width;
     u32 generation;
 } InteractionRecord;
 
@@ -47,21 +39,5 @@ static inline Tui_EventSlice events_route(Brenda_EventSlice events);
 static inline void interactions_end(void);
 static inline void focus_move(i32 direction);
 static inline void commands_draw(Layla_CommandSlice commands);
-static inline void text_input_cursor_draw(Layla_CommandText text, Tui_TextInputState *input);
-static inline b32 text_input_event_handle(InteractionRecord *record, Brenda_Event event);
-static inline void text_input_cursor_move_vertical(
-    Tui_TextInputState *input,
-    i32 wrap_width,
-    Layla_TextWrapPolicy wrap_policy,
-    i32 direction
-);
-static inline isize text_input_line_end(
-    Tui_TextInputState *input,
-    isize line_start,
-    i32 wrap_width,
-    Layla_TextWrapPolicy wrap_policy
-);
-static inline isize utf8_previous_byte(Tui_TextInputState *input);
-static inline isize utf8_next_byte(Tui_TextInputState *input);
 
 #endif

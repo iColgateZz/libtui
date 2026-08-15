@@ -7,8 +7,7 @@
 #include "tui.h"
 
 enum {
-    TUI_EXAMPLE_INPUT_ID = 1,
-    TUI_EXAMPLE_INCREMENT_ID,
+    TUI_EXAMPLE_INCREMENT_ID = 1,
     TUI_EXAMPLE_QUIT_ID,
     TUI_EXAMPLE_SCROLL_ID,
 };
@@ -16,8 +15,6 @@ enum {
 i32 main(void) {
     tui_init((Tui_Config) {.fps = 60});
 
-    byte input_storage[256] = {0};
-    Tui_TextInputState input = {.items = input_storage, .capacity = sizeof(input_storage)};
     i32 count = 0;
     b32 quit = false;
 
@@ -48,13 +45,6 @@ i32 main(void) {
                 }
             );
 
-            Tui_TextInputResult input_result = Tui_TextInput(
-                .id = TUI_EXAMPLE_INPUT_ID,
-                .state = &input,
-                .placeholder = LAYLA_TEXT_SLICE("Type here and press Enter"),
-            );
-
-            if (input_result.submitted) tui_element_focus(LAYLA_ELEMENT_ID_NONE);
             if (Tui_Button(.id = TUI_EXAMPLE_INCREMENT_ID, .text = LAYLA_TEXT_SLICE("Increment"))) count++;
             if (Tui_Button(.id = TUI_EXAMPLE_QUIT_ID, .text = LAYLA_TEXT_SLICE("Quit"))) quit = true;
 
