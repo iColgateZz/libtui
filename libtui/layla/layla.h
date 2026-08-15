@@ -384,16 +384,16 @@ void layla_close_element(void);
                 __VA_ARGS__                                     \
         }), 0); _latch < 1; _latch = 1, layla_close_element())
 
-#define Layla_Text(...)                                         \
-    for (u8 _latch = (layla_open_text_element(),                \
-        layla_configure_text_element(                           \
-            (Layla_TextConfig) {__VA_ARGS__}                    \
-        ), 0); _latch < 1; _latch = 1, layla_close_element())
+#define Layla_Text(...) do {                                        \
+    layla_open_text_element();                                      \
+    layla_configure_text_element((Layla_TextConfig) {__VA_ARGS__}); \
+    layla_close_element();                                          \
+} while (0)
 
-#define Layla_TextID(id, ...)                                   \
-    for (u8 _latch = (layla_open_text_element_with_id(id),      \
-        layla_configure_text_element(                           \
-            (Layla_TextConfig) {__VA_ARGS__}                    \
-        ), 0); _latch < 1; _latch = 1, layla_close_element())
+#define Layla_TextID(id, ...) do {                                  \
+    layla_open_text_element_with_id(id);                            \
+    layla_configure_text_element((Layla_TextConfig) {__VA_ARGS__}); \
+    layla_close_element();                                          \
+} while (0)
 
 #endif
