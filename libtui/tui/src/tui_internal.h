@@ -12,17 +12,22 @@ enum {
 
 typedef struct {
     Tui_ElementConfig config;
+    Tui_TextInputState *text_input;
+    Tui_TextInputResult text_input_result;
+    Layla_TextWrapPolicy text_input_wrap_policy;
+    i32 text_input_wrap_width;
     u32 generation;
 } InteractionRecord;
 
 hash_map_def(Layla_ElementID, InteractionRecord)
 list_def(Layla_ElementID)
+list_def(Tui_Event)
 
 typedef struct {
     HashMap(Layla_ElementID, InteractionRecord) interaction_records;
     List(Layla_ElementID) focus_order;
+    List(Tui_Event) unhandled_events;
     Tui_Config config;
-    Brenda_EventSlice events;
     Layla_ElementID pressed_id;
     Layla_ElementID clicked_id;
     Layla_ElementID focused_id;
@@ -38,17 +43,12 @@ static inline Tui_Binding binding_resolve(Tui_Binding binding, Tui_Binding defau
 static inline b32 binding_matches_event(Tui_Binding binding, Brenda_Event event);
 static inline InteractionRecord *interaction_record_get(Layla_ElementID id);
 static inline Layla_ElementID interaction_target_get(u8 required_flags);
-static inline void interactions_begin(Brenda_EventSlice events);
+static inline Tui_EventSlice events_route(Brenda_EventSlice events);
 static inline void interactions_end(void);
 static inline void focus_move(i32 direction);
 static inline void commands_draw(Layla_CommandSlice commands);
 static inline void text_input_cursor_draw(Layla_CommandText text, Tui_TextInputState *input);
-static inline void text_input_events_handle(
-    Tui_TextInputState *input,
-    Tui_TextInputResult *result,
-    i32 wrap_width,
-    Layla_TextWrapPolicy wrap_policy
-);
+static inline b32 text_input_event_handle(InteractionRecord *record, Brenda_Event event);
 static inline void text_input_cursor_move_vertical(
     Tui_TextInputState *input,
     i32 wrap_width,

@@ -67,15 +67,15 @@ void tui_deinit(void) {
     brenda_terminal_deinit();
     hash_map_free(&state.interaction_records);
     list_free(state.focus_order);
+    list_free(state.unhandled_events);
 }
 
-Brenda_EventSlice tui_frame_begin(void) {
+Tui_EventSlice tui_frame_begin(void) {
     brenda_frame_begin();
-    state.events = brenda_events_get();
-    interactions_begin(state.events);
+    Tui_EventSlice unhandled_events = events_route(brenda_events_get());
     layla_state_set_screen_dimensions(brenda_terminal_get_width(), brenda_terminal_get_height());
     layla_layout_begin();
-    return state.events;
+    return unhandled_events;
 }
 
 void tui_frame_end(void) {
@@ -181,7 +181,6 @@ b32 tui_button_draw(Tui_ButtonConfig config) {
 }
 
 Tui_TextInputResult tui_text_input_draw(Tui_TextInputConfig config) {
-    Tui_TextInputResult result = {0};
     config.state->count = CLAMP(config.state->count, 0, config.state->capacity);
     config.state->cursor = CLAMP(config.state->cursor, 0, config.state->count);
 
@@ -189,19 +188,27 @@ Tui_TextInputResult tui_text_input_draw(Tui_TextInputConfig config) {
     else layla_container_element_open_with_id(config.id);
 
     Layla_ElementID id = layla_state_get_open_element_id();
+    InteractionRecord *previous_record = NULL;
+    hash_map_get(&state.interaction_records, id, &previous_record);
+    Tui_TextInputResult result = {0};
+    if (previous_record != NULL && previous_record->generation == state.generation - 1)
+        result = previous_record->text_input_result;
+
     u8 flags = TUI_ELEMENT_HOVERABLE | TUI_ELEMENT_CLICKABLE | TUI_ELEMENT_FOCUSABLE | ELEMENT_TEXT_INPUT;
     if (config.disabled) flags |= TUI_ELEMENT_DISABLED;
     tui_element_register(id, (Tui_ElementConfig) {.flags = flags});
 
+    Layla_ElementData data = layla_state_get_element_data(id);
+    i32 horizontal_inset = config.style.padding.left + config.style.padding.right
+        + config.style.border.width * 2;
+    i32 wrap_width = data.found ? MAX(data.rectangle.w - horizontal_inset, 1) : 1;
+    InteractionRecord *record = interaction_record_get(id);
+    record->text_input = config.state;
+    record->text_input_wrap_width = wrap_width;
+    record->text_input_wrap_policy = config.text_style.wrap_policy;
+
     b32 focused = tui_element_is_focused(id);
-    if (focused) {
-        config.style.background = config.focused_background;
-        Layla_ElementData data = layla_state_get_element_data(id);
-        i32 horizontal_inset = config.style.padding.left + config.style.padding.right
-            + config.style.border.width * 2;
-        i32 wrap_width = data.found ? MAX(data.rectangle.w - horizontal_inset, 1) : 1;
-        text_input_events_handle(config.state, &result, wrap_width, config.text_style.wrap_policy);
-    }
+    if (focused) config.style.background = config.focused_background;
 
     layla_container_element_configure((Layla_ContainerConfig) {.style = config.style});
     Layla_TextSlice text = {.items = config.state->items, .count = config.state->count};
@@ -254,19 +261,19 @@ static inline Layla_ElementID interaction_target_get(u8 required_flags) {
     return LAYLA_ELEMENT_ID_NONE;
 }
 
-static inline void interactions_begin(Brenda_EventSlice events) {
+static inline Tui_EventSlice events_route(Brenda_EventSlice events) {
     state.clicked_id = LAYLA_ELEMENT_ID_NONE;
+    list_clear(&state.unhandled_events);
 
     Layla_CursorState cursor = layla_state_get_cursor_state();
     b32 cursor_is_down = cursor.interaction_state == LAYLA_CURSOR_PRESSED_THIS_FRAME
         || cursor.interaction_state == LAYLA_CURSOR_PRESSED;
     b32 cursor_was_set = false;
+    b32 text_input_result_pending = false;
 
     for (isize i = 0; i < events.count; ++i) {
         Brenda_Event event = events.items[i];
 
-        //TODO: set_cursor_state does hover test every time it is called
-        //      why not call it once after going through all events?
         switch (event.type) {
             case BRENDA_EVENT_MOUSE_LEFT: {
                 cursor.x = event.as.mouse.x;
@@ -276,6 +283,7 @@ static inline void interactions_begin(Brenda_EventSlice events) {
                 cursor_was_set = true;
 
                 Layla_ElementID target = interaction_target_get(TUI_ELEMENT_CLICKABLE);
+                Layla_ElementID pressed = state.pressed_id;
                 if (event.as.mouse.pressed) {
                     state.pressed_id = target;
                     InteractionRecord *record = interaction_record_get(target);
@@ -286,6 +294,12 @@ static inline void interactions_begin(Brenda_EventSlice events) {
                     if (target != LAYLA_ELEMENT_ID_NONE && target == state.pressed_id) state.clicked_id = target;
                     state.pressed_id = LAYLA_ELEMENT_ID_NONE;
                 }
+                if (target == LAYLA_ELEMENT_ID_NONE && pressed == LAYLA_ELEMENT_ID_NONE) {
+                    list_append(&state.unhandled_events, ((Tui_Event) {
+                        .target_id = interaction_target_get(TUI_ELEMENT_HOVERABLE),
+                        .event = event,
+                    }));
+                }
                 break;
             }
             case BRENDA_EVENT_MOUSE_RIGHT:
@@ -295,6 +309,10 @@ static inline void interactions_begin(Brenda_EventSlice events) {
                 cursor.y = event.as.mouse.y;
                 layla_state_set_cursor_state(cursor.x, cursor.y, cursor_is_down);
                 cursor_was_set = true;
+                list_append(&state.unhandled_events, ((Tui_Event) {
+                    .target_id = interaction_target_get(TUI_ELEMENT_HOVERABLE),
+                    .event = event,
+                }));
                 break;
             case BRENDA_EVENT_MOUSE_DRAG:
                 cursor.x = event.as.mouse.x;
@@ -302,6 +320,12 @@ static inline void interactions_begin(Brenda_EventSlice events) {
                 cursor_is_down = true;
                 layla_state_set_cursor_state(cursor.x, cursor.y, cursor_is_down);
                 cursor_was_set = true;
+                if (state.pressed_id == LAYLA_ELEMENT_ID_NONE) {
+                    list_append(&state.unhandled_events, ((Tui_Event) {
+                        .target_id = interaction_target_get(TUI_ELEMENT_HOVERABLE),
+                        .event = event,
+                    }));
+                }
                 break;
             case BRENDA_EVENT_SCROLL_UP:
             case BRENDA_EVENT_SCROLL_DOWN: {
@@ -315,25 +339,47 @@ static inline void interactions_begin(Brenda_EventSlice events) {
                 if (data.found && (data.flags & LAYLA_ELEMENT_SCROLL_Y)) {
                     i32 delta_y = event.type == BRENDA_EVENT_SCROLL_UP ? -1 : 1;
                     layla_state_update_scroll_offset(target, delta_y);
+                } else {
+                    list_append(&state.unhandled_events, ((Tui_Event) {
+                        .target_id = interaction_target_get(TUI_ELEMENT_HOVERABLE),
+                        .event = event,
+                    }));
                 }
                 break;
             }
-            default:
+            default: {
                 if (binding_matches_event(state.config.bindings.focus_clear, event)) {
                     state.focused_id = LAYLA_ELEMENT_ID_NONE;
                 } else if (binding_matches_event(state.config.bindings.focus_next, event)) {
                     focus_move(1);
                 } else if (binding_matches_event(state.config.bindings.focus_previous, event)) {
                     focus_move(-1);
-                } else if ((binding_matches_event(state.config.bindings.activate, event)
-                            || binding_matches_event(state.config.bindings.activate_alternate, event))
-                           && state.focused_id != LAYLA_ELEMENT_ID_NONE)
-                {
+                } else {
                     InteractionRecord *record = interaction_record_get(state.focused_id);
-                    if (record != NULL && (record->config.flags & TUI_ELEMENT_CLICKABLE))
+                    if (record != NULL
+                        && (record->config.flags & ELEMENT_TEXT_INPUT)
+                        && text_input_event_handle(record, event)) {
+                        text_input_result_pending |= record->text_input_result.changed
+                            || record->text_input_result.submitted;
+                        continue;
+                    } else if (record != NULL
+                               && (record->config.flags & TUI_ELEMENT_CLICKABLE)
+                               && (binding_matches_event(state.config.bindings.activate, event)
+                                   || binding_matches_event(state.config.bindings.activate_alternate, event))) {
                         state.clicked_id = state.focused_id;
+                    } else {
+                        Layla_ElementID target_id = event.type == BRENDA_EVENT_TERM_KEY
+                            || event.type == BRENDA_EVENT_UTF8
+                            ? state.focused_id
+                            : LAYLA_ELEMENT_ID_NONE;
+                        list_append(&state.unhandled_events, ((Tui_Event) {
+                            .target_id = target_id,
+                            .event = event,
+                        }));
+                    }
                 }
                 break;
+            }
         }
     }
 
@@ -343,7 +389,7 @@ static inline void interactions_begin(Brenda_EventSlice events) {
     b32 no_live_records = state.registered_count == 0 && state.interaction_records.count > 0;
     b32 too_many_stale_records = state.registered_count > 0
         && state.interaction_records.count >= state.registered_count * 2;
-    if (next_generation == 0 || no_live_records || too_many_stale_records) {
+    if (!text_input_result_pending && (next_generation == 0 || no_live_records || too_many_stale_records)) {
         hash_map_clear(&state.interaction_records);
         if (next_generation == 0) next_generation = 1;
     }
@@ -351,6 +397,11 @@ static inline void interactions_begin(Brenda_EventSlice events) {
     state.generation = next_generation;
     state.registered_count = 0;
     list_clear(&state.focus_order);
+
+    return (Tui_EventSlice) {
+        .items = state.unhandled_events.items,
+        .count = state.unhandled_events.count,
+    };
 }
 
 static inline void interactions_end(void) {
@@ -472,64 +523,55 @@ static inline void text_input_cursor_draw(Layla_CommandText text, Tui_TextInputS
     brenda_text_draw(cursor_x, text.y, cursor, next - input->cursor, effect);
 }
 
-static inline void text_input_events_handle(
-    Tui_TextInputState *input,
-    Tui_TextInputResult *result,
-    i32 wrap_width,
-    Layla_TextWrapPolicy wrap_policy
-) {
+static inline b32 text_input_event_handle(InteractionRecord *record, Brenda_Event event) {
+    Tui_TextInputState *input = record->text_input;
+    Tui_TextInputResult *result = &record->text_input_result;
     Tui_TextInputBindings bindings = state.config.bindings.text_input;
 
-    for (isize i = 0; i < state.events.count; ++i) {
-        Brenda_Event event = state.events.items[i];
-
-        if (binding_matches_event(state.config.bindings.focus_next, event)
-            || binding_matches_event(state.config.bindings.focus_previous, event)
-            || binding_matches_event(state.config.bindings.focus_clear, event)) {
-            continue;
-        }
-
-        if (binding_matches_event(bindings.delete_left, event)) {
-            if (input->cursor == 0) continue;
-            isize previous = utf8_previous_byte(input);
-            memmove(input->items + previous, input->items + input->cursor, input->count - input->cursor);
-            input->count -= input->cursor - previous;
-            input->cursor = previous;
-            result->changed = true;
-        } else if (binding_matches_event(bindings.delete_right, event)) {
-            if (input->cursor == input->count) continue;
-            isize next = utf8_next_byte(input);
-            memmove(input->items + input->cursor, input->items + next, input->count - next);
-            input->count -= next - input->cursor;
-            result->changed = true;
-        } else if (binding_matches_event(bindings.cursor_left, event)) {
-            input->cursor = utf8_previous_byte(input);
-        } else if (binding_matches_event(bindings.cursor_right, event)) {
-            input->cursor = utf8_next_byte(input);
-        } else if (binding_matches_event(bindings.cursor_up, event)) {
-            text_input_cursor_move_vertical(input, wrap_width, wrap_policy, -1);
-        } else if (binding_matches_event(bindings.cursor_down, event)) {
-            text_input_cursor_move_vertical(input, wrap_width, wrap_policy, 1);
-        } else if (binding_matches_event(bindings.cursor_home, event)) {
-            input->cursor = 0;
-        } else if (binding_matches_event(bindings.cursor_end, event)) {
-            input->cursor = input->count;
-        } else if (binding_matches_event(bindings.submit, event)) {
-            result->submitted = true;
-        } else if (event.type == BRENDA_EVENT_UTF8
-                   && !(event.modifiers & (BRENDA_MODIFIER_CTRL | BRENDA_MODIFIER_ALT))) {
-            if (input->count + event.as.utf8.length > input->capacity) continue;
-            memmove(
-                input->items + input->cursor + event.as.utf8.length,
-                input->items + input->cursor,
-                input->count - input->cursor
-            );
-            memcpy(input->items + input->cursor, event.as.utf8.bytes, event.as.utf8.length);
-            input->count += event.as.utf8.length;
-            input->cursor += event.as.utf8.length;
-            result->changed = true;
-        }
+    if (binding_matches_event(bindings.delete_left, event)) {
+        if (input->cursor == 0) return true;
+        isize previous = utf8_previous_byte(input);
+        memmove(input->items + previous, input->items + input->cursor, input->count - input->cursor);
+        input->count -= input->cursor - previous;
+        input->cursor = previous;
+        result->changed = true;
+    } else if (binding_matches_event(bindings.delete_right, event)) {
+        if (input->cursor == input->count) return true;
+        isize next = utf8_next_byte(input);
+        memmove(input->items + input->cursor, input->items + next, input->count - next);
+        input->count -= next - input->cursor;
+        result->changed = true;
+    } else if (binding_matches_event(bindings.cursor_left, event)) {
+        input->cursor = utf8_previous_byte(input);
+    } else if (binding_matches_event(bindings.cursor_right, event)) {
+        input->cursor = utf8_next_byte(input);
+    } else if (binding_matches_event(bindings.cursor_up, event)) {
+        text_input_cursor_move_vertical(input, record->text_input_wrap_width, record->text_input_wrap_policy, -1);
+    } else if (binding_matches_event(bindings.cursor_down, event)) {
+        text_input_cursor_move_vertical(input, record->text_input_wrap_width, record->text_input_wrap_policy, 1);
+    } else if (binding_matches_event(bindings.cursor_home, event)) {
+        input->cursor = 0;
+    } else if (binding_matches_event(bindings.cursor_end, event)) {
+        input->cursor = input->count;
+    } else if (binding_matches_event(bindings.submit, event)) {
+        result->submitted = true;
+    } else if (event.type == BRENDA_EVENT_UTF8
+               && !(event.modifiers & (BRENDA_MODIFIER_CTRL | BRENDA_MODIFIER_ALT))) {
+        if (input->count + event.as.utf8.length > input->capacity) return true;
+        memmove(
+            input->items + input->cursor + event.as.utf8.length,
+            input->items + input->cursor,
+            input->count - input->cursor
+        );
+        memcpy(input->items + input->cursor, event.as.utf8.bytes, event.as.utf8.length);
+        input->count += event.as.utf8.length;
+        input->cursor += event.as.utf8.length;
+        result->changed = true;
+    } else {
+        return false;
     }
+
+    return true;
 }
 
 static inline void text_input_cursor_move_vertical(

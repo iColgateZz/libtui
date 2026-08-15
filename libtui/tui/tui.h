@@ -120,10 +120,20 @@ typedef struct {
     b32 submitted;
 } Tui_TextInputResult;
 
+typedef struct {
+    Layla_ElementID target_id;
+    Brenda_Event event;
+} Tui_Event;
+
+typedef struct {
+    Tui_Event *items;
+    isize count;
+} Tui_EventSlice;
+
 void tui_init(Tui_Config config);
 void tui_deinit(void);
-// Begins both the Brenda and Layla frames. The returned events remain available to application code.
-Brenda_EventSlice tui_frame_begin(void);
+// Returns events that TUI did not consume. The slice remains valid until the next frame begins.
+Tui_EventSlice tui_frame_begin(void);
 // Ends Layla, draws its commands through Brenda, and ends the Brenda frame.
 void tui_frame_end(void);
 

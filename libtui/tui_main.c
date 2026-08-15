@@ -22,12 +22,11 @@ i32 main(void) {
     b32 quit = false;
 
     while (!quit) {
-        Brenda_EventSlice events = tui_frame_begin();
+        Tui_EventSlice events = tui_frame_begin();
         for (isize i = 0; i < events.count; ++i) {
-            Brenda_Event event = events.items[i];
+            Brenda_Event event = events.items[i].event;
             if (event.type == BRENDA_EVENT_UTF8 && event.as.utf8.length == 1
-                && event.as.utf8.bytes[0] == 'q'
-                && !tui_element_is_focused(TUI_EXAMPLE_INPUT_ID)) {
+                && event.as.utf8.bytes[0] == 'q') {
                 quit = true;
             }
         }
@@ -76,7 +75,7 @@ i32 main(void) {
                 Tui_Text(.text = LAYLA_TEXT_SLICE("TUI updates the Layla scroll offset automatically."));
                 Tui_Text(.text = LAYLA_TEXT_SLICE("Tab and Shift+Tab move keyboard focus."));
                 Tui_Text(.text = LAYLA_TEXT_SLICE("Enter and Space activate focused buttons."));
-                Tui_Text(.text = LAYLA_TEXT_SLICE("Application-specific Brenda events remain available."));
+                Tui_Text(.text = LAYLA_TEXT_SLICE("Unhandled Brenda events remain available to the application."));
                 Tui_Text(.text = LAYLA_TEXT_SLICE("The Layla command adapter is also automatic."));
             }
         }
