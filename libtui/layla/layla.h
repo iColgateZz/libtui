@@ -329,71 +329,71 @@ typedef struct {
     isize count;
 } Layla_CommandSlice;
 
-void layla_state_set_error_handler(Layla_ErrorHandler handler, void *userdata);
-Layla_ErrorSlice layla_state_get_errors(void);
+void layla_set_error_handler(Layla_ErrorHandler handler, void *userdata);
+Layla_ErrorSlice layla_get_errors(void);
 
-void layla_state_set_text_measure_function(Layla_TextMeasureFunction function, void *userdata);
-void layla_state_set_screen_dimensions(i32 w, i32 h);
+void layla_set_text_measure_function(Layla_TextMeasureFunction function, void *userdata);
+void layla_set_screen_dimensions(i32 w, i32 h);
 
-// Call once per frame before layla_layout_begin(). Hit-tests the last completed layout and updates interaction_state.
-void layla_state_set_cursor_state(i32 x, i32 y, b32 is_down);
-Layla_CursorState layla_state_get_cursor_state(void);
+// Call once per frame before layla_begin_layout(). Hit-tests the last completed layout and updates interaction_state.
+void layla_set_cursor_state(i32 x, i32 y, b32 is_down);
+Layla_CursorState layla_get_cursor_state(void);
 
-void layla_state_set_scroll_offset(Layla_ElementID id, i32 offset_y);
-void layla_state_update_scroll_offset(Layla_ElementID id, i32 delta_y);
-i32 layla_state_get_scroll_offset(Layla_ElementID id);
-i32 layla_state_get_max_scroll_offset(Layla_ElementID id);
+void layla_set_scroll_offset(Layla_ElementID id, i32 offset_y);
+void layla_update_scroll_offset(Layla_ElementID id, i32 delta_y);
+i32 layla_get_scroll_offset(Layla_ElementID id);
+i32 layla_get_max_scroll_offset(Layla_ElementID id);
 
-b32 layla_state_is_element_hovered(void);
-b32 layla_state_is_element_hovered_by_id(Layla_ElementID id);
+b32 layla_is_open_element_hovered(void);
+b32 layla_is_element_hovered(Layla_ElementID id);
 // The returned IDs are ordered back to front.
 // The slice remains valid until the cursor state is set again.
-Layla_ElementIDSlice layla_state_get_hovered_element_ids(void);
+Layla_ElementIDSlice layla_get_hovered_element_ids(void);
 
-Layla_ElementID layla_state_get_open_element_id(void);
+Layla_ElementID layla_get_open_element_id(void);
 // Returns data from the last completed layout. During layout construction, this is the preceding frame's data.
-Layla_ElementData layla_state_get_element_data(Layla_ElementID id);
+Layla_ElementData layla_get_element_data(Layla_ElementID id);
 
-void layla_layout_begin(void);
-Layla_CommandSlice layla_layout_end(void);
+void layla_begin_layout(void);
+Layla_CommandSlice layla_end_layout(void);
 
-void layla_text_element_open(void);
-void layla_text_element_open_with_id(Layla_ElementID id);
-void layla_text_element_configure(Layla_TextConfig conf);
-void layla_container_element_open(void);
-void layla_container_element_open_with_id(Layla_ElementID id);
-void layla_container_element_configure(Layla_ContainerConfig conf);
-void layla_element_close(void);
+void layla_open_text_element(void);
+void layla_open_text_element_with_id(Layla_ElementID id);
+void layla_configure_text_element(Layla_TextConfig conf);
+void layla_open_container_element(void);
+void layla_open_container_element_with_id(Layla_ElementID id);
+void layla_configure_container_element(Layla_ContainerConfig conf);
+void layla_close_element(void);
 
 // Automatic IDs depend on the parent ID and sibling declaration order.
 #define Layla_Container(...)                                    \
-    for (u8 _latch = (layla_container_element_open(),           \
-        layla_container_element_configure(                      \
+    for (u8 _latch = (layla_open_container_element(),           \
+        layla_configure_container_element(                      \
             (Layla_ContainerConfig) {                           \
                 .style.size.w = LAYLA_FIT(),                    \
                 .style.size.h = LAYLA_FIT(),                    \
                 __VA_ARGS__                                     \
-        }), 0); _latch < 1; _latch = 1, layla_element_close())
+        }), 0); _latch < 1; _latch = 1, layla_close_element())
 
 #define Layla_ContainerID(id, ...)                              \
-    for (u8 _latch = (layla_container_element_open_with_id(id), \
-        layla_container_element_configure(                      \
+    for (u8 _latch = (layla_open_container_element_with_id(id), \
+        layla_configure_container_element(                      \
             (Layla_ContainerConfig) {                           \
                 .style.size.w = LAYLA_FIT(),                    \
                 .style.size.h = LAYLA_FIT(),                    \
                 __VA_ARGS__                                     \
-        }), 0); _latch < 1; _latch = 1, layla_element_close())
+        }), 0); _latch < 1; _latch = 1, layla_close_element())
 
 #define Layla_Text(...)                                         \
-    for (u8 _latch = (layla_text_element_open(),                \
-        layla_text_element_configure(                           \
+    for (u8 _latch = (layla_open_text_element(),                \
+        layla_configure_text_element(                           \
             (Layla_TextConfig) {__VA_ARGS__}                    \
-        ), 0); _latch < 1; _latch = 1, layla_element_close())
+        ), 0); _latch < 1; _latch = 1, layla_close_element())
 
 #define Layla_TextID(id, ...)                                   \
-    for (u8 _latch = (layla_text_element_open_with_id(id),      \
-        layla_text_element_configure(                           \
+    for (u8 _latch = (layla_open_text_element_with_id(id),      \
+        layla_configure_text_element(                           \
             (Layla_TextConfig) {__VA_ARGS__}                    \
-        ), 0); _latch < 1; _latch = 1, layla_element_close())
+        ), 0); _latch < 1; _latch = 1, layla_close_element())
 
 #endif

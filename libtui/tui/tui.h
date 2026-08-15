@@ -118,7 +118,7 @@ b32 tui_button_draw(Tui_ButtonConfig config);
         .style.size.w = LAYLA_FIT(),                                                                 \
         .style.size.h = LAYLA_FIT(),                                                                 \
         __VA_ARGS__                                                                                  \
-    }), 0); _tui_latch < 1; _tui_latch = 1, layla_element_close())
+    }), 0); _tui_latch < 1; _tui_latch = 1, layla_close_element())
 
 #define Tui_Text(...) tui_text_draw((Tui_TextConfig) {                                               \
     .style.color = LAYLA_COLOR(255, 255, 255),                                                       \

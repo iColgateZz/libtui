@@ -22,7 +22,7 @@ static b32 button(Layla_ElementID id, Layla_TextSlice label) {
     b32 hovered = false;
 
     Layla_ContainerID(id, .style = {
-        .background = layla_state_is_element_hovered()
+        .background = layla_is_open_element_hovered()
             ? LAYLA_COLOR(120, 150, 255)
             : LAYLA_COLOR(70, 90, 180),
         .padding = {.left = 1, .right = 1},
@@ -30,19 +30,19 @@ static b32 button(Layla_ElementID id, Layla_TextSlice label) {
         .align_self = LAYLA_ALIGN_CENTER,
         .size = {.w = LAYLA_FIT(), .h = LAYLA_FIT()},
     }) {
-        hovered = layla_state_is_element_hovered();
+        hovered = layla_is_open_element_hovered();
         Layla_Text(.text = label, .style = {
             .color = LAYLA_COLOR(255, 255, 255),
             .alignment = LAYLA_ALIGN_CENTER,
         });
     }
 
-    Layla_CursorState cursor = layla_state_get_cursor_state();
+    Layla_CursorState cursor = layla_get_cursor_state();
     return hovered && cursor.interaction_state == LAYLA_CURSOR_RELEASED_THIS_FRAME;
 }
 
 i32 main(void) {
-    layla_state_set_text_measure_function(text_measure, NULL);
+    layla_set_text_measure_function(text_measure, NULL);
     brenda_terminal_init((Brenda_TerminalConfig) {0});
     brenda_terminal_set_fps(60);
 
@@ -51,7 +51,7 @@ i32 main(void) {
     while (!quit) {
         brenda_frame_begin();
 
-        Layla_CursorState cursor = layla_state_get_cursor_state();
+        Layla_CursorState cursor = layla_get_cursor_state();
         b32 cursor_is_down = cursor.interaction_state == LAYLA_CURSOR_PRESSED_THIS_FRAME ||
                              cursor.interaction_state == LAYLA_CURSOR_PRESSED;
         i32 scroll_delta_y = 0;
@@ -78,15 +78,15 @@ i32 main(void) {
             if (event.type == BRENDA_EVENT_SCROLL_DOWN) scroll_delta_y++;
         }
         if (left_mouse_pressed) tooltip_open = false;
-        if (right_mouse_pressed) tooltip_open = layla_state_is_element_hovered_by_id(BUTTON_QUIT_ID);
-        layla_state_set_cursor_state(cursor.x, cursor.y, cursor_is_down);
-        layla_state_set_scroll_offset(SCROLL_PANEL_ID, scroll_delta_y);
+        if (right_mouse_pressed) tooltip_open = layla_is_element_hovered(BUTTON_QUIT_ID);
+        layla_set_cursor_state(cursor.x, cursor.y, cursor_is_down);
+        layla_set_scroll_offset(SCROLL_PANEL_ID, scroll_delta_y);
 
         {
             u32 w = brenda_terminal_get_width();
             u32 h = brenda_terminal_get_height();
-            layla_state_set_screen_dimensions(w, h);
-            layla_layout_begin();
+            layla_set_screen_dimensions(w, h);
+            layla_begin_layout();
 
             Layla_Container(.style = {
                 .background = LAYLA_COLOR(196, 240, 120),
@@ -157,7 +157,7 @@ i32 main(void) {
                 });
             }
 
-            Layla_CommandSlice cmds = layla_layout_end();
+            Layla_CommandSlice cmds = layla_end_layout();
 
             for (isize i = 0; i < cmds.count; ++i) {
                 Layla_Command cmd = cmds.items[i];

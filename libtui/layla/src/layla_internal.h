@@ -12,8 +12,8 @@ typedef struct {
 } ChildrenIndices;
 
 typedef i32 TempID;
-#define LAYLA_TEMP_ID_NONE (-1)
-#define LAYLA_ROOT_TEMP_ID 0
+#define TEMP_ID_NONE (-1)
+#define ROOT_TEMP_ID 0
 
 typedef struct {
     TempID parent;
@@ -25,8 +25,8 @@ typedef struct {
     u32 next_child_id_offset;
     
     LAYLA_PACKED_ENUM {
-        LAYLA_NODE_CONTAINER,
-        LAYLA_NODE_TEXT,
+        NODE_CONTAINER,
+        NODE_TEXT,
     } type;
     union {
         struct {
@@ -107,18 +107,18 @@ typedef struct {
 
 // Functions
 
-static inline void error_emit(Layla_ErrorType type, Layla_ElementID id, byte const *message);
-static inline u64 element_id_hash(Layla_ElementID id);
-static inline b32 element_id_equal(Layla_ElementID a, Layla_ElementID b);
-static inline Node *node_from_temp_id(TempID id);
-static inline Node *node_get_by_element_id(Layla_ElementID id);
-static inline TempID temp_id_from_child_index(i32 index);
-static inline Node *node_from_index(i32 index);
-static inline TempID node_push(Node node);
-static inline void node_open(Node node);
-static inline void hover_test(void);
+static inline void emit_error(Layla_ErrorType type, Layla_ElementID id, byte const *message);
+static inline u64 hash_element_id(Layla_ElementID id);
+static inline b32 equal_element_ids(Layla_ElementID a, Layla_ElementID b);
+static inline Node *get_node_by_temp_id(TempID id);
+static inline Node *get_node_by_element_id(Layla_ElementID id);
+static inline TempID get_temp_id_by_child_index(i32 index);
+static inline Node *get_node_by_index(i32 index);
+static inline TempID push_node(Node node);
+static inline void open_node(Node node);
+static inline void test_hover(void);
 static inline void floating_layout(Node *node);
-static inline void floating_roots_sort(void);
+static inline void sort_floating_roots(void);
 static inline void container_intrinsic_size(Node *node, Dimension dim);
 static inline void container_fill_size(Node *node, Dimension dim);
 
@@ -133,33 +133,33 @@ static inline void container_commands(Node *node, Layla_Rectangle active_clip);
 static inline void text_intrinsic_width(Node *node);
 static inline void text_wrap_text(Node *node);
 static inline TextMeasurement text_process(Node *node, i32 wrap_width, b32 emit_commands, Layla_Rectangle active_clip);
-static inline i32 text_slice_measure(Layla_ElementID id, Layla_TextSlice text);
+static inline i32 measure_text_slice(Layla_ElementID id, Layla_TextSlice text);
 
 static inline b32 node_hit_test(Node *node, Layla_Rectangle parent_clip, i32 x, i32 y);
-static inline b32 rect_contains_point(i32 x, i32 y, Layla_Rectangle r);
-static inline Layla_Rectangle rect_intersect(Layla_Rectangle a, Layla_Rectangle b);
-static inline Layla_Rectangle rect_from_node(Node *node);
-static inline Dimension dimension_get_other(Dimension dim);
-static inline Dimension direction_get_main_dimension(Layla_Direction direction);
+static inline b32 rectangle_contains_point(i32 x, i32 y, Layla_Rectangle r);
+static inline Layla_Rectangle intersect_rectangles(Layla_Rectangle a, Layla_Rectangle b);
+static inline Layla_Rectangle node_get_rectangle(Node *node);
+static inline Dimension get_other_dimension(Dimension dim);
+static inline Dimension get_main_dimension_from_direction(Layla_Direction direction);
 static inline i32 *node_get_pos(Node *node, Dimension dim);
 static inline i32 *node_get_size(Node *node, Dimension dim);
 static inline i32 *node_get_min_size(Node *node, Dimension dim);
 static inline Layla_SizeStyle get_size_style(Layla_ContainerStyle style, Dimension dim);
 static inline SizeRange get_size_range(Layla_SizeStyle size);
-static inline PaddingSides padding_sides_from_container_style(Layla_ContainerStyle style, Dimension dim);
+static inline PaddingSides get_padding_sides_from_container_style(Layla_ContainerStyle style, Dimension dim);
 static inline i32 get_children_spacing(ChildrenIndices children, i32 spacing);
 static inline b32 node_is_fill(Node *node, Dimension dim);
 static inline b32 node_is_percentage(Node *node, Dimension dim);
-static inline i32 size_from_percentage(Layla_SizeStyle size, i32 available_size);
+static inline i32 calculate_percentage_size(Layla_SizeStyle size, i32 available_size);
 static inline i32 node_get_fill_max(Node *node, Dimension dim);
 static inline i32 node_get_fill_min(Node *node, Dimension dim);
-static inline void space_distribute(i32 space, List(NodePtr) nodes, Dimension dim);
-static inline i32 align_offset(Layla_Alignment align, i32 parent_size, PaddingSides padding, i32 child_size);
-static inline i32 alignment_resolve_position(Layla_Alignment alignment, i32 size);
+static inline void distribute_space(i32 space, List(NodePtr) nodes, Dimension dim);
+static inline i32 calculate_alignment_offset(Layla_Alignment align, i32 parent_size, PaddingSides padding, i32 child_size);
+static inline i32 resolve_alignment_position(Layla_Alignment alignment, i32 size);
 static inline Layla_Alignment node_get_align_self(Node *node);
 static inline b32 node_is_scroll_y(Node *node);
 static inline b32 node_is_floating(Node *node);
-static inline ScrollState *scroll_state_get_by_id(Layla_ElementID id);
+static inline ScrollState *get_scroll_state_by_id(Layla_ElementID id);
 static inline void append_text_command(Node *node, isize line_start_byte, isize line_end_byte, i32 line_x, i32 line_y, i32 line_width, Layla_Rectangle active_clip);
 static inline void floating_measure_size(Node *node, Node *attached, Dimension dim);
 
