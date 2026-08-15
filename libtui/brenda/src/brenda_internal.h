@@ -16,6 +16,7 @@ enum {
     CELL_WIDE_LEAD    = 0x02,
 };
 
+//TODO: why?
 enum {
     EFFECT_BOLD          = BRENDA_TEXT_EFFECT_BOLD,
     EFFECT_DIM           = BRENDA_TEXT_EFFECT_DIM,
@@ -75,50 +76,48 @@ typedef struct {
     u32 width;
     u32 height;
     CursorState cursor;
-    b32 alreadly_deinited;
+    b32 already_deinitialized;
 } State;
 
-static TerminalTextUnit text_unit_from_bytes(byte *utf8, u8 utf8_length, u8 cell_width);
-static TerminalTextUnit text_unit_from_byte(byte value);
-static u8 utf8_expected_length(byte first);
-static TerminalTextUnit utf8_next(byte **cursor, byte *end);
-static u8 cell_width_from_unicode(Unicode codepoint);
-static inline Effect effect_from_text_effect(Brenda_TextEffect text_effect);
-static void effect_merge(Effect *effect, Effect new_effect);
-static Cell cell(TerminalTextUnit text_unit, Effect effect);
-static Cell cell_empty(void);
-static b32 cell_equal(Cell a, Cell b);
-static void screen_dimensions_update(void);
-static void signal_winch_handle(i32 signal_number);
-static i64 time_get_ms(void);
-static i64 time_get_ns(void);
-static void events_poll(i64 interval_ns);
-static void events_handle_available(i32 timeout_ms);
-static void input_parse_pending(void);
-static void output_write(byte *text, usize length);
-static void cursor_move_emit(List(byte) *output, u32 row, u32 column);
-static void frame_render(void);
-static void root_clip_update(void);
-static b32 input_unit_parse(byte **cursor, byte *end, Brenda_Event *event);
-static b32 escape_parse(byte **cursor, byte *end, Brenda_Event *event);
-static b32 mouse_parse(byte **cursor, byte *end, Brenda_Event *event);
-static b32 term_key_parse(byte **cursor, byte *end, Brenda_Event *event);
-static b32 text_parse(byte **cursor, byte *end, Brenda_Event *event);
-static void text_unit_put(i32 x, i32 y, TerminalTextUnit text_unit, Effect effect);
-static void wide_character_fix(i32 x, i32 y);
-static void cells_emit(List(byte) *output, Cell *cells, usize start, usize length);
-static void effect_emit(List(byte) *output, Effect effect);
-static void effect_reset(List(byte) *output);
-static byte *format_variadic(byte *cursor, byte *end, byte *format, va_list arguments);
-static byte *format_uint(byte *cursor, byte *end, u64 value, u8 base);
-static byte *format_cstring(byte *cursor, byte *end, byte *text);
-static byte *format_string(byte *cursor, byte *end, s8 text);
-static void debug_text_unit_put(i32 x, i32 y, TerminalTextUnit text_unit);
-static Brenda_Stream brenda_stream_start_from_arena(Arena *arena, usize size);
-
-static inline b32 rectangle_contains_point(Brenda_Rectangle rectangle, i32 x, i32 y);
-static inline Brenda_Rectangle rectangle_intersect(Brenda_Rectangle a, Brenda_Rectangle b);
-
-static inline b32 effect_equal(Effect a, Effect b);
+static inline TerminalTextUnit text_unit_from_bytes(byte *utf8, u8 utf8_length, u8 cell_width);
+static inline TerminalTextUnit text_unit_from_byte(byte value);
+static inline u8 get_expected_utf8_length(byte first);
+static inline TerminalTextUnit parse_next_utf8_unit(byte **cursor, byte *end);
+static inline u8 get_cell_width_from_unicode(Unicode codepoint);
+static inline inline Effect get_effect_from_text_effect(Brenda_TextEffect text_effect);
+static inline void effect_merge(Effect *effect, Effect new_effect);
+static inline Cell cell(TerminalTextUnit text_unit, Effect effect);
+static inline Cell empty_cell(void);
+static inline b32 equal_cells(Cell a, Cell b);
+static inline void update_screen_dimensions(void);
+static inline void handle_winch_signal(i32 signal_number);
+static inline i64 get_time_ms(void);
+static inline i64 get_time_ns(void);
+static inline void poll_events(i64 interval_ns);
+static inline void handle_available_events(i32 timeout_ms);
+static inline void parse_pending_input(void);
+static inline void write_output(byte *text, usize length);
+static inline void emit_cursor_move(List(byte) *output, u32 row, u32 column);
+static inline void render_frame(void);
+static inline void update_root_clip(void);
+static inline b32 parse_input_unit(byte **cursor, byte *end, Brenda_Event *event);
+static inline b32 parse_escape(byte **cursor, byte *end, Brenda_Event *event);
+static inline b32 parse_mouse(byte **cursor, byte *end, Brenda_Event *event);
+static inline b32 parse_term_key(byte **cursor, byte *end, Brenda_Event *event);
+static inline b32 parse_text(byte **cursor, byte *end, Brenda_Event *event);
+static inline void put_text_unit(i32 x, i32 y, TerminalTextUnit text_unit, Effect effect);
+static inline void fix_wide_character(i32 x, i32 y);
+static inline void emit_cells(List(byte) *output, Cell *cells, usize start, usize length);
+static inline void emit_effect(List(byte) *output, Effect effect);
+static inline void emit_effect_reset(List(byte) *output);
+static inline byte *format_variadic(byte *cursor, byte *end, byte *format, va_list arguments);
+static inline byte *format_uint(byte *cursor, byte *end, u64 value, u8 base);
+static inline byte *format_cstring(byte *cursor, byte *end, byte *text);
+static inline byte *format_string(byte *cursor, byte *end, s8 text);
+static inline void put_debug_text_unit(i32 x, i32 y, TerminalTextUnit text_unit);
+static inline Brenda_Stream arena_start_stream(Arena *arena, usize size);
+static inline  b32 rectangle_contains_point(Brenda_Rectangle rectangle, i32 x, i32 y);
+static inline  Brenda_Rectangle intersect_rectangles(Brenda_Rectangle a, Brenda_Rectangle b);
+static inline  b32 equal_effects(Effect a, Effect b);
 
 #endif

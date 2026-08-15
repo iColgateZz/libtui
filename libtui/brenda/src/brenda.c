@@ -12,21 +12,21 @@
 
 static State state = {0};
 
-u64 brenda_frame_get_delta_time(void) { return state.delta_time; }
-u32 brenda_terminal_get_width(void) { return state.width; }
-u32 brenda_terminal_get_height(void) { return state.height; }
-Brenda_EventSlice brenda_events_get(void) {
+u64 brenda_get_frame_delta_time(void) { return state.delta_time; }
+u32 brenda_get_terminal_width(void) { return state.width; }
+u32 brenda_get_terminal_height(void) { return state.height; }
+Brenda_EventSlice brenda_get_events(void) {
     return (Brenda_EventSlice) {
         .items = state.events.items,
         .count = state.events.count,
     };
 }
 
-#define write_string(string) output_write(string, sizeof(string) - 1)
+#define write_string(string) write_output(string, sizeof(string) - 1)
 
-static void output_write(byte *text, usize length) { write(STDOUT_FILENO, text, length); }
+static void write_output(byte *text, usize length) { write(STDOUT_FILENO, text, length); }
 
-void brenda_terminal_init(Brenda_TerminalConfig config) {
+void brenda_init_terminal(Brenda_TerminalConfig config) {
     assert(tcgetattr(STDIN_FILENO, &state.original_terminal) == 0);
     assert(sigaction(SIGWINCH, NULL, &state.original_winch_action) == 0);
 
@@ -61,12 +61,12 @@ void brenda_terminal_init(Brenda_TerminalConfig config) {
     write_string("\33[2J");                     // clear screen
     write_string("\33[H");                      // move cursor to home position
 
-    screen_dimensions_update();
-    assert(atexit(brenda_terminal_deinit) == 0);
+    update_screen_dimensions();
+    assert(atexit(brenda_deinit_terminal) == 0);
     assert(pipe_open(&state.pipe));
 
     struct sigaction sa = {0};
-    sa.sa_handler = signal_winch_handle;
+    sa.sa_handler = handle_winch_signal;
     sa.sa_flags = SA_RESTART;
     assert(sigaction(SIGWINCH, &sa, NULL) == 0);
 
@@ -81,7 +81,7 @@ void brenda_terminal_init(Brenda_TerminalConfig config) {
     state.tmp = arena_init(MB(16));
 }
 
-static void screen_dimensions_update(void) {
+static void update_screen_dimensions(void) {
     struct winsize ws = {0};
     assert(ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == 0);
 
@@ -89,13 +89,13 @@ static void screen_dimensions_update(void) {
     state.height = ws.ws_row;
 }
 
-static void root_clip_update(void) {
+static void update_root_clip(void) {
     Brenda_Rectangle r = {.w = state.width, .h = state.height};
     state.clips.items[0] = r;
 }
 
-void brenda_terminal_deinit(void) {
-    if (state.alreadly_deinited) return;
+void brenda_deinit_terminal(void) {
+    if (state.already_deinitialized) return;
 
     assert(sigaction(SIGWINCH, &state.original_winch_action, NULL) == 0);
     assert(tcsetattr(STDIN_FILENO, TCSAFLUSH, &state.original_terminal) == 0);
@@ -121,64 +121,64 @@ void brenda_terminal_deinit(void) {
     list_free(state.input_bytes);
 
     arena_destroy(state.tmp);
-    state.alreadly_deinited = true;
+    state.already_deinitialized = true;
 }
 
-void brenda_cursor_show(void) { state.cursor.is_visible = true; }
-void brenda_cursor_hide(void) { state.cursor.is_visible = false; }
-void brenda_cursor_set_position(i32 x, i32 y) {
+void brenda_show_cursor(void) { state.cursor.is_visible = true; }
+void brenda_hide_cursor(void) { state.cursor.is_visible = false; }
+void brenda_set_cursor_position(i32 x, i32 y) {
     state.cursor.x = x;
     state.cursor.y = y;
 }
 
-static void signal_winch_handle(i32 signo) {
+static void handle_winch_signal(i32 signo) {
     write(state.pipe.write_fd, &signo, sizeof signo);
 }
 
-void brenda_terminal_set_fps(i32 fps) {
+void brenda_set_terminal_fps(i32 fps) {
     state.frame_interval_ns = fps <= 0 ? -1 : 1000000000ull / fps;
 }
 
-void brenda_frame_begin(void) {
-    state.saved_time = time_get_ms();
+void brenda_begin_frame(void) {
+    state.saved_time = get_time_ms();
 
     arena_clear(&state.tmp);
     list_clear(&state.frame_commands);
     list_clear(&state.events);
     for (isize i = 0; i < state.back_buffer.count; ++i)
-        state.back_buffer.items[i] = cell_empty();
+        state.back_buffer.items[i] = empty_cell();
 
-    events_poll(state.frame_interval_ns);
+    poll_events(state.frame_interval_ns);
 }
 
-static i64 time_get_ns(void) {
+static i64 get_time_ns(void) {
     struct timespec ts = {0};
     clock_gettime(CLOCK_MONOTONIC, &ts);
     return ts.tv_sec * 1000000000ull + ts.tv_nsec;
 }
 
-static i64 time_get_ms(void) {
-    return time_get_ns() / 1000000ull;
+static i64 get_time_ms(void) {
+    return get_time_ns() / 1000000ull;
 }
 
-void brenda_frame_end(void) {
-    frame_render();
+void brenda_end_frame(void) {
+    render_frame();
 
     s8 cursor_visibility;
     if (state.cursor.is_visible) {
-        cursor_move_emit(&state.frame_commands, state.cursor.y, state.cursor.x);
+        emit_cursor_move(&state.frame_commands, state.cursor.y, state.cursor.x);
         cursor_visibility = s8("\33[?25h");
     } else {
         cursor_visibility = s8("\33[?25l");
     }
     list_append_many(&state.frame_commands, cursor_visibility.s, cursor_visibility.len);
 
-    output_write(state.frame_commands.items, state.frame_commands.count);
-    state.delta_time = time_get_ms() - state.saved_time;
+    write_output(state.frame_commands.items, state.frame_commands.count);
+    state.delta_time = get_time_ms() - state.saved_time;
 }
 
 //TODO: maybe hash each row and compare hashes?
-static void frame_render(void) {
+static void render_frame(void) {
     Cell *back_items = state.back_buffer.items;
     Cell *front_items = state.front_buffer.items;
     u32 screen_w = state.width;
@@ -189,7 +189,7 @@ static void frame_render(void) {
 
         usize pos = row_start;
         while (pos < row_end) {
-            if (cell_equal(back_items[pos], front_items[pos])) {
+            if (equal_cells(back_items[pos], front_items[pos])) {
                 pos++;
                 continue;
             }
@@ -197,16 +197,16 @@ static void frame_render(void) {
             usize run_start = pos;
             Effect run_effect = back_items[run_start].effect;
             while (pos < row_end && 
-                !cell_equal(back_items[pos], front_items[pos]) &&
-                effect_equal(back_items[pos].effect, run_effect)) {
+                !equal_cells(back_items[pos], front_items[pos]) &&
+                equal_effects(back_items[pos].effect, run_effect)) {
                 pos++;
             }
 
             usize run_len = pos - run_start;
             u32 new_row = run_start / screen_w;
             u32 new_col = run_start % screen_w;
-            cursor_move_emit(&state.frame_commands, new_row, new_col);
-            cells_emit(&state.frame_commands, back_items, run_start, run_len);
+            emit_cursor_move(&state.frame_commands, new_row, new_col);
+            emit_cells(&state.frame_commands, back_items, run_start, run_len);
 
             memcpy(
                 front_items + run_start,
@@ -217,8 +217,8 @@ static void frame_render(void) {
     }
 }
 
-static void cells_emit(List(byte) *out, Cell *cells, usize start, usize len) {
-    effect_emit(out, cells[start].effect);
+static void emit_cells(List(byte) *out, Cell *cells, usize start, usize len) {
+    emit_effect(out, cells[start].effect);
 
     for (usize i = 0; i < len; i++) {
         Cell c = cells[start + i];
@@ -227,13 +227,13 @@ static void cells_emit(List(byte) *out, Cell *cells, usize start, usize len) {
         list_append_many(out, c.text_unit.utf8, c.text_unit.utf8_length);
     }
 
-    effect_reset(out);
+    emit_effect_reset(out);
 }
 
-static void effect_emit(List(byte) *out, Effect e) {
+static void emit_effect(List(byte) *out, Effect e) {
     if (e.flags == 0 && !e.fg.is_set && !e.bg.is_set) return;
 
-    Brenda_Stream s = brenda_stream_start_from_arena(&state.tmp, 64);
+    Brenda_Stream s = arena_start_stream(&state.tmp, 64);
     brenda_stream_format(&s, "\33[");
 
     if (e.flags & EFFECT_BOLD)          brenda_stream_format(&s, "1;");
@@ -254,31 +254,31 @@ static void effect_emit(List(byte) *out, Effect e) {
     list_append_many(out, result.s, result.len);
 }
 
-static void effect_reset(List(byte) *out) {
+static void emit_effect_reset(List(byte) *out) {
     s8 result = s8("\33[0m");
     list_append_many(out, result.s, result.len);
 }
 
-static void cursor_move_emit(List(byte) *a, u32 row, u32 col) {
-    Brenda_Stream s = brenda_stream_start_from_arena(&state.tmp, 64);
+static void emit_cursor_move(List(byte) *a, u32 row, u32 col) {
+    Brenda_Stream s = arena_start_stream(&state.tmp, 64);
     brenda_stream_format(&s, "\33[%u;%uH", row + 1, col + 1);
     s8 result = brenda_stream_end(s);
 
     list_append_many(a, result.s, result.len);
 }
 
-static void events_poll(i64 interval_ns) {
+static void poll_events(i64 interval_ns) {
     if (interval_ns <= 0) {
-        events_handle_available(-1);
+        handle_available_events(-1);
         if (state.input_bytes.count == 1 && state.input_bytes.items[0] == BRENDA_TERM_KEY_ESCAPE)
-            events_handle_available(5);
+            handle_available_events(5);
     } else {
-        i64 deadline_ns = time_get_ns() + interval_ns;
+        i64 deadline_ns = get_time_ns() + interval_ns;
         for (;;) {
-            i64 remaining_ns = deadline_ns - time_get_ns();
+            i64 remaining_ns = deadline_ns - get_time_ns();
             if (remaining_ns <= 0) break;
             i32 timeout_ms = (remaining_ns + 999999) / 1000000;
-            events_handle_available(timeout_ms);
+            handle_available_events(timeout_ms);
         }
     }
 
@@ -291,7 +291,7 @@ static void events_poll(i64 interval_ns) {
     }
 }
 
-static void events_handle_available(i32 timeout_ms) {
+static void handle_available_events(i32 timeout_ms) {
     #define PFD_SIZE 2
     struct pollfd pfd[PFD_SIZE] = {
         {.fd = state.pipe.read_fd, .events = POLLIN},
@@ -317,8 +317,8 @@ static void events_handle_available(i32 timeout_ms) {
         read(state.pipe.read_fd, &sig, sizeof sig);
         list_append(&state.events, ((Brenda_Event) {.type = BRENDA_EVENT_WINCH}));
 
-        screen_dimensions_update();
-        root_clip_update();
+        update_screen_dimensions();
+        update_root_clip();
 
         u32 new_size = state.width * state.height;
         list_resize(&state.back_buffer, new_size);
@@ -337,14 +337,14 @@ static void events_handle_available(i32 timeout_ms) {
         assert(n > 0 && "read non-positive amount of bytes from STDIN");
 
         list_append_many(&state.input_bytes, buffer, n);
-        input_parse_pending();
+        parse_pending_input();
     }
 }
 
 //TODO: support extended keyboard protocol
 //TODO: add syncronized output
 //TODO: support OSC 8 hyperlinks
-static void input_parse_pending(void) {
+static void parse_pending_input(void) {
     byte *start = state.input_bytes.items;
     byte *p = start;
     byte *end = start + state.input_bytes.count;
@@ -354,14 +354,14 @@ static void input_parse_pending(void) {
         Brenda_Event e = { .type = BRENDA_EVENT_NONE };
 
         if (*p != BRENDA_TERM_KEY_ESCAPE) {
-            if (!input_unit_parse(&p, end, &e)) break;
+            if (!parse_input_unit(&p, end, &e)) break;
         } else if (end - p <= 1) {
             break;
         } else if (p[1] == '[' || p[1] == 'O') {
-            if (!escape_parse(&p, end, &e)) break;
+            if (!parse_escape(&p, end, &e)) break;
         } else {
             byte *alt_input = p + 1;
-            if (!input_unit_parse(&alt_input, end, &e)) break;
+            if (!parse_input_unit(&alt_input, end, &e)) break;
             e.modifiers |= BRENDA_MODIFIER_ALT;
             p = alt_input;
         }
@@ -382,7 +382,7 @@ static void input_parse_pending(void) {
 }
 
 // UTF-8 text or a single-byte terminal control key.
-static b32 input_unit_parse(byte **p, byte *end, Brenda_Event *e) {
+static b32 parse_input_unit(byte **p, byte *end, Brenda_Event *e) {
     u8 value = (u8)**p;
 
     if (value == 127) {
@@ -408,17 +408,17 @@ static b32 input_unit_parse(byte **p, byte *end, Brenda_Event *e) {
         return true;
     }
 
-    return text_parse(p, end, e);
+    return parse_text(p, end, e);
 }
 
 // CSI (ESC [) or SS3 (ESC O) terminal sequence.
-static b32 escape_parse(byte **p, byte *end, Brenda_Event *e) {
+static b32 parse_escape(byte **p, byte *end, Brenda_Event *e) {
     byte *start = *p;
     assert(end - start >= 2);
     assert(start[1] == '[' || start[1] == 'O');
 
-    if (mouse_parse(p, end, e)) return true;
-    if (term_key_parse(p, end, e)) return true;
+    if (parse_mouse(p, end, e)) return true;
+    if (parse_term_key(p, end, e)) return true;
 
     // Getting rid of unknown sequence
     for (byte *it = start + 2; it < end; ++it) {
@@ -432,7 +432,7 @@ static b32 escape_parse(byte **p, byte *end, Brenda_Event *e) {
 }
 
 // SGR mouse sequence: CSI < button ; x ; y M/m.
-static b32 mouse_parse(byte **p, byte *end, Brenda_Event *e) {
+static b32 parse_mouse(byte **p, byte *end, Brenda_Event *e) {
     byte *start = *p;
     isize n = end - start;
     if (n < 9 || memcmp(start, "\33[<", 3) != 0) return false;
@@ -471,7 +471,7 @@ static b32 mouse_parse(byte **p, byte *end, Brenda_Event *e) {
 }
 
 // CSI or SS3 navigation, editing and function key.
-static b32 term_key_parse(byte **p, byte *end, Brenda_Event *e) {
+static b32 parse_term_key(byte **p, byte *end, Brenda_Event *e) {
     byte *start = *p;
     isize n = end - start;
     if (n < 3) return false;
@@ -571,20 +571,20 @@ static b32 term_key_parse(byte **p, byte *end, Brenda_Event *e) {
 }
 
 // One UTF-8 encoded text unit.
-static b32 text_parse(byte **p, byte *end, Brenda_Event *e) {
+static b32 parse_text(byte **p, byte *end, Brenda_Event *e) {
     byte *start = *p;
-    u8 expected_length = utf8_expected_length(*start);
+    u8 expected_length = get_expected_utf8_length(*start);
     if (end - start < expected_length) return false;
 
-    //TODO: utf8_next also decodes width. It is not needed here.
-    TerminalTextUnit text_unit = utf8_next(p, start + expected_length);
+    //TODO: parse_next_utf8_unit also decodes width. It is not needed here.
+    TerminalTextUnit text_unit = parse_next_utf8_unit(p, start + expected_length);
     e->type = BRENDA_EVENT_UTF8;
     e->as.utf8.length = text_unit.utf8_length;
     memcpy(e->as.utf8.bytes, text_unit.utf8, text_unit.utf8_length);
     return true;
 }
 
-static inline Effect effect_from_text_effect(Brenda_TextEffect text_effect) {
+static inline Effect get_effect_from_text_effect(Brenda_TextEffect text_effect) {
     return (Effect) {
         .fg = text_effect.color,
         .flags = text_effect.flags,
@@ -601,20 +601,20 @@ static Cell cell(TerminalTextUnit text_unit, Effect effect) {
     return (Cell) { .text_unit = text_unit, .effect = effect };
 }
 
-static Cell cell_empty(void) { return (Cell) { .text_unit = text_unit_from_byte(' ') }; }
-static b32 cell_equal(Cell a, Cell b) { return memcmp(&a, &b, sizeof a) == 0; }
+static Cell empty_cell(void) { return (Cell) { .text_unit = text_unit_from_byte(' ') }; }
+static b32 equal_cells(Cell a, Cell b) { return memcmp(&a, &b, sizeof a) == 0; }
 
-static inline b32 effect_equal(Effect a, Effect b) { return memcmp(&a, &b, sizeof a) == 0; }
+static inline b32 equal_effects(Effect a, Effect b) { return memcmp(&a, &b, sizeof a) == 0; }
 
-static void text_unit_put(i32 x, i32 y, TerminalTextUnit text_unit, Effect effect) {
-    Brenda_Rectangle parent = brenda_clip_peek();
+static void put_text_unit(i32 x, i32 y, TerminalTextUnit text_unit, Effect effect) {
+    Brenda_Rectangle parent = brenda_peek_clip();
     if (!rectangle_contains_point(parent, x, y)) return;
 
     u32 w = state.width;
     Cell *cells = state.back_buffer.items;
 
     if (text_unit.cell_width == 1) {
-        wide_character_fix(x, y);
+        fix_wide_character(x, y);
         Cell *current = &cells[x + y * w];
         current->text_unit = text_unit;
         current->flags = CELL_REGULAR;
@@ -625,8 +625,8 @@ static void text_unit_put(i32 x, i32 y, TerminalTextUnit text_unit, Effect effec
     if (text_unit.cell_width == 2) {
         if ((u32)x + 1 >= w) return; // cannot fit
 
-        wide_character_fix(x, y);
-        wide_character_fix(x + 1, y);
+        fix_wide_character(x, y);
+        fix_wide_character(x + 1, y);
 
         Cell *lead = &cells[x + y * w];
         lead->text_unit = text_unit;
@@ -642,7 +642,7 @@ static void text_unit_put(i32 x, i32 y, TerminalTextUnit text_unit, Effect effec
     assert(false && "a terminal text unit has an invalid cell width");
 }
 
-static void wide_character_fix(i32 x, i32 y) {
+static void fix_wide_character(i32 x, i32 y) {
     u32 w = state.width;
     Cell *cells = state.back_buffer.items;
     Cell c = cells[x + y * w];
@@ -660,41 +660,41 @@ static void wide_character_fix(i32 x, i32 y) {
     }
 }
 
-i32 brenda_text_measure_width(byte *text, isize length) {
+i32 brenda_measure_text_width(byte *text, isize length) {
     i32 width = 0;
     byte *cursor = text;
     byte *end = text + length;
-    while (cursor < end) width += utf8_next(&cursor, end).cell_width;
+    while (cursor < end) width += parse_next_utf8_unit(&cursor, end).cell_width;
     return width;
 }
 
-void brenda_text_draw(i32 x, i32 y, byte *text, isize length, Brenda_TextEffect text_effect) {
-    Effect effect = effect_from_text_effect(text_effect);
+void brenda_draw_text(i32 x, i32 y, byte *text, isize length, Brenda_TextEffect text_effect) {
+    Effect effect = get_effect_from_text_effect(text_effect);
     byte *cursor = text;
     byte *end = text + length;
     while (cursor < end) {
-        TerminalTextUnit text_unit = utf8_next(&cursor, end);
-        text_unit_put(x, y, text_unit, effect);
+        TerminalTextUnit text_unit = parse_next_utf8_unit(&cursor, end);
+        put_text_unit(x, y, text_unit, effect);
         x += text_unit.cell_width;
     }
 }
 
-void brenda_clip_push(i32 x, i32 y, i32 w, i32 h) {
+void brenda_push_clip(i32 x, i32 y, i32 w, i32 h) {
     Brenda_Rectangle r = {x,y,w,h};
-    brenda_clip_push_rectangle(r);
+    brenda_push_clip_rectangle(r);
 }
 
-void brenda_clip_push_rectangle(Brenda_Rectangle r) {
-    Brenda_Rectangle parent = brenda_clip_peek();
-    Brenda_Rectangle clipped = rectangle_intersect(parent, r);
+void brenda_push_clip_rectangle(Brenda_Rectangle r) {
+    Brenda_Rectangle parent = brenda_peek_clip();
+    Brenda_Rectangle clipped = intersect_rectangles(parent, r);
     list_append(&state.clips, clipped);
 }
 
-Brenda_Rectangle brenda_clip_pop(void) { 
+Brenda_Rectangle brenda_pop_clip(void) {
     return list_pop(&state.clips);
 }
 
-Brenda_Rectangle brenda_clip_peek(void) {
+Brenda_Rectangle brenda_peek_clip(void) {
     return list_last(&state.clips);
 }
 
@@ -703,7 +703,7 @@ static inline b32 rectangle_contains_point(Brenda_Rectangle r, i32 x, i32 y) {
         && r.y <= y && y < r.y + r.h;
 }
 
-static inline Brenda_Rectangle rectangle_intersect(Brenda_Rectangle a, Brenda_Rectangle b) {
+static inline Brenda_Rectangle intersect_rectangles(Brenda_Rectangle a, Brenda_Rectangle b) {
     i32 x1 = MAX(a.x, b.x);
     i32 y1 = MAX(a.y, b.y);
     i32 x2 = MIN(a.x + a.w, b.x + b.w);
@@ -838,8 +838,8 @@ psh_s8 brenda_stream_end(Brenda_Stream s) {
     return s8(s.start, len);
 }
 
-void brenda_debug_draw(i32 x, i32 y, byte *fmt, ...) {
-    Brenda_Stream s = brenda_stream_start_from_arena(&state.tmp, 256);
+void brenda_draw_debug_text(i32 x, i32 y, byte *fmt, ...) {
+    Brenda_Stream s = arena_start_stream(&state.tmp, 256);
 
     va_list args;
     va_start(args, fmt);
@@ -850,16 +850,16 @@ void brenda_debug_draw(i32 x, i32 y, byte *fmt, ...) {
     byte *cursor = text.s;
     byte *end = text.s + text.len;
     while (cursor < end) {
-        TerminalTextUnit text_unit = utf8_next(&cursor, end);
-        debug_text_unit_put(x, y, text_unit);
+        TerminalTextUnit text_unit = parse_next_utf8_unit(&cursor, end);
+        put_debug_text_unit(x, y, text_unit);
         x += text_unit.cell_width;
     }
 }
 
-void brenda_line_draw(i32 x0, i32 y0, i32 x1, i32 y1, byte *text, isize length, Brenda_TextEffect text_effect) {
+void brenda_draw_line(i32 x0, i32 y0, i32 x1, i32 y1, byte *text, isize length, Brenda_TextEffect text_effect) {
     byte *cursor = text;
-    TerminalTextUnit text_unit = utf8_next(&cursor, text + length);
-    Effect effect = effect_from_text_effect(text_effect);
+    TerminalTextUnit text_unit = parse_next_utf8_unit(&cursor, text + length);
+    Effect effect = get_effect_from_text_effect(text_effect);
 
     if (x0 == x1) { // vertical
         if (y1 < y0) {
@@ -869,7 +869,7 @@ void brenda_line_draw(i32 x0, i32 y0, i32 x1, i32 y1, byte *text, isize length, 
         }
 
         for (i32 y = y0; y <= y1; y++) {
-            text_unit_put(x0, y, text_unit, effect);
+            put_text_unit(x0, y, text_unit, effect);
         }
     }
     else if (y0 == y1) { // horizontal
@@ -880,12 +880,12 @@ void brenda_line_draw(i32 x0, i32 y0, i32 x1, i32 y1, byte *text, isize length, 
         }
 
         for (i32 x = x0; x <= x1; x++) {
-            text_unit_put(x, y0, text_unit, effect);
+            put_text_unit(x, y0, text_unit, effect);
         }
     }
 }
 
-void brenda_box_draw(Brenda_Rectangle r, Brenda_TextEffect effect) {
+void brenda_draw_box(Brenda_Rectangle r, Brenda_TextEffect effect) {
     if (r.w < 2 || r.h < 2) return;
 
     i32 x0 = r.x;
@@ -893,21 +893,21 @@ void brenda_box_draw(Brenda_Rectangle r, Brenda_TextEffect effect) {
     i32 x1 = r.x + r.w - 1;
     i32 y1 = r.y + r.h - 1;
 
-    brenda_text_draw(x0, y0, (byte *)"┌", sizeof("┌") - 1, effect);
-    brenda_text_draw(x1, y0, (byte *)"┐", sizeof("┐") - 1, effect);
-    brenda_text_draw(x0, y1, (byte *)"└", sizeof("└") - 1, effect);
-    brenda_text_draw(x1, y1, (byte *)"┘", sizeof("┘") - 1, effect);
+    brenda_draw_text(x0, y0, (byte *)"┌", sizeof("┌") - 1, effect);
+    brenda_draw_text(x1, y0, (byte *)"┐", sizeof("┐") - 1, effect);
+    brenda_draw_text(x0, y1, (byte *)"└", sizeof("└") - 1, effect);
+    brenda_draw_text(x1, y1, (byte *)"┘", sizeof("┘") - 1, effect);
 
-    brenda_line_draw(x0 + 1, y0, x1 - 1, y0, (byte *)"─", sizeof("─") - 1, effect);
-    brenda_line_draw(x0 + 1, y1, x1 - 1, y1, (byte *)"─", sizeof("─") - 1, effect);
-    brenda_line_draw(x0, y0 + 1, x0, y1 - 1, (byte *)"│", sizeof("│") - 1, effect);
-    brenda_line_draw(x1, y0 + 1, x1, y1 - 1, (byte *)"│", sizeof("│") - 1, effect);
+    brenda_draw_line(x0 + 1, y0, x1 - 1, y0, (byte *)"─", sizeof("─") - 1, effect);
+    brenda_draw_line(x0 + 1, y1, x1 - 1, y1, (byte *)"─", sizeof("─") - 1, effect);
+    brenda_draw_line(x0, y0 + 1, x0, y1 - 1, (byte *)"│", sizeof("│") - 1, effect);
+    brenda_draw_line(x1, y0 + 1, x1, y1 - 1, (byte *)"│", sizeof("│") - 1, effect);
 }
 
-void brenda_rectangle_fill(Brenda_Rectangle r, Brenda_Color color) {
+void brenda_fill_rectangle(Brenda_Rectangle r, Brenda_Color color) {
     Effect effect = {.bg = color};
-    Brenda_Rectangle clip = brenda_clip_peek();
-    Brenda_Rectangle rectangle = rectangle_intersect(r, clip);
+    Brenda_Rectangle clip = brenda_peek_clip();
+    Brenda_Rectangle rectangle = intersect_rectangles(r, clip);
     Cell *cells = state.back_buffer.items;
 
     for (i32 y = rectangle.y; y < rectangle.y + rectangle.h; ++y) {
@@ -924,13 +924,13 @@ void brenda_rectangle_fill(Brenda_Rectangle r, Brenda_Color color) {
     }
 }
 
-static Brenda_Stream brenda_stream_start_from_arena(Arena *arena, usize size) {
+static Brenda_Stream arena_start_stream(Arena *arena, usize size) {
     byte *buffer = arena_push(arena, byte, size);
     assert(buffer && "arena does not have enough memory");
     return brenda_stream_start(buffer, size);
 }
 
-static void debug_text_unit_put(i32 x, i32 y, TerminalTextUnit text_unit) {
+static void put_debug_text_unit(i32 x, i32 y, TerminalTextUnit text_unit) {
     u32 w = state.width;
     Cell *cells = state.back_buffer.items;
     cells[x + y * w] = cell(text_unit, (Effect) {0});
@@ -953,7 +953,7 @@ static TerminalTextUnit text_unit_from_byte(byte value) {
     };
 }
 
-static u8 utf8_expected_length(byte first) {
+static u8 get_expected_utf8_length(byte first) {
     u8 value = (u8)first;
     if (value < 0x80) return 1;
     if ((value & 0xE0) == 0xC0) return 2;
@@ -962,7 +962,7 @@ static u8 utf8_expected_length(byte first) {
     return 1;
 }
 
-static TerminalTextUnit utf8_next(byte **cursor, byte *end) {
+static TerminalTextUnit parse_next_utf8_unit(byte **cursor, byte *end) {
     static TerminalTextUnit replacement = {
         .utf8 = {0xEF, 0xBF, 0xBD},
         .utf8_length = 3,
@@ -1009,10 +1009,10 @@ static TerminalTextUnit utf8_next(byte **cursor, byte *end) {
     }
 
     *cursor += length;
-    return text_unit_from_bytes(start, length, cell_width_from_unicode(codepoint));
+    return text_unit_from_bytes(start, length, get_cell_width_from_unicode(codepoint));
 }
 
-static u8 cell_width_from_unicode(Unicode codepoint) {
+static u8 get_cell_width_from_unicode(Unicode codepoint) {
     if (codepoint < 32 || (codepoint >= 0x7F && codepoint < 0xA0)) return 0;
 
     if ((codepoint >= 0x0300 && codepoint <= 0x036F) ||

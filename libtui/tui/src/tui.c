@@ -7,7 +7,7 @@ static inline Brenda_Color color_from_layla(Layla_Color color) {
 }
 static inline i32 text_measure(Layla_TextSlice text, void *userdata) {
     UNUSED(userdata);
-    return brenda_text_measure_width(text.items, text.count);
+    return brenda_measure_text_width(text.items, text.count);
 }
 
 static State state = {
@@ -47,22 +47,22 @@ void tui_init(Tui_Config config) {
     bindings->activate = binding_resolve(bindings->activate, TUI_BINDING_KEY(BRENDA_TERM_KEY_ENTER, 0));
     bindings->activate_alternate = binding_resolve(bindings->activate_alternate, TUI_BINDING_CHAR(' ', 0));
 
-    brenda_terminal_init(config.terminal);
-    brenda_terminal_set_fps(config.fps == 0 ? 60 : config.fps);
+    brenda_init_terminal(config.terminal);
+    brenda_set_terminal_fps(config.fps == 0 ? 60 : config.fps);
     layla_set_text_measure_function(text_measure, NULL);
 }
 
 void tui_deinit(void) {
-    brenda_terminal_deinit();
+    brenda_deinit_terminal();
     hash_map_free(&state.interaction_records);
     list_free(state.focus_order);
     list_free(state.unhandled_events);
 }
 
 Tui_EventSlice tui_frame_begin(void) {
-    brenda_frame_begin();
-    Tui_EventSlice unhandled_events = events_route(brenda_events_get());
-    layla_set_screen_dimensions(brenda_terminal_get_width(), brenda_terminal_get_height());
+    brenda_begin_frame();
+    Tui_EventSlice unhandled_events = events_route(brenda_get_events());
+    layla_set_screen_dimensions(brenda_get_terminal_width(), brenda_get_terminal_height());
     layla_begin_layout();
     return unhandled_events;
 }
@@ -71,7 +71,7 @@ void tui_frame_end(void) {
     Layla_CommandSlice commands = layla_end_layout();
     interactions_end();
     commands_draw(commands);
-    brenda_frame_end();
+    brenda_end_frame();
 }
 
 void tui_element_register(Layla_ElementID id, Tui_ElementConfig config) {
@@ -383,7 +383,7 @@ static inline void commands_draw(Layla_CommandSlice commands) {
         switch (command.type) {
             case LAYLA_CMD_RECTANGLE: {
                 Layla_CommandRectangle rectangle = command.as.rectangle;
-                brenda_rectangle_fill(
+                brenda_fill_rectangle(
                     (Brenda_Rectangle) {.x = rectangle.x, .y = rectangle.y, .w = rectangle.w, .h = rectangle.h},
                     color_from_layla(rectangle.color)
                 );
@@ -394,7 +394,7 @@ static inline void commands_draw(Layla_CommandSlice commands) {
                 Brenda_TextEffect effect = {
                     .color = color_from_layla(text.color),
                 };
-                brenda_text_draw(text.x, text.y, text.slice.items, text.slice.count, effect);
+                brenda_draw_text(text.x, text.y, text.slice.items, text.slice.count, effect);
                 break;
             }
             case LAYLA_CMD_BORDER: {
@@ -403,15 +403,15 @@ static inline void commands_draw(Layla_CommandSlice commands) {
                 Brenda_TextEffect effect = {
                     .color = color_from_layla(border.color),
                 };
-                brenda_box_draw(rectangle, effect);
+                brenda_draw_box(rectangle, effect);
                 break;
             }
             case LAYLA_CMD_CLIP_START: {
                 Layla_CommandClipStart clip = command.as.clip_start;
-                brenda_clip_push(clip.x, clip.y, clip.w, clip.h);
+                brenda_push_clip(clip.x, clip.y, clip.w, clip.h);
                 break;
             }
-            case LAYLA_CMD_CLIP_END: brenda_clip_pop(); break;
+            case LAYLA_CMD_CLIP_END: brenda_pop_clip(); break;
             case LAYLA_CMD_CUSTOM: break;
         }
     }

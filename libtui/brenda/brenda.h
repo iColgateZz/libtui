@@ -123,38 +123,38 @@ typedef struct {
     byte *end;
 } Brenda_Stream;
 
-Brenda_EventSlice brenda_events_get(void);
+Brenda_EventSlice brenda_get_events(void);
 
-void brenda_clip_push(i32 x, i32 y, i32 w, i32 h);
-void brenda_clip_push_rectangle(Brenda_Rectangle rectangle);
-Brenda_Rectangle brenda_clip_pop(void);
-Brenda_Rectangle brenda_clip_peek(void);
+void brenda_push_clip(i32 x, i32 y, i32 w, i32 h);
+void brenda_push_clip_rectangle(Brenda_Rectangle rectangle);
+Brenda_Rectangle brenda_pop_clip(void);
+Brenda_Rectangle brenda_peek_clip(void);
 
-void brenda_terminal_init(Brenda_TerminalConfig config);
-void brenda_terminal_deinit(void);
-void brenda_terminal_set_fps(i32 fps);
-u32 brenda_terminal_get_width(void);
-u32 brenda_terminal_get_height(void);
+void brenda_init_terminal(Brenda_TerminalConfig config);
+void brenda_deinit_terminal(void);
+void brenda_set_terminal_fps(i32 fps);
+u32 brenda_get_terminal_width(void);
+u32 brenda_get_terminal_height(void);
 
-void brenda_cursor_show(void);
-void brenda_cursor_hide(void);
-void brenda_cursor_set_position(i32 x, i32 y);
+void brenda_show_cursor(void);
+void brenda_hide_cursor(void);
+void brenda_set_cursor_position(i32 x, i32 y);
 
-void brenda_frame_begin(void);
-void brenda_frame_end(void);
-u64 brenda_frame_get_delta_time(void);
+void brenda_begin_frame(void);
+void brenda_end_frame(void);
+u64 brenda_get_frame_delta_time(void);
 
-i32 brenda_text_measure_width(byte *text, isize length);
-void brenda_text_draw(i32 x, i32 y, byte *text, isize length, Brenda_TextEffect effect);
-void brenda_line_draw(i32 x0, i32 y0, i32 x1, i32 y1, byte *utf8, isize byte_count, Brenda_TextEffect effect);
-void brenda_box_draw(Brenda_Rectangle rectangle, Brenda_TextEffect effect);
-void brenda_rectangle_fill(Brenda_Rectangle rectangle, Brenda_Color color);
+i32 brenda_measure_text_width(byte *text, isize length);
+void brenda_draw_text(i32 x, i32 y, byte *text, isize length, Brenda_TextEffect effect);
+void brenda_draw_line(i32 x0, i32 y0, i32 x1, i32 y1, byte *utf8, isize byte_count, Brenda_TextEffect effect);
+void brenda_draw_box(Brenda_Rectangle rectangle, Brenda_TextEffect effect);
+void brenda_fill_rectangle(Brenda_Rectangle rectangle, Brenda_Color color);
 
 byte *brenda_format(byte *cursor, byte *end, byte *format, ...);
 Brenda_Stream brenda_stream_start(byte *buffer, usize size);
 void brenda_stream_format(Brenda_Stream *stream, byte *format, ...);
 psh_s8 brenda_stream_end(Brenda_Stream stream);
 
-void brenda_debug_draw(i32 x, i32 y, byte *format, ...);
+void brenda_draw_debug_text(i32 x, i32 y, byte *format, ...);
 
 #endif

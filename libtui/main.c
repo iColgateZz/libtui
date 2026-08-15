@@ -15,7 +15,7 @@ enum {
 
 static i32 text_measure(Layla_TextSlice text, void *userdata) {
     UNUSED(userdata);
-    return brenda_text_measure_width(text.items, text.count);
+    return brenda_measure_text_width(text.items, text.count);
 }
 
 static b32 button(Layla_ElementID id, Layla_TextSlice label) {
@@ -43,13 +43,13 @@ static b32 button(Layla_ElementID id, Layla_TextSlice label) {
 
 i32 main(void) {
     layla_set_text_measure_function(text_measure, NULL);
-    brenda_terminal_init((Brenda_TerminalConfig) {0});
-    brenda_terminal_set_fps(60);
+    brenda_init_terminal((Brenda_TerminalConfig) {0});
+    brenda_set_terminal_fps(60);
 
     b32 quit = false;
     b32 tooltip_open = false;
     while (!quit) {
-        brenda_frame_begin();
+        brenda_begin_frame();
 
         Layla_CursorState cursor = layla_get_cursor_state();
         b32 cursor_is_down = cursor.interaction_state == LAYLA_CURSOR_PRESSED_THIS_FRAME ||
@@ -57,7 +57,7 @@ i32 main(void) {
         i32 scroll_delta_y = 0;
         b32 left_mouse_pressed = false;
         b32 right_mouse_pressed = false;
-        Brenda_EventSlice events = brenda_events_get();
+        Brenda_EventSlice events = brenda_get_events();
         for (isize i = 0; i < events.count; ++i) {
             Brenda_Event event = events.items[i];
             if (event.type == BRENDA_EVENT_UTF8 
@@ -83,8 +83,8 @@ i32 main(void) {
         layla_set_scroll_offset(SCROLL_PANEL_ID, scroll_delta_y);
 
         {
-            u32 w = brenda_terminal_get_width();
-            u32 h = brenda_terminal_get_height();
+            u32 w = brenda_get_terminal_width();
+            u32 h = brenda_get_terminal_height();
             layla_set_screen_dimensions(w, h);
             layla_begin_layout();
 
@@ -164,14 +164,14 @@ i32 main(void) {
                 switch (cmd.type) {
                     case LAYLA_CMD_RECTANGLE: {
                         Layla_CommandRectangle rectangle = cmd.as.rectangle;
-                        brenda_rectangle_fill(*(Brenda_Rectangle *)&rectangle, *(Brenda_Color *)&rectangle.color);
+                        brenda_fill_rectangle(*(Brenda_Rectangle *)&rectangle, *(Brenda_Color *)&rectangle.color);
                         break;
                     }
 
                     case LAYLA_CMD_TEXT: {
                         Layla_CommandText text = cmd.as.text;
                         Brenda_TextEffect effect = { .color = *(Brenda_Color *)&text.color, };
-                        brenda_text_draw(text.x, text.y, text.slice.items, text.slice.count, effect);
+                        brenda_draw_text(text.x, text.y, text.slice.items, text.slice.count, effect);
                         break;
                     }
 
@@ -179,7 +179,7 @@ i32 main(void) {
                         Layla_CommandBorder border = cmd.as.border;
                         Brenda_Rectangle rectangle = *(Brenda_Rectangle *)&border;
                         Brenda_TextEffect effect = { .color = *(Brenda_Color *)&border.color, };
-                        brenda_box_draw(rectangle, effect);
+                        brenda_draw_box(rectangle, effect);
                         break;
                     }
 
@@ -189,12 +189,12 @@ i32 main(void) {
 
                     case LAYLA_CMD_CLIP_START: {
                         Layla_CommandClipStart clip_start = cmd.as.clip_start;
-                        brenda_clip_push_rectangle(*(Brenda_Rectangle *)&clip_start);
+                        brenda_push_clip_rectangle(*(Brenda_Rectangle *)&clip_start);
                         break;
                     }
 
                     case LAYLA_CMD_CLIP_END: {
-                        brenda_clip_pop();
+                        brenda_pop_clip();
                         break;
                     }
 
@@ -202,9 +202,9 @@ i32 main(void) {
                 }
             }
         }
-        brenda_frame_end();
+        brenda_end_frame();
     }
 
-    brenda_terminal_deinit();
+    brenda_deinit_terminal();
     return 0;
 }
