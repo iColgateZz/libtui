@@ -16,16 +16,6 @@ enum {
     CELL_WIDE_LEAD    = 0x02,
 };
 
-//TODO: why?
-enum {
-    EFFECT_BOLD          = BRENDA_TEXT_EFFECT_BOLD,
-    EFFECT_DIM           = BRENDA_TEXT_EFFECT_DIM,
-    EFFECT_ITALIC        = BRENDA_TEXT_EFFECT_ITALIC,
-    EFFECT_UNDERLINE     = BRENDA_TEXT_EFFECT_UNDERLINE,
-    EFFECT_INVERSE       = BRENDA_TEXT_EFFECT_INVERSE,
-    EFFECT_STRIKETHROUGH = BRENDA_TEXT_EFFECT_STRIKETHROUGH,
-};
-
 typedef u32 Unicode;
 
 typedef struct {
@@ -84,7 +74,7 @@ static inline TerminalTextUnit text_unit_from_byte(byte value);
 static inline u8 get_expected_utf8_length(byte first);
 static inline TerminalTextUnit parse_next_utf8_unit(byte **cursor, byte *end);
 static inline u8 get_cell_width_from_unicode(Unicode codepoint);
-static inline inline Effect get_effect_from_text_effect(Brenda_TextEffect text_effect);
+static inline Effect get_effect_from_text_effect(Brenda_TextEffect text_effect);
 static inline void effect_merge(Effect *effect, Effect new_effect);
 static inline Cell cell(TerminalTextUnit text_unit, Effect effect);
 static inline Cell empty_cell(void);
@@ -116,8 +106,8 @@ static inline byte *format_cstring(byte *cursor, byte *end, byte *text);
 static inline byte *format_string(byte *cursor, byte *end, s8 text);
 static inline void put_debug_text_unit(i32 x, i32 y, TerminalTextUnit text_unit);
 static inline Brenda_Stream arena_start_stream(Arena *arena, usize size);
-static inline  b32 rectangle_contains_point(Brenda_Rectangle rectangle, i32 x, i32 y);
-static inline  Brenda_Rectangle intersect_rectangles(Brenda_Rectangle a, Brenda_Rectangle b);
-static inline  b32 equal_effects(Effect a, Effect b);
+static inline b32 rectangle_contains_point(Brenda_Rectangle rectangle, i32 x, i32 y);
+static inline Brenda_Rectangle intersect_rectangles(Brenda_Rectangle a, Brenda_Rectangle b);
+static inline b32 equal_effects(Effect a, Effect b);
 
 #endif

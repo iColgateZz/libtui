@@ -236,12 +236,12 @@ static void emit_effect(List(byte) *out, Effect e) {
     Brenda_Stream s = arena_start_stream(&state.tmp, 64);
     brenda_stream_format(&s, "\33[");
 
-    if (e.flags & EFFECT_BOLD)          brenda_stream_format(&s, "1;");
-    if (e.flags & EFFECT_DIM)           brenda_stream_format(&s, "2;");
-    if (e.flags & EFFECT_ITALIC)        brenda_stream_format(&s, "3;");
-    if (e.flags & EFFECT_UNDERLINE)     brenda_stream_format(&s, "4;");
-    if (e.flags & EFFECT_INVERSE)       brenda_stream_format(&s, "7;");
-    if (e.flags & EFFECT_STRIKETHROUGH) brenda_stream_format(&s, "9;");
+    if (e.flags & BRENDA_TEXT_EFFECT_BOLD)          brenda_stream_format(&s, "1;");
+    if (e.flags & BRENDA_TEXT_EFFECT_DIM)           brenda_stream_format(&s, "2;");
+    if (e.flags & BRENDA_TEXT_EFFECT_ITALIC)        brenda_stream_format(&s, "3;");
+    if (e.flags & BRENDA_TEXT_EFFECT_UNDERLINE)     brenda_stream_format(&s, "4;");
+    if (e.flags & BRENDA_TEXT_EFFECT_INVERSE)       brenda_stream_format(&s, "7;");
+    if (e.flags & BRENDA_TEXT_EFFECT_STRIKETHROUGH) brenda_stream_format(&s, "9;");
 
     if (e.fg.is_set)
         brenda_stream_format(&s, "38;2;%u;%u;%u;", e.fg.r, e.fg.g, e.fg.b);
