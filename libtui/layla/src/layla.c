@@ -143,6 +143,14 @@ Layla_ElementData layla_get_element_data(Layla_ElementID id) {
     return record->data;
 }
 
+void layla_set_element_position(Layla_ElementID id, i32 x, i32 y) {
+    Node *node = get_node_by_element_id(id);
+    assert(node != NULL && "Layla element must be opened before its position is set");
+    node->x = x;
+    node->y = y;
+    node->position_is_set = true;
+}
+
 void layla_begin_layout(void) {
     // reset state
     state.nodes.count = 0;
@@ -387,12 +395,14 @@ static inline void floating_layout(Node *node) {
     // Same here
     floating_measure_size(node, attached, DIM_Y);
     container_fill_height(node);
-    node->x = attached->x
-              + resolve_alignment_position(floating.attach_point.parent.x, attached->w)
-              - resolve_alignment_position(floating.attach_point.element.x, node->w);
-    node->y = attached->y
-              + resolve_alignment_position(floating.attach_point.parent.y, attached->h)
-              - resolve_alignment_position(floating.attach_point.element.y, node->h);
+    if (!node->position_is_set) {
+        node->x = attached->x
+                  + resolve_alignment_position(floating.attach_point.parent.x, attached->w)
+                  - resolve_alignment_position(floating.attach_point.element.x, node->w);
+        node->y = attached->y
+                  + resolve_alignment_position(floating.attach_point.parent.y, attached->h)
+                  - resolve_alignment_position(floating.attach_point.element.y, node->h);
+    }
     container_positions(node);
     container_commands(node, node_get_rectangle(get_node_by_temp_id(ROOT_TEMP_ID)));
 }
@@ -630,13 +640,15 @@ static inline void container_positions(Node *node) {
 
     for (isize i = 0; i < children.count; ++i) {
         Node *child = get_node_by_index(children.offset + i);
-        *node_get_pos(child, main_dim) = cursor;
-        *node_get_pos(child, cross_dim) = *node_get_pos(node, cross_dim) + calculate_alignment_offset(
-            node_get_align_self(child),
-            *node_get_size(node, cross_dim),
-            cross_padding,
-            *node_get_size(child, cross_dim)
-        );
+        if (!child->position_is_set) {
+            *node_get_pos(child, main_dim) = cursor;
+            *node_get_pos(child, cross_dim) = *node_get_pos(node, cross_dim) + calculate_alignment_offset(
+                node_get_align_self(child),
+                *node_get_size(node, cross_dim),
+                cross_padding,
+                *node_get_size(child, cross_dim)
+            );
+        }
 
         content_bottom = MAX(content_bottom, child->y + child->h);
         cursor += *node_get_size(child, main_dim) + style.spacing;
@@ -982,6 +994,7 @@ static inline Node *get_node_by_temp_id(TempID id) {
     return &state.nodes.items[id];
 }
 
+//TODO: O(1) implementation?
 static inline Node *get_node_by_element_id(Layla_ElementID id) {
     if (id == LAYLA_ELEMENT_ID_NONE) return NULL;
 

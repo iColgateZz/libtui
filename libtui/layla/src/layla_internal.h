@@ -23,6 +23,7 @@ typedef struct {
     i32 min_w, min_h;
     ChildrenIndices children;
     u32 next_child_id_offset;
+    u8 position_is_set; // this may later become a flags field
     
     LAYLA_PACKED_ENUM {
         NODE_CONTAINER,

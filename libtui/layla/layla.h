@@ -353,6 +353,8 @@ Layla_ElementIDSlice layla_get_hovered_element_ids(void);
 Layla_ElementID layla_get_open_element_id(void);
 // Returns data from the last completed layout. During layout construction, this is the preceding frame's data.
 Layla_ElementData layla_get_element_data(Layla_ElementID id);
+// Sets an absolute position for an element in the current layout without changing its size.
+void layla_set_element_position(Layla_ElementID id, i32 x, i32 y);
 
 void layla_begin_layout(void);
 Layla_CommandSlice layla_end_layout(void);
