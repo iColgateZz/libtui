@@ -11,15 +11,25 @@ typedef struct {
     u32 generation;
 } InteractionRecord;
 
+typedef struct { i32 x, y; } DragPosition;
+
+typedef struct {
+    Tui_DragState state;
+    i32 cursor_start_x, cursor_start_y;
+} ActiveDrag;
+
 hash_map_def(Layla_ElementID, InteractionRecord)
+hash_map_def(Layla_ElementID, DragPosition)
 list_def(Layla_ElementID)
 list_def(Tui_Event)
 
 typedef struct {
     HashMap(Layla_ElementID, InteractionRecord) interaction_records;
+    HashMap(Layla_ElementID, DragPosition) drag_positions;
     List(Layla_ElementID) focus_order;
     List(Tui_Event) unhandled_events;
     Tui_Config config;
+    ActiveDrag active_drag;
     Layla_ElementID pressed_id;
     Layla_ElementID clicked_id;
     Layla_ElementID focused_id;
@@ -34,6 +44,7 @@ static inline i32 measure_text(Layla_TextSlice text, void *userdata);
 static inline Tui_Binding resolve_binding(Tui_Binding binding, Tui_Binding default_binding);
 static inline b32 binding_matches_event(Tui_Binding binding, Brenda_Event event);
 static inline InteractionRecord *get_interaction_record_by_id(Layla_ElementID id);
+static inline DragPosition *get_drag_position_by_id(Layla_ElementID id);
 static inline Layla_ElementID get_interaction_target_by_flags(u8 required_flags);
 static inline Tui_EventSlice route_events(Brenda_EventSlice events);
 static inline void end_interactions(void);

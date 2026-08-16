@@ -26,7 +26,6 @@ TODO: maybe add a function to put ascii characters. Fast path without utf8 decod
 
 TUI:
 
-TODO: Add dragging support with a captured element ID, drag start position, current position, delta, and release state.
 TODO: Add a text input widget with cursor movement, selection, multiline editing, wrapping, and configurable bindings.
 TODO: Add a scrollbar widget that reads and updates Layla scroll offsets.
 TODO: Add tabs and tab panels with mouse and keyboard navigation.
@@ -35,4 +34,3 @@ TODO: Add popup, dropdown, menu, and tooltip widgets using Layla floating contai
 TODO: Add focus scopes so modal and popup widgets can keep keyboard navigation inside themselves.
 TODO: Add directional focus navigation using Layla element rectangles.
 TODO: Add configurable default widget styles and themes instead of hardcoded colors and dimensions.
-

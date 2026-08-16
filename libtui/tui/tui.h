@@ -10,6 +10,7 @@ enum {
     TUI_ELEMENT_FOCUSABLE      = 1 << 2,
     TUI_ELEMENT_ACCEPTS_SCROLL = 1 << 3,
     TUI_ELEMENT_DISABLED       = 1 << 4,
+    TUI_ELEMENT_DRAGGABLE      = 1 << 5,
 };
 
 // Returning true indicates that command was handled.
@@ -54,13 +55,24 @@ typedef struct {
 } Tui_Config;
 
 typedef struct {
+    b32 draggable;
+    Layla_FloatingAttachTo attach_to;
+    struct {
+        Layla_FloatingAttachPoint parent;
+        Layla_FloatingAttachPoint element;
+    } attach_point;
+    Layla_CursorCaptureMode cursor_capture_mode;
+    i32 z_index;
+} Tui_Floating;
+
+typedef struct {
     u8 flags;
 } Tui_ElementConfig;
 
 typedef struct {
     Layla_ElementID id;
     Layla_ContainerStyle style;
-    Layla_Floating floating;
+    Tui_Floating floating;
     void *custom;
     u8 flags;
 } Tui_DivConfig;
@@ -94,6 +106,22 @@ typedef struct {
     isize count;
 } Tui_EventSlice;
 
+typedef enum {
+    TUI_DRAG_NONE,
+    TUI_DRAG_STARTED,
+    TUI_DRAGGING,
+    TUI_DRAG_RELEASED,
+} Tui_DragInteractionState;
+
+typedef struct {
+    Layla_ElementID element_id;
+    Tui_DragInteractionState interaction_state;
+    // Element position at the start of the current drag.
+    i32 start_x, start_y;
+    // Total displacement from the drag start position.
+    i32 delta_x, delta_y;
+} Tui_DragState;
+
 void tui_init(Tui_Config config);
 void tui_deinit(void);
 // Returns events that TUI did not consume. The slice remains valid until the next frame begins.
@@ -108,12 +136,13 @@ b32 tui_is_element_clicked(Layla_ElementID id);
 b32 tui_is_element_focused(Layla_ElementID id);
 void tui_focus_element(Layla_ElementID id);
 Layla_ElementID tui_get_focused_element_id(void);
+Tui_DragState tui_get_drag_state(Layla_ElementID id);
 
 void tui_open_div(Tui_DivConfig config);
 void tui_draw_text(Tui_TextConfig config);
 b32 tui_draw_button(Tui_ButtonConfig config);
 
-#define Tui_Div(...)                                                                                  \
+#define Tui_Div(...)                                                                                 \
     for (u8 _tui_latch = (tui_open_div((Tui_DivConfig) {                                             \
         .style.size.w = LAYLA_FIT(),                                                                 \
         .style.size.h = LAYLA_FIT(),                                                                 \
@@ -127,7 +156,7 @@ b32 tui_draw_button(Tui_ButtonConfig config);
 
 #define Tui_Button(...) tui_draw_button((Tui_ButtonConfig) {                                         \
     .style = {                                                                                       \
-        .size = {.w = LAYLA_FIT(), .h = LAYLA_FIT()},                                               \
+        .size = {.w = LAYLA_FIT(), .h = LAYLA_FIT()},                                                \
         .background = LAYLA_COLOR(70, 90, 180),                                                      \
         .padding = {.left = 1, .right = 1},                                                          \
         .border = {.width = 1, .color = LAYLA_COLOR(255, 255, 255)},                                 \

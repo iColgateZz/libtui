@@ -10,7 +10,32 @@ enum {
     TUI_EXAMPLE_INCREMENT_ID = 1,
     TUI_EXAMPLE_QUIT_ID,
     TUI_EXAMPLE_SCROLL_ID,
+    TUI_EXAMPLE_PURPLE_PANEL_ID,
+    TUI_EXAMPLE_GREEN_PANEL_ID,
 };
+
+void draggable_panel(i32 id, i32 z_index, Layla_Color color, Layla_TextSlice text) {
+    Tui_Div(
+        .id = id,
+        .floating = {
+            .draggable = true,
+            .attach_to = {.type = LAYLA_ATTACH_TO_ROOT},
+            .z_index = z_index,
+            .attach_point = {
+                .parent =  {.x = LAYLA_ALIGN_END, .y = LAYLA_ALIGN_START},
+                .element = {.x = LAYLA_ALIGN_END, .y = LAYLA_ALIGN_START},
+            },
+        },
+        .style = {
+            .size = {.w = LAYLA_FIXED(26), .h = LAYLA_FIXED(4)},
+            .background = color,
+            .padding = {.left = 1, .right = 1, .top = 1},
+            .border = {.width = 1, .color = LAYLA_COLOR(210, 160, 255)},
+        },
+    ) {
+        Tui_Text(.text = text);
+    }
+}
 
 i32 main(void) {
     tui_init((Tui_Config) {.fps = 60});
@@ -68,6 +93,9 @@ i32 main(void) {
                 Tui_Text(.text = LAYLA_TEXT_SLICE("Unhandled Brenda events remain available to the application."));
                 Tui_Text(.text = LAYLA_TEXT_SLICE("The Layla command adapter is also automatic."));
             }
+
+            draggable_panel(TUI_EXAMPLE_PURPLE_PANEL_ID, 10, LAYLA_COLOR(90, 55, 120), LAYLA_TEXT_SLICE("Drag me with the mouse"));
+            draggable_panel(TUI_EXAMPLE_GREEN_PANEL_ID,  11, LAYLA_COLOR(35, 100, 80), LAYLA_TEXT_SLICE("Drag this panel too"));
         }
 
         tui_end_frame();

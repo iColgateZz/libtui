@@ -15,6 +15,10 @@ static State state = {
         .key_hash = hash_element_id,
         .key_equal = equal_element_ids,
     },
+    .drag_positions = {
+        .key_hash = hash_element_id,
+        .key_equal = equal_element_ids,
+    },
 };
 
 static inline Tui_Binding resolve_binding(Tui_Binding binding, Tui_Binding default_binding) {
@@ -55,6 +59,7 @@ void tui_init(Tui_Config config) {
 void tui_deinit(void) {
     brenda_deinit_terminal();
     hash_map_free(&state.interaction_records);
+    hash_map_free(&state.drag_positions);
     list_free(state.focus_order);
     list_free(state.unhandled_events);
 }
@@ -82,6 +87,11 @@ void tui_register_element(Layla_ElementID id, Tui_ElementConfig config) {
     state.registered_count++;
 
     if (config.flags & TUI_ELEMENT_FOCUSABLE) list_append(&state.focus_order, id);
+
+    DragPosition *position = get_drag_position_by_id(id);
+    if (position != NULL && (config.flags & TUI_ELEMENT_DRAGGABLE)) {
+        layla_set_element_position(id, position->x, position->y);
+    }
 }
 
 b32 tui_is_element_hovered(Layla_ElementID id) {
@@ -121,6 +131,14 @@ void tui_focus_element(Layla_ElementID id) {
 
 Layla_ElementID tui_get_focused_element_id(void) { return state.focused_id; }
 
+Tui_DragState tui_get_drag_state(Layla_ElementID id) {
+    if (state.active_drag.state.element_id == id) return state.active_drag.state;
+
+    DragPosition *position = get_drag_position_by_id(id);
+    if (position == NULL) return (Tui_DragState) {0};
+    return (Tui_DragState) {.element_id = id, .start_x = position->x, .start_y = position->y};
+}
+
 void tui_open_div(Tui_DivConfig config) {
     if (config.id == LAYLA_ELEMENT_ID_NONE) layla_open_container_element();
     else layla_open_container_element_with_id(config.id);
@@ -128,10 +146,20 @@ void tui_open_div(Tui_DivConfig config) {
     Layla_ElementID id = layla_get_open_element_id();
     if (config.style.scroll != LAYLA_SCROLL_NONE)
         config.flags |= TUI_ELEMENT_HOVERABLE | TUI_ELEMENT_ACCEPTS_SCROLL;
+    if (config.floating.attach_to.type != LAYLA_ATTACH_TO_NONE && config.floating.draggable)
+        config.flags |= TUI_ELEMENT_DRAGGABLE;
     tui_register_element(id, (Tui_ElementConfig) {.flags = config.flags});
     layla_configure_container_element((Layla_ContainerConfig) {
         .style = config.style,
-        .floating = config.floating,
+        .floating = {
+            .attach_to = config.floating.attach_to,
+            .attach_point = {
+                .parent = config.floating.attach_point.parent,
+                .element = config.floating.attach_point.element,
+            },
+            .cursor_capture_mode = config.floating.cursor_capture_mode,
+            .z_index = config.floating.z_index,
+        },
         .custom = config.custom,
     });
 }
@@ -175,6 +203,12 @@ static inline InteractionRecord *get_interaction_record_by_id(Layla_ElementID id
     return record != NULL && record->generation == state.generation ? record : NULL;
 }
 
+static inline DragPosition *get_drag_position_by_id(Layla_ElementID id) {
+    DragPosition *position = NULL;
+    hash_map_get(&state.drag_positions, id, &position);
+    return position;
+}
+
 static inline Layla_ElementID get_interaction_target_by_flags(u8 required_flags) {
     Layla_ElementIDSlice hovered = layla_get_hovered_element_ids();
 
@@ -200,6 +234,12 @@ static inline Tui_EventSlice route_events(Brenda_EventSlice events) {
     state.clicked_id = LAYLA_ELEMENT_ID_NONE;
     list_clear(&state.unhandled_events);
 
+    if (state.active_drag.state.interaction_state == TUI_DRAG_STARTED) {
+        state.active_drag.state.interaction_state = TUI_DRAGGING;
+    } else if (state.active_drag.state.interaction_state == TUI_DRAG_RELEASED) {
+        state.active_drag = (ActiveDrag) {0};
+    }
+
     Layla_CursorState cursor = layla_get_cursor_state();
     b32 cursor_is_down = cursor.interaction_state == LAYLA_CURSOR_PRESSED_THIS_FRAME
         || cursor.interaction_state == LAYLA_CURSOR_PRESSED;
@@ -216,19 +256,65 @@ static inline Tui_EventSlice route_events(Brenda_EventSlice events) {
                 layla_set_cursor_state(cursor.x, cursor.y, cursor_is_down);
                 cursor_was_set = true;
 
-                Layla_ElementID target = get_interaction_target_by_flags(TUI_ELEMENT_CLICKABLE);
-                Layla_ElementID pressed = state.pressed_id;
+                Layla_ElementID click_target = get_interaction_target_by_flags(TUI_ELEMENT_CLICKABLE);
+                Layla_ElementID previous_pressed_id = state.pressed_id;
+                Layla_ElementID previous_drag_id = state.active_drag.state.element_id;
+                Layla_ElementID drag_target = LAYLA_ELEMENT_ID_NONE;
                 if (event.as.mouse.pressed) {
-                    state.pressed_id = target;
-                    InteractionRecord *record = get_interaction_record_by_id(target);
+                    state.pressed_id = click_target;
+                    drag_target = get_interaction_target_by_flags(TUI_ELEMENT_DRAGGABLE);
+                    if (drag_target != LAYLA_ELEMENT_ID_NONE) {
+                        DragPosition *position = get_drag_position_by_id(drag_target);
+                        if (position == NULL) {
+                            Layla_ElementData data = layla_get_element_data(drag_target);
+                            state.active_drag.state.start_x = data.rectangle.x;
+                            state.active_drag.state.start_y = data.rectangle.y;
+                        } else {
+                            state.active_drag.state.start_x = position->x;
+                            state.active_drag.state.start_y = position->y;
+                        }
+
+                        state.active_drag.state.element_id = drag_target;
+                        state.active_drag.state.interaction_state = TUI_DRAG_STARTED;
+                        state.active_drag.state.delta_x = 0;
+                        state.active_drag.state.delta_y = 0;
+                        state.active_drag.cursor_start_x = cursor.x;
+                        state.active_drag.cursor_start_y = cursor.y;
+                    } else {
+                        state.active_drag = (ActiveDrag) {0};
+                    }
+
+                    InteractionRecord *record = get_interaction_record_by_id(click_target);
                     state.focused_id = record != NULL && (record->config.flags & TUI_ELEMENT_FOCUSABLE)
-                        ? target
+                        ? click_target
                         : LAYLA_ELEMENT_ID_NONE;
                 } else {
-                    if (target != LAYLA_ELEMENT_ID_NONE && target == state.pressed_id) state.clicked_id = target;
+                    Tui_DragState *drag = &state.active_drag.state;
+                    if (drag->element_id != LAYLA_ELEMENT_ID_NONE) {
+                        drag->delta_x = cursor.x - state.active_drag.cursor_start_x;
+                        drag->delta_y = cursor.y - state.active_drag.cursor_start_y;
+                        if (get_drag_position_by_id(drag->element_id) != NULL
+                            || drag->delta_x != 0 || drag->delta_y != 0) {
+                            hash_map_insert(&state.drag_positions, drag->element_id, ((DragPosition) {
+                                .x = drag->start_x + drag->delta_x,
+                                .y = drag->start_y + drag->delta_y,
+                            }));
+                        }
+                        drag->interaction_state = TUI_DRAG_RELEASED;
+                    }
+
+                    b32 element_was_dragged = drag->element_id != LAYLA_ELEMENT_ID_NONE
+                        && (drag->delta_x != 0 || drag->delta_y != 0);
+                    if (!element_was_dragged && click_target != LAYLA_ELEMENT_ID_NONE
+                        && click_target == state.pressed_id) state.clicked_id = click_target;
                     state.pressed_id = LAYLA_ELEMENT_ID_NONE;
                 }
-                if (target == LAYLA_ELEMENT_ID_NONE && pressed == LAYLA_ELEMENT_ID_NONE) {
+
+                b32 click_was_handled = click_target != LAYLA_ELEMENT_ID_NONE
+                    || previous_pressed_id != LAYLA_ELEMENT_ID_NONE;
+                b32 drag_was_handled = drag_target != LAYLA_ELEMENT_ID_NONE
+                    || previous_drag_id != LAYLA_ELEMENT_ID_NONE;
+                if (!click_was_handled && !drag_was_handled) {
                     list_append(&state.unhandled_events, ((Tui_Event) {
                         .target_id = get_interaction_target_by_flags(TUI_ELEMENT_HOVERABLE),
                         .event = event,
@@ -254,7 +340,16 @@ static inline Tui_EventSlice route_events(Brenda_EventSlice events) {
                 cursor_is_down = true;
                 layla_set_cursor_state(cursor.x, cursor.y, cursor_is_down);
                 cursor_was_set = true;
-                if (state.pressed_id == LAYLA_ELEMENT_ID_NONE) {
+                Tui_DragState *drag = &state.active_drag.state;
+                if (drag->element_id != LAYLA_ELEMENT_ID_NONE) {
+                    drag->delta_x = cursor.x - state.active_drag.cursor_start_x;
+                    drag->delta_y = cursor.y - state.active_drag.cursor_start_y;
+                    hash_map_insert(&state.drag_positions, drag->element_id, ((DragPosition) {
+                        .x = drag->start_x + drag->delta_x,
+                        .y = drag->start_y + drag->delta_y,
+                    }));
+                    drag->interaction_state = TUI_DRAGGING;
+                } else {
                     list_append(&state.unhandled_events, ((Tui_Event) {
                         .target_id = get_interaction_target_by_flags(TUI_ELEMENT_HOVERABLE),
                         .event = event,
@@ -340,6 +435,14 @@ static inline void end_interactions(void) {
     InteractionRecord *pressed = get_interaction_record_by_id(state.pressed_id);
     if (pressed == NULL || (pressed->config.flags & TUI_ELEMENT_DISABLED))
         state.pressed_id = LAYLA_ELEMENT_ID_NONE;
+
+    Layla_ElementID dragged_id = state.active_drag.state.element_id;
+    InteractionRecord *dragged = get_interaction_record_by_id(dragged_id);
+    if (dragged_id != LAYLA_ELEMENT_ID_NONE
+        && (dragged == NULL || (dragged->config.flags & TUI_ELEMENT_DISABLED)
+            || !(dragged->config.flags & TUI_ELEMENT_DRAGGABLE))) {
+        state.active_drag = (ActiveDrag) {0};
+    }
 }
 
 static inline void move_focus(i32 direction) {
