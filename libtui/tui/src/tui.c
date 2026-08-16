@@ -1,15 +1,5 @@
 #include "tui_internal.h"
 
-static inline u64 hash_element_id(Layla_ElementID id) { return id; }
-static inline b32 equal_element_ids(Layla_ElementID a, Layla_ElementID b) { return a == b; }
-static inline Brenda_Color color_from_layla(Layla_Color color) {
-    return (Brenda_Color) {.r = color.r, .g = color.g, .b = color.b, .is_set = color.is_set};
-}
-static inline i32 measure_text(Layla_TextSlice text, void *userdata) {
-    UNUSED(userdata);
-    return brenda_measure_text_width(text.items, text.count);
-}
-
 static State state = {
     .interaction_records = {
         .key_hash = hash_element_id,
@@ -21,26 +11,7 @@ static State state = {
     },
 };
 
-static inline Tui_Binding resolve_binding(Tui_Binding binding, Tui_Binding default_binding) {
-    return binding.type == TUI_BINDING_USE_DEFAULT ? default_binding : binding;
-}
-
-static inline b32 binding_matches_event(Tui_Binding binding, Brenda_Event event) {
-    if (binding.modifiers != event.modifiers) return false;
-
-    switch (binding.type) {
-        case TUI_BINDING_TERM_KEY:
-            return event.type == BRENDA_EVENT_TERM_KEY && event.as.term_key == binding.as.term_key;
-        case TUI_BINDING_CHARACTER:
-            return event.type == BRENDA_EVENT_UTF8
-                && event.as.utf8.length == 1
-                && event.as.utf8.bytes[0] == binding.as.character;
-        case TUI_BINDING_USE_DEFAULT:
-        case TUI_BINDING_DISABLED: return false;
-    }
-
-    return false;
-}
+// Program lifetime
 
 void tui_init(Tui_Config config) {
     state.config = config;
@@ -64,6 +35,8 @@ void tui_deinit(void) {
     list_free(state.unhandled_events);
 }
 
+// Frame loop
+
 Tui_EventSlice tui_begin_frame(void) {
     brenda_begin_frame();
     Tui_EventSlice unhandled_events = route_events(brenda_get_events());
@@ -78,6 +51,8 @@ void tui_end_frame(void) {
     draw_commands(commands);
     brenda_end_frame();
 }
+
+// Interaction state and event routing
 
 void tui_register_element(Layla_ElementID id, Tui_ElementConfig config) {
     hash_map_insert(&state.interaction_records, id, ((InteractionRecord) {
@@ -139,62 +114,28 @@ Tui_DragState tui_get_drag_state(Layla_ElementID id) {
     return (Tui_DragState) {.element_id = id, .start_x = position->x, .start_y = position->y};
 }
 
-void tui_open_div(Tui_DivConfig config) {
-    if (config.id == LAYLA_ELEMENT_ID_NONE) layla_open_container_element();
-    else layla_open_container_element_with_id(config.id);
+static inline u64 hash_element_id(Layla_ElementID id) { return id; }
+static inline b32 equal_element_ids(Layla_ElementID a, Layla_ElementID b) { return a == b; }
 
-    Layla_ElementID id = layla_get_open_element_id();
-    if (config.style.scroll != LAYLA_SCROLL_NONE)
-        config.flags |= TUI_ELEMENT_HOVERABLE | TUI_ELEMENT_ACCEPTS_SCROLL;
-    if (config.floating.attach_to.type != LAYLA_ATTACH_TO_NONE && config.floating.draggable)
-        config.flags |= TUI_ELEMENT_DRAGGABLE;
-    tui_register_element(id, (Tui_ElementConfig) {.flags = config.flags});
-    layla_configure_container_element((Layla_ContainerConfig) {
-        .style = config.style,
-        .floating = {
-            .attach_to = config.floating.attach_to,
-            .attach_point = {
-                .parent = config.floating.attach_point.parent,
-                .element = config.floating.attach_point.element,
-            },
-            .cursor_capture_mode = config.floating.cursor_capture_mode,
-            .z_index = config.floating.z_index,
-        },
-        .custom = config.custom,
-    });
+static inline Tui_Binding resolve_binding(Tui_Binding binding, Tui_Binding default_binding) {
+    return binding.type == TUI_BINDING_USE_DEFAULT ? default_binding : binding;
 }
 
-void tui_draw_text(Tui_TextConfig config) {
-    if (config.id == LAYLA_ELEMENT_ID_NONE) layla_open_text_element();
-    else layla_open_text_element_with_id(config.id);
+static inline b32 binding_matches_event(Tui_Binding binding, Brenda_Event event) {
+    if (binding.modifiers != event.modifiers) return false;
 
-    Layla_ElementID id = layla_get_open_element_id();
-    tui_register_element(id, (Tui_ElementConfig) {.flags = config.flags});
-    layla_configure_text_element((Layla_TextConfig) {
-        .text = config.text,
-        .style = config.style,
-        .userdata = config.userdata,
-    });
-    layla_close_element();
-}
+    switch (binding.type) {
+        case TUI_BINDING_TERM_KEY:
+            return event.type == BRENDA_EVENT_TERM_KEY && event.as.term_key == binding.as.term_key;
+        case TUI_BINDING_CHARACTER:
+            return event.type == BRENDA_EVENT_UTF8
+                && event.as.utf8.length == 1
+                && event.as.utf8.bytes[0] == binding.as.character;
+        case TUI_BINDING_USE_DEFAULT:
+        case TUI_BINDING_DISABLED: return false;
+    }
 
-b32 tui_draw_button(Tui_ButtonConfig config) {
-    if (config.id == LAYLA_ELEMENT_ID_NONE) layla_open_container_element();
-    else layla_open_container_element_with_id(config.id);
-
-    Layla_ElementID id = layla_get_open_element_id();
-    u8 flags = TUI_ELEMENT_HOVERABLE | TUI_ELEMENT_CLICKABLE | TUI_ELEMENT_FOCUSABLE;
-    if (config.disabled) flags |= TUI_ELEMENT_DISABLED;
-    tui_register_element(id, (Tui_ElementConfig) {.flags = flags});
-
-    if      (tui_is_element_pressed(id)) config.style.background = config.pressed_background;
-    else if (tui_is_element_hovered(id)) config.style.background = config.hovered_background;
-    else if (tui_is_element_focused(id)) config.style.background = config.focused_background;
-
-    layla_configure_container_element((Layla_ContainerConfig) {.style = config.style});
-    Tui_Text(.text = config.text, .style = config.text_style);
-    layla_close_element();
-    return tui_is_element_clicked(id);
+    return false;
 }
 
 static inline InteractionRecord *get_interaction_record_by_id(Layla_ElementID id) {
@@ -475,6 +416,17 @@ static inline void move_focus(i32 direction) {
     state.focused_id = LAYLA_ELEMENT_ID_NONE;
 }
 
+// Layla and Brenda adapter
+
+static inline Brenda_Color color_from_layla(Layla_Color color) {
+    return (Brenda_Color) {.r = color.r, .g = color.g, .b = color.b, .is_set = color.is_set};
+}
+
+static inline i32 measure_text(Layla_TextSlice text, void *userdata) {
+    UNUSED(userdata);
+    return brenda_measure_text_width(text.items, text.count);
+}
+
 static inline void draw_commands(Layla_CommandSlice commands) {
     for (isize i = 0; i < commands.count; ++i) {
         Layla_Command command = commands.items[i];
@@ -518,4 +470,64 @@ static inline void draw_commands(Layla_CommandSlice commands) {
             case LAYLA_CMD_CUSTOM: break;
         }
     }
+}
+
+// Widgets
+
+void tui_open_div(Tui_DivConfig config) {
+    if (config.id == LAYLA_ELEMENT_ID_NONE) layla_open_container_element();
+    else layla_open_container_element_with_id(config.id);
+
+    Layla_ElementID id = layla_get_open_element_id();
+    if (config.style.scroll != LAYLA_SCROLL_NONE)
+        config.flags |= TUI_ELEMENT_HOVERABLE | TUI_ELEMENT_ACCEPTS_SCROLL;
+    if (config.floating.attach_to.type != LAYLA_ATTACH_TO_NONE && config.floating.draggable)
+        config.flags |= TUI_ELEMENT_DRAGGABLE;
+    tui_register_element(id, (Tui_ElementConfig) {.flags = config.flags});
+    layla_configure_container_element((Layla_ContainerConfig) {
+        .style = config.style,
+        .floating = {
+            .attach_to = config.floating.attach_to,
+            .attach_point = {
+                .parent = config.floating.attach_point.parent,
+                .element = config.floating.attach_point.element,
+            },
+            .cursor_capture_mode = config.floating.cursor_capture_mode,
+            .z_index = config.floating.z_index,
+        },
+        .custom = config.custom,
+    });
+}
+
+void tui_draw_text(Tui_TextConfig config) {
+    if (config.id == LAYLA_ELEMENT_ID_NONE) layla_open_text_element();
+    else layla_open_text_element_with_id(config.id);
+
+    Layla_ElementID id = layla_get_open_element_id();
+    tui_register_element(id, (Tui_ElementConfig) {.flags = config.flags});
+    layla_configure_text_element((Layla_TextConfig) {
+        .text = config.text,
+        .style = config.style,
+        .userdata = config.userdata,
+    });
+    layla_close_element();
+}
+
+b32 tui_draw_button(Tui_ButtonConfig config) {
+    if (config.id == LAYLA_ELEMENT_ID_NONE) layla_open_container_element();
+    else layla_open_container_element_with_id(config.id);
+
+    Layla_ElementID id = layla_get_open_element_id();
+    u8 flags = TUI_ELEMENT_HOVERABLE | TUI_ELEMENT_CLICKABLE | TUI_ELEMENT_FOCUSABLE;
+    if (config.disabled) flags |= TUI_ELEMENT_DISABLED;
+    tui_register_element(id, (Tui_ElementConfig) {.flags = flags});
+
+    if      (tui_is_element_pressed(id)) config.style.background = config.pressed_background;
+    else if (tui_is_element_hovered(id)) config.style.background = config.hovered_background;
+    else if (tui_is_element_focused(id)) config.style.background = config.focused_background;
+
+    layla_configure_container_element((Layla_ContainerConfig) {.style = config.style});
+    Tui_Text(.text = config.text, .style = config.text_style);
+    layla_close_element();
+    return tui_is_element_clicked(id);
 }
