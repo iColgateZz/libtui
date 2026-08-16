@@ -912,14 +912,8 @@ void brenda_fill_rectangle(Brenda_Rectangle r, Brenda_Color color) {
 
     for (i32 y = rectangle.y; y < rectangle.y + rectangle.h; ++y) {
         for (i32 x = rectangle.x; x < rectangle.x + rectangle.w; ++x) {
-            Cell *current = &cells[x + y * state.width];
-            effect_merge(&current->effect, effect);
-
-            if ((current->flags & CELL_WIDE_LEAD) && (u32)x + 1 < state.width) {
-                effect_merge(&cells[x + 1 + y * state.width].effect, effect);
-            } else if ((current->flags & CELL_CONTINUATION) && x > 0) {
-                effect_merge(&cells[x - 1 + y * state.width].effect, effect);
-            }
+            fix_wide_character(x, y);
+            cells[x + y * state.width] = cell(text_unit_from_byte(' '), effect);
         }
     }
 }
