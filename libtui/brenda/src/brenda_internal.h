@@ -19,6 +19,11 @@ enum {
 typedef u32 Unicode;
 
 typedef struct {
+    Unicode value;
+    u8 is_valid;
+} Utf8Codepoint;
+
+typedef struct {
     byte utf8[4];
     u8 utf8_length;
     u8 cell_width;
@@ -72,7 +77,8 @@ typedef struct {
 static inline TerminalTextUnit text_unit_from_bytes(byte *utf8, u8 utf8_length, u8 cell_width);
 static inline TerminalTextUnit text_unit_from_byte(byte value);
 static inline u8 get_expected_utf8_length(byte first);
-static inline TerminalTextUnit parse_next_utf8_unit(byte **cursor, byte *end);
+static inline Utf8Codepoint decode_utf8_codepoint(byte **cursor, byte *end);
+static inline TerminalTextUnit decode_terminal_text_unit(byte **cursor, byte *end);
 static inline u8 get_cell_width_from_unicode(Unicode codepoint);
 static inline Effect get_effect_from_text_effect(Brenda_TextEffect text_effect);
 static inline void effect_merge(Effect *effect, Effect new_effect);

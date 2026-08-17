@@ -572,15 +572,15 @@ static b32 parse_term_key(byte **p, byte *end, Brenda_Event *e) {
 
 // One UTF-8 encoded text unit.
 static b32 parse_text(byte **p, byte *end, Brenda_Event *e) {
+    static byte replacement[] = {0xEF, 0xBF, 0xBD};
     byte *start = *p;
     u8 expected_length = get_expected_utf8_length(*start);
     if (end - start < expected_length) return false;
 
-    //TODO: parse_next_utf8_unit also decodes width. It is not needed here.
-    TerminalTextUnit text_unit = parse_next_utf8_unit(p, start + expected_length);
+    Utf8Codepoint codepoint = decode_utf8_codepoint(p, start + expected_length);
     e->type = BRENDA_EVENT_UTF8;
-    e->as.utf8.length = text_unit.utf8_length;
-    memcpy(e->as.utf8.bytes, text_unit.utf8, text_unit.utf8_length);
+    e->as.utf8.length = codepoint.is_valid ? *p - start : sizeof(replacement);
+    memcpy(e->as.utf8.bytes, codepoint.is_valid ? start : replacement, e->as.utf8.length);
     return true;
 }
 
@@ -664,7 +664,7 @@ i32 brenda_measure_text_width(byte *text, isize length) {
     i32 width = 0;
     byte *cursor = text;
     byte *end = text + length;
-    while (cursor < end) width += parse_next_utf8_unit(&cursor, end).cell_width;
+    while (cursor < end) width += decode_terminal_text_unit(&cursor, end).cell_width;
     return width;
 }
 
@@ -673,7 +673,7 @@ void brenda_draw_text(i32 x, i32 y, byte *text, isize length, Brenda_TextEffect 
     byte *cursor = text;
     byte *end = text + length;
     while (cursor < end) {
-        TerminalTextUnit text_unit = parse_next_utf8_unit(&cursor, end);
+        TerminalTextUnit text_unit = decode_terminal_text_unit(&cursor, end);
         put_text_unit(x, y, text_unit, effect);
         x += text_unit.cell_width;
     }
@@ -850,7 +850,7 @@ void brenda_draw_debug_text(i32 x, i32 y, byte *fmt, ...) {
     byte *cursor = text.s;
     byte *end = text.s + text.len;
     while (cursor < end) {
-        TerminalTextUnit text_unit = parse_next_utf8_unit(&cursor, end);
+        TerminalTextUnit text_unit = decode_terminal_text_unit(&cursor, end);
         put_debug_text_unit(x, y, text_unit);
         x += text_unit.cell_width;
     }
@@ -858,7 +858,7 @@ void brenda_draw_debug_text(i32 x, i32 y, byte *fmt, ...) {
 
 void brenda_draw_line(i32 x0, i32 y0, i32 x1, i32 y1, byte *text, isize length, Brenda_TextEffect text_effect) {
     byte *cursor = text;
-    TerminalTextUnit text_unit = parse_next_utf8_unit(&cursor, text + length);
+    TerminalTextUnit text_unit = decode_terminal_text_unit(&cursor, text + length);
     Effect effect = get_effect_from_text_effect(text_effect);
 
     if (x0 == x1) { // vertical
@@ -956,7 +956,52 @@ static u8 get_expected_utf8_length(byte first) {
     return 1;
 }
 
-static TerminalTextUnit parse_next_utf8_unit(byte **cursor, byte *end) {
+static Utf8Codepoint decode_utf8_codepoint(byte **cursor, byte *end) {
+    Utf8Codepoint result = {.value = 0xFFFD};
+    byte *start = *cursor;
+    if (start >= end) return result;
+
+    u8 first = start[0];
+    if (first < 0x80) {
+        *cursor += 1;
+        return (Utf8Codepoint) {.value = first, .is_valid = true};
+    }
+
+    u8 length = 0;
+
+    if ((first & 0xE0) == 0xC0) {
+        length = 2;
+        result.value = first & 0x1F;
+    } else if ((first & 0xF0) == 0xE0) {
+        length = 3;
+        result.value = first & 0x0F;
+    } else if ((first & 0xF8) == 0xF0) {
+        length = 4;
+        result.value = first & 0x07;
+    } else {
+        *cursor += 1;
+        return result;
+    }
+
+    if (start + length > end) {
+        *cursor = end;
+        return result;
+    }
+
+    for (u8 i = 1; i < length; ++i) {
+        if (((u8)start[i] & 0xC0) != 0x80) {
+            *cursor += i;
+            return result;
+        }
+        result.value = (result.value << 6) | ((u8)start[i] & 0x3F);
+    }
+
+    *cursor += length;
+    result.is_valid = true;
+    return result;
+}
+
+static TerminalTextUnit decode_terminal_text_unit(byte **cursor, byte *end) {
     static TerminalTextUnit replacement = {
         .utf8 = {0xEF, 0xBF, 0xBD},
         .utf8_length = 3,
@@ -964,46 +1009,10 @@ static TerminalTextUnit parse_next_utf8_unit(byte **cursor, byte *end) {
     };
 
     byte *start = *cursor;
-    if (start >= end) return replacement;
-
-    u8 first = start[0];
-    if (first < 0x80) {
-        *cursor += 1;
-        return text_unit_from_byte(first);
-    }
-
-    usize length = 0;
-    Unicode codepoint = 0;
-
-    if ((first & 0xE0) == 0xC0) {
-        length = 2;
-        codepoint = first & 0x1F;
-    } else if ((first & 0xF0) == 0xE0) {
-        length = 3;
-        codepoint = first & 0x0F;
-    } else if ((first & 0xF8) == 0xF0) {
-        length = 4;
-        codepoint = first & 0x07;
-    } else {
-        *cursor += 1;
-        return replacement;
-    }
-
-    if (start + length > end) {
-        *cursor = end;
-        return replacement;
-    }
-
-    for (usize i = 1; i < length; ++i) {
-        if (((u8)start[i] & 0xC0) != 0x80) {
-            *cursor += i;
-            return replacement;
-        }
-        codepoint = (codepoint << 6) | ((u8)start[i] & 0x3F);
-    }
-
-    *cursor += length;
-    return text_unit_from_bytes(start, length, get_cell_width_from_unicode(codepoint));
+    Utf8Codepoint codepoint = decode_utf8_codepoint(cursor, end);
+    if (!codepoint.is_valid) return replacement;
+    if (codepoint.value < 0x80) return text_unit_from_byte((byte)codepoint.value);
+    return text_unit_from_bytes(start, (u8)(*cursor - start), get_cell_width_from_unicode(codepoint.value));
 }
 
 static u8 get_cell_width_from_unicode(Unicode codepoint) {
@@ -1032,4 +1041,26 @@ static u8 get_cell_width_from_unicode(Unicode codepoint) {
     }
 
     return 1;
+}
+
+isize brenda_distance_to_codepoint_boundary(byte *text, isize length, isize offset, Brenda_Utf8Direction direction) {
+    offset = CLAMP(offset, 0, length);
+
+    if (direction == BRENDA_UTF8_DIRECTION_FORWARD) {
+        byte *start = text + offset;
+        byte *next = start;
+        decode_utf8_codepoint(&next, text + length);
+        return next - start;
+    }
+
+    if (direction != BRENDA_UTF8_DIRECTION_BACKWARD) return 0;
+
+    byte *current = text;
+    byte *previous = text;
+    byte *position = text + offset;
+    while (current < position) {
+        previous = current;
+        decode_utf8_codepoint(&current, text + length);
+    }
+    return position - previous;
 }
