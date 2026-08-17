@@ -577,10 +577,10 @@ static b32 parse_text(byte **p, byte *end, Brenda_Event *e) {
     u8 expected_length = get_expected_utf8_length(*start);
     if (end - start < expected_length) return false;
 
-    Utf8Codepoint codepoint = decode_utf8_codepoint(p, start + expected_length);
+    b32 is_valid = decode_utf8_codepoint(p, start + expected_length, NULL);
     e->type = BRENDA_EVENT_UTF8;
-    e->as.utf8.length = codepoint.is_valid ? *p - start : sizeof(replacement);
-    memcpy(e->as.utf8.bytes, codepoint.is_valid ? start : replacement, e->as.utf8.length);
+    e->as.utf8.length = is_valid ? *p - start : sizeof(replacement);
+    memcpy(e->as.utf8.bytes, is_valid ? start : replacement, e->as.utf8.length);
     return true;
 }
 
@@ -956,49 +956,51 @@ static u8 get_expected_utf8_length(byte first) {
     return 1;
 }
 
-static Utf8Codepoint decode_utf8_codepoint(byte **cursor, byte *end) {
-    Utf8Codepoint result = {.value = 0xFFFD};
+static b32 decode_utf8_codepoint(byte **cursor, byte *end, Unicode *result) {
+    if (result != NULL) *result = 0xFFFD;
     byte *start = *cursor;
-    if (start >= end) return result;
+    if (start >= end) return false;
 
     u8 first = start[0];
     if (first < 0x80) {
         *cursor += 1;
-        return (Utf8Codepoint) {.value = first, .is_valid = true};
+        if (result != NULL) *result = first;
+        return true;
     }
 
     u8 length = 0;
+    Unicode value = 0;
 
     if ((first & 0xE0) == 0xC0) {
         length = 2;
-        result.value = first & 0x1F;
+        value = first & 0x1F;
     } else if ((first & 0xF0) == 0xE0) {
         length = 3;
-        result.value = first & 0x0F;
+        value = first & 0x0F;
     } else if ((first & 0xF8) == 0xF0) {
         length = 4;
-        result.value = first & 0x07;
+        value = first & 0x07;
     } else {
         *cursor += 1;
-        return result;
+        return false;
     }
 
     if (start + length > end) {
         *cursor = end;
-        return result;
+        return false;
     }
 
     for (u8 i = 1; i < length; ++i) {
         if (((u8)start[i] & 0xC0) != 0x80) {
             *cursor += i;
-            return result;
+            return false;
         }
-        result.value = (result.value << 6) | ((u8)start[i] & 0x3F);
+        value = (value << 6) | ((u8)start[i] & 0x3F);
     }
 
     *cursor += length;
-    result.is_valid = true;
-    return result;
+    if (result != NULL) *result = value;
+    return true;
 }
 
 static TerminalTextUnit decode_terminal_text_unit(byte **cursor, byte *end) {
@@ -1009,10 +1011,10 @@ static TerminalTextUnit decode_terminal_text_unit(byte **cursor, byte *end) {
     };
 
     byte *start = *cursor;
-    Utf8Codepoint codepoint = decode_utf8_codepoint(cursor, end);
-    if (!codepoint.is_valid) return replacement;
-    if (codepoint.value < 0x80) return text_unit_from_byte((byte)codepoint.value);
-    return text_unit_from_bytes(start, (u8)(*cursor - start), get_cell_width_from_unicode(codepoint.value));
+    Unicode codepoint = 0;
+    if (!decode_utf8_codepoint(cursor, end, &codepoint)) return replacement;
+    if (codepoint < 0x80) return text_unit_from_byte(codepoint);
+    return text_unit_from_bytes(start, *cursor - start, get_cell_width_from_unicode(codepoint));
 }
 
 static u8 get_cell_width_from_unicode(Unicode codepoint) {
@@ -1049,7 +1051,7 @@ isize brenda_distance_to_codepoint_boundary(byte *text, isize length, isize offs
     if (direction == BRENDA_UTF8_DIRECTION_FORWARD) {
         byte *start = text + offset;
         byte *next = start;
-        decode_utf8_codepoint(&next, text + length);
+        decode_utf8_codepoint(&next, text + length, NULL);
         return next - start;
     }
 
@@ -1060,7 +1062,7 @@ isize brenda_distance_to_codepoint_boundary(byte *text, isize length, isize offs
     byte *position = text + offset;
     while (current < position) {
         previous = current;
-        decode_utf8_codepoint(&current, text + length);
+        decode_utf8_codepoint(&current, text + length, NULL);
     }
     return position - previous;
 }
