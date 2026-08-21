@@ -151,6 +151,7 @@ u64 brenda_get_frame_delta_time(void);
 
 i32 brenda_measure_text_width(byte *text, isize length);
 isize brenda_distance_to_codepoint_boundary(byte *text, isize length, isize offset, Brenda_Utf8Direction direction);
+void brenda_apply_text_effect(i32 x, i32 y, Brenda_TextEffect effect);
 void brenda_draw_text(i32 x, i32 y, byte *text, isize length, Brenda_TextEffect effect);
 void brenda_draw_line(i32 x0, i32 y0, i32 x1, i32 y1, byte *utf8, isize byte_count, Brenda_TextEffect effect);
 void brenda_draw_box(Brenda_Rectangle rectangle, Brenda_TextEffect effect);

@@ -9,6 +9,7 @@
 enum {
     TUI_EXAMPLE_INCREMENT_ID = 1,
     TUI_EXAMPLE_QUIT_ID,
+    TUI_EXAMPLE_TEXT_INPUT_ID,
     TUI_EXAMPLE_SCROLL_ID,
     TUI_EXAMPLE_PURPLE_PANEL_ID,
     TUI_EXAMPLE_GREEN_PANEL_ID,
@@ -42,16 +43,19 @@ i32 main(void) {
 
     i32 count = 0;
     b32 quit = false;
+    //TODO: same string 3 times!!!
+    //TODO: provide optional placeholder text
+    //TODO: otherwise the input zone should be empty
+    byte input_text[256] = "Click here and type. Long text wraps inside the input.";
+    Tui_TextInputState input = {
+        .items = input_text,
+        .count = sizeof("Click here and type. Long text wraps inside the input.") - 1,
+        .capacity = sizeof(input_text),
+        .cursor = sizeof("Click here and type. Long text wraps inside the input.") - 1,
+    };
 
     while (!quit) {
-        Tui_EventSlice events = tui_begin_frame();
-        for (isize i = 0; i < events.count; ++i) {
-            Brenda_Event event = events.items[i].event;
-            if (event.type == BRENDA_EVENT_UTF8 && event.as.utf8.length == 1
-                && event.as.utf8.bytes[0] == 'q') {
-                quit = true;
-            }
-        }
+        tui_begin_frame();
 
         byte count_text[64] = {0};
         i32 count_text_length = snprintf(count_text, sizeof(count_text), "Button clicks: %d", count);
@@ -75,6 +79,9 @@ i32 main(void) {
 
             Tui_Text(.text = ((Layla_TextSlice) {.items = count_text, .count = count_text_length}));
 
+            Tui_Text(.text = LAYLA_TEXT_SLICE("Text input (Escape releases focus):"));
+            Tui_TextInput(.id = TUI_EXAMPLE_TEXT_INPUT_ID, .state = &input);
+
             Tui_Div(
                 .id = TUI_EXAMPLE_SCROLL_ID,
                 .style = {
@@ -96,6 +103,15 @@ i32 main(void) {
 
             draggable_panel(TUI_EXAMPLE_PURPLE_PANEL_ID, 10, LAYLA_COLOR(90, 55, 120), LAYLA_TEXT_SLICE("Drag me with the mouse"));
             draggable_panel(TUI_EXAMPLE_GREEN_PANEL_ID,  11, LAYLA_COLOR(35, 100, 80), LAYLA_TEXT_SLICE("Drag this panel too"));
+        }
+
+        Tui_EventSlice events = tui_get_unhandled_events();
+        for (isize i = 0; i < events.count; ++i) {
+            Brenda_Event event = events.items[i].event;
+            if (event.type == BRENDA_EVENT_UTF8 && event.as.utf8.length == 1
+                && event.as.utf8.bytes[0] == 'q') {
+                quit = true;
+            }
         }
 
         tui_end_frame();

@@ -668,6 +668,21 @@ i32 brenda_measure_text_width(byte *text, isize length) {
     return width;
 }
 
+void brenda_apply_text_effect(i32 x, i32 y, Brenda_TextEffect text_effect) {
+    if (!rectangle_contains_point(brenda_peek_clip(), x, y)) return;
+
+    Cell *cells = state.back_buffer.items;
+    Cell *target = &cells[x + y * state.width];
+    Effect effect = get_effect_from_text_effect(text_effect);
+    effect_merge(&target->effect, effect);
+
+    if ((target->flags & CELL_WIDE_LEAD) && (u32)x + 1 < state.width) {
+        effect_merge(&cells[x + 1 + y * state.width].effect, effect);
+    } else if ((target->flags & CELL_CONTINUATION) && x > 0) {
+        effect_merge(&cells[x - 1 + y * state.width].effect, effect);
+    }
+}
+
 void brenda_draw_text(i32 x, i32 y, byte *text, isize length, Brenda_TextEffect text_effect) {
     Effect effect = get_effect_from_text_effect(text_effect);
     byte *cursor = text;

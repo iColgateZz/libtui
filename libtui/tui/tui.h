@@ -11,6 +11,7 @@ enum {
     TUI_ELEMENT_ACCEPTS_SCROLL = 1 << 3,
     TUI_ELEMENT_DISABLED       = 1 << 4,
     TUI_ELEMENT_DRAGGABLE      = 1 << 5,
+    TUI_ELEMENT_TEXT_INPUT     = 1 << 6,
 };
 
 // Returning true indicates that command was handled.
@@ -106,6 +107,9 @@ typedef struct {
     isize count;
 } Tui_EventSlice;
 
+// Return true when the event was handled and should not be exposed to the application.
+typedef b32 (*Tui_EventHandler)(Tui_Event event, void *userdata);
+
 typedef enum {
     TUI_DRAG_NONE,
     TUI_DRAG_STARTED,
@@ -122,12 +126,32 @@ typedef struct {
     i32 delta_x, delta_y;
 } Tui_DragState;
 
+typedef struct {
+    byte *items;
+    isize count;
+    isize capacity;
+    isize cursor;
+} Tui_TextInputState;
+
+typedef struct {
+    Layla_ElementID id;
+    Tui_TextInputState *state;
+    Layla_ContainerStyle style;
+    Layla_TextStyle text_style;
+    Layla_Color focused_background;
+    b32 disabled;
+} Tui_TextInputConfig;
+
 void tui_init(Tui_Config config);
 void tui_deinit(void);
-// Returns events that TUI did not consume. The slice remains valid until the next frame begins.
-Tui_EventSlice tui_begin_frame(void);
+void tui_begin_frame(void);
 // Ends Layla, draws its commands through Brenda, and ends the Brenda frame.
 void tui_end_frame(void);
+
+// Widgets call this while being declared to consume events routed to their element ID.
+void tui_consume_element_specific_events(Layla_ElementID id, Tui_EventHandler handler, void *userdata);
+// Call after declaring widgets. The slice remains valid until the next call or frame begins.
+Tui_EventSlice tui_get_unhandled_events(void);
 
 void tui_register_element(Layla_ElementID id, Tui_ElementConfig config);
 b32 tui_is_element_hovered(Layla_ElementID id);
@@ -141,6 +165,7 @@ Tui_DragState tui_get_drag_state(Layla_ElementID id);
 void tui_open_div(Tui_DivConfig config);
 void tui_draw_text(Tui_TextConfig config);
 b32 tui_draw_button(Tui_ButtonConfig config);
+b32 tui_draw_text_input(Tui_TextInputConfig config);
 
 #define Tui_Div(...)                                                                                 \
     for (u8 _tui_latch = (tui_open_div((Tui_DivConfig) {                                             \
@@ -165,6 +190,22 @@ b32 tui_draw_button(Tui_ButtonConfig config);
     .hovered_background = LAYLA_COLOR(100, 120, 220),                                                \
     .pressed_background = LAYLA_COLOR(45, 60, 130),                                                  \
     .focused_background = LAYLA_COLOR(100, 120, 220),                                                \
+    __VA_ARGS__                                                                                      \
+})
+
+#define Tui_TextInput(...) tui_draw_text_input((Tui_TextInputConfig) {                               \
+    .style = {                                                                                       \
+        .size = {.w = LAYLA_FILL(), .h = LAYLA_FIXED(5)},                                            \
+        .background = LAYLA_COLOR(35, 42, 55),                                                       \
+        .padding = {.left = 1, .right = 1},                                                          \
+        .border = {.width = 1, .color = LAYLA_COLOR(90, 105, 130)},                                  \
+        .direction = LAYLA_DIR_COL,                                                                  \
+    },                                                                                               \
+    .text_style = {                                                                                  \
+        .color = LAYLA_COLOR(255, 255, 255),                                                         \
+        .wrap_policy = LAYLA_TEXT_WRAP_CHARACTER,                                                    \
+    },                                                                                               \
+    .focused_background = LAYLA_COLOR(45, 55, 72),                                                   \
     __VA_ARGS__                                                                                      \
 })
 

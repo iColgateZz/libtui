@@ -18,15 +18,27 @@ typedef struct {
     i32 cursor_start_x, cursor_start_y;
 } ActiveDrag;
 
+typedef struct {
+    Tui_Event event;
+    b32 consumed;
+} RoutedEvent;
+
+typedef struct {
+    Tui_TextInputState *state;
+    b32 changed;
+} TextInputEventContext;
+
 hash_map_def(Layla_ElementID, InteractionRecord)
 hash_map_def(Layla_ElementID, DragPosition)
 list_def(Layla_ElementID)
 list_def(Tui_Event)
+list_def(RoutedEvent)
 
 typedef struct {
     HashMap(Layla_ElementID, InteractionRecord) interaction_records;
     HashMap(Layla_ElementID, DragPosition) drag_positions;
     List(Layla_ElementID) focus_order;
+    List(RoutedEvent) routed_events;
     List(Tui_Event) unhandled_events;
     Tui_Config config;
     ActiveDrag active_drag;
@@ -46,9 +58,10 @@ static inline b32 binding_matches_event(Tui_Binding binding, Brenda_Event event)
 static inline InteractionRecord *get_interaction_record_by_id(Layla_ElementID id);
 static inline DragPosition *get_drag_position_by_id(Layla_ElementID id);
 static inline Layla_ElementID get_interaction_target_by_flags(u8 required_flags);
-static inline Tui_EventSlice route_events(Brenda_EventSlice events);
+static inline void route_events(Brenda_EventSlice events);
 static inline void end_interactions(void);
 static inline void move_focus(i32 direction);
 static inline void draw_commands(Layla_CommandSlice commands);
+static inline b32 text_input_handle_event(Tui_Event event, void *userdata);
 
 #endif

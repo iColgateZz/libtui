@@ -32,17 +32,17 @@ void tui_deinit(void) {
     hash_map_free(&state.interaction_records);
     hash_map_free(&state.drag_positions);
     list_free(state.focus_order);
+    list_free(state.routed_events);
     list_free(state.unhandled_events);
 }
 
 // Frame loop
 
-Tui_EventSlice tui_begin_frame(void) {
+void tui_begin_frame(void) {
     brenda_begin_frame();
-    Tui_EventSlice unhandled_events = route_events(brenda_get_events());
+    route_events(brenda_get_events());
     layla_set_screen_dimensions(brenda_get_terminal_width(), brenda_get_terminal_height());
     layla_begin_layout();
-    return unhandled_events;
 }
 
 void tui_end_frame(void) {
@@ -114,6 +114,30 @@ Tui_DragState tui_get_drag_state(Layla_ElementID id) {
     return (Tui_DragState) {.element_id = id, .start_x = position->x, .start_y = position->y};
 }
 
+void tui_consume_element_specific_events(Layla_ElementID id, Tui_EventHandler handler, void *userdata) {
+    if (handler == NULL) return;
+
+    for (isize i = 0; i < state.routed_events.count; ++i) {
+        RoutedEvent *routed = &state.routed_events.items[i];
+        if (!routed->consumed && routed->event.target_id == id) {
+            routed->consumed = handler(routed->event, userdata);
+        }
+    }
+}
+
+Tui_EventSlice tui_get_unhandled_events(void) {
+    list_clear(&state.unhandled_events);
+    for (isize i = 0; i < state.routed_events.count; ++i) {
+        RoutedEvent routed = state.routed_events.items[i];
+        if (!routed.consumed) list_append(&state.unhandled_events, routed.event);
+    }
+
+    return (Tui_EventSlice) {
+        .items = state.unhandled_events.items,
+        .count = state.unhandled_events.count
+    };
+}
+
 static inline u64 hash_element_id(Layla_ElementID id) { return id; }
 static inline b32 equal_element_ids(Layla_ElementID a, Layla_ElementID b) { return a == b; }
 
@@ -171,8 +195,9 @@ static inline Layla_ElementID get_interaction_target_by_flags(u8 required_flags)
     return LAYLA_ELEMENT_ID_NONE;
 }
 
-static inline Tui_EventSlice route_events(Brenda_EventSlice events) {
+static inline void route_events(Brenda_EventSlice events) {
     state.clicked_id = LAYLA_ELEMENT_ID_NONE;
+    list_clear(&state.routed_events);
     list_clear(&state.unhandled_events);
 
     if (state.active_drag.state.interaction_state == TUI_DRAG_STARTED) {
@@ -198,6 +223,8 @@ static inline Tui_EventSlice route_events(Brenda_EventSlice events) {
                 cursor_was_set = true;
 
                 Layla_ElementID click_target = get_interaction_target_by_flags(TUI_ELEMENT_CLICKABLE);
+                Layla_ElementID focus_target = get_interaction_target_by_flags(
+                    TUI_ELEMENT_HOVERABLE | TUI_ELEMENT_FOCUSABLE);
                 Layla_ElementID previous_pressed_id = state.pressed_id;
                 Layla_ElementID previous_drag_id = state.active_drag.state.element_id;
                 Layla_ElementID drag_target = LAYLA_ELEMENT_ID_NONE;
@@ -225,10 +252,7 @@ static inline Tui_EventSlice route_events(Brenda_EventSlice events) {
                         state.active_drag = (ActiveDrag) {0};
                     }
 
-                    InteractionRecord *record = get_interaction_record_by_id(click_target);
-                    state.focused_id = record != NULL && (record->config.flags & TUI_ELEMENT_FOCUSABLE)
-                        ? click_target
-                        : LAYLA_ELEMENT_ID_NONE;
+                    state.focused_id = focus_target;
                 } else {
                     Tui_DragState *drag = &state.active_drag.state;
                     if (drag->element_id != LAYLA_ELEMENT_ID_NONE) {
@@ -256,10 +280,10 @@ static inline Tui_EventSlice route_events(Brenda_EventSlice events) {
                 b32 drag_was_handled = drag_target != LAYLA_ELEMENT_ID_NONE
                     || previous_drag_id != LAYLA_ELEMENT_ID_NONE;
                 if (!click_was_handled && !drag_was_handled) {
-                    list_append(&state.unhandled_events, ((Tui_Event) {
+                    list_append(&state.routed_events, ((RoutedEvent) {.event = {
                         .target_id = get_interaction_target_by_flags(TUI_ELEMENT_HOVERABLE),
                         .event = event,
-                    }));
+                    }}));
                 }
                 break;
             }
@@ -270,10 +294,10 @@ static inline Tui_EventSlice route_events(Brenda_EventSlice events) {
                 cursor.y = event.as.mouse.y;
                 layla_set_cursor_state(cursor.x, cursor.y, cursor_is_down);
                 cursor_was_set = true;
-                list_append(&state.unhandled_events, ((Tui_Event) {
+                list_append(&state.routed_events, ((RoutedEvent) {.event = {
                     .target_id = get_interaction_target_by_flags(TUI_ELEMENT_HOVERABLE),
                     .event = event,
-                }));
+                }}));
                 break;
             case BRENDA_EVENT_MOUSE_DRAG:
                 cursor.x = event.as.mouse.x;
@@ -291,10 +315,10 @@ static inline Tui_EventSlice route_events(Brenda_EventSlice events) {
                     }));
                     drag->interaction_state = TUI_DRAGGING;
                 } else {
-                    list_append(&state.unhandled_events, ((Tui_Event) {
+                    list_append(&state.routed_events, ((RoutedEvent) {.event = {
                         .target_id = get_interaction_target_by_flags(TUI_ELEMENT_HOVERABLE),
                         .event = event,
-                    }));
+                    }}));
                 }
                 break;
             case BRENDA_EVENT_SCROLL_UP:
@@ -310,10 +334,10 @@ static inline Tui_EventSlice route_events(Brenda_EventSlice events) {
                     i32 delta_y = event.type == BRENDA_EVENT_SCROLL_UP ? -1 : 1;
                     layla_update_scroll_offset(target, delta_y);
                 } else {
-                    list_append(&state.unhandled_events, ((Tui_Event) {
+                    list_append(&state.routed_events, ((RoutedEvent) {.event = {
                         .target_id = get_interaction_target_by_flags(TUI_ELEMENT_HOVERABLE),
                         .event = event,
-                    }));
+                    }}));
                 }
                 break;
             }
@@ -336,10 +360,10 @@ static inline Tui_EventSlice route_events(Brenda_EventSlice events) {
                             || event.type == BRENDA_EVENT_UTF8
                             ? state.focused_id
                             : LAYLA_ELEMENT_ID_NONE;
-                        list_append(&state.unhandled_events, ((Tui_Event) {
+                        list_append(&state.routed_events, ((RoutedEvent) {.event = {
                             .target_id = target_id,
                             .event = event,
-                        }));
+                        }}));
                     }
                 }
                 break;
@@ -361,11 +385,6 @@ static inline Tui_EventSlice route_events(Brenda_EventSlice events) {
     state.generation = next_generation;
     state.registered_count = 0;
     list_clear(&state.focus_order);
-
-    return (Tui_EventSlice) {
-        .items = state.unhandled_events.items,
-        .count = state.unhandled_events.count,
-    };
 }
 
 static inline void end_interactions(void) {
@@ -449,7 +468,62 @@ static inline void draw_commands(Layla_CommandSlice commands) {
                 Brenda_TextEffect effect = {
                     .color = color_from_layla(text.color),
                 };
-                brenda_draw_text(text.x, text.y, text.slice.items, text.slice.count, effect);
+
+                Layla_ElementData text_data = layla_get_element_data(command.id);
+                InteractionRecord *parent = get_interaction_record_by_id(text_data.parent_id);
+                Tui_TextInputState *input = parent != NULL && (parent->config.flags & TUI_ELEMENT_TEXT_INPUT)
+                    ? text.userdata
+                    : NULL;
+                if (input == NULL || state.focused_id != text_data.parent_id) {
+                    brenda_draw_text(text.x, text.y, text.slice.items, text.slice.count, effect);
+                    break;
+                }
+
+                if (input->count == 0) {
+                    effect.flags |= BRENDA_TEXT_EFFECT_UNDERLINE;
+                    brenda_draw_text(text.x, text.y, text.slice.items, text.slice.count, effect);
+                    break;
+                }
+
+                byte *cursor = input->items + input->cursor;
+                byte *slice_end = text.slice.items + text.slice.count;
+                if (cursor < text.slice.items || cursor >= slice_end) {
+                    brenda_draw_text(text.x, text.y, text.slice.items, text.slice.count, effect);
+
+                    b32 cursor_is_at_text_end = input->cursor == input->count;
+                    b32 cursor_is_before_newline = input->cursor < input->count && input->items[input->cursor] == '\n';
+                    if (cursor == slice_end && (cursor_is_at_text_end || cursor_is_before_newline)) {
+                        i32 cursor_x = text.x + brenda_measure_text_width(text.slice.items, text.slice.count);
+                        i32 cursor_y = text.y;
+                        if (cursor_x >= text_data.rectangle.x + text_data.rectangle.w) {
+                            cursor_x = text_data.rectangle.x;
+                            cursor_y++;
+                        }
+
+                        effect.flags |= BRENDA_TEXT_EFFECT_UNDERLINE;
+                        brenda_draw_text(cursor_x, cursor_y, " ", 1, effect);
+                    }
+                    break;
+                }
+
+                isize prefix_length = cursor - text.slice.items;
+                isize cursor_length = brenda_distance_to_codepoint_boundary(
+                    input->items, input->count, input->cursor, BRENDA_UTF8_DIRECTION_FORWARD);
+                cursor_length = MIN(cursor_length, slice_end - cursor);
+
+                i32 prefix_width = brenda_measure_text_width(text.slice.items, prefix_length);
+                i32 cursor_width = brenda_measure_text_width(cursor, cursor_length);
+                brenda_draw_text(text.x, text.y, text.slice.items, prefix_length, effect);
+                effect.flags |= BRENDA_TEXT_EFFECT_UNDERLINE;
+                brenda_draw_text(text.x + prefix_width, text.y, cursor, cursor_length, effect);
+                effect.flags &= ~BRENDA_TEXT_EFFECT_UNDERLINE;
+                brenda_draw_text(
+                    text.x + prefix_width + cursor_width,
+                    text.y,
+                    cursor + cursor_length,
+                    slice_end - cursor - cursor_length,
+                    effect
+                );
                 break;
             }
             case LAYLA_CMD_BORDER: {
@@ -530,4 +604,120 @@ b32 tui_draw_button(Tui_ButtonConfig config) {
     Tui_Text(.text = config.text, .style = config.text_style);
     layla_close_element();
     return tui_is_element_clicked(id);
+}
+
+b32 tui_draw_text_input(Tui_TextInputConfig config) {
+    Tui_TextInputState *input = config.state;
+    if (input == NULL || input->items == NULL || input->capacity < 0 || input->count < 0
+        || input->count > input->capacity) return false;
+    input->cursor = CLAMP(input->cursor, 0, input->count);
+    if (input->cursor > 0 && input->cursor < input->count) {
+        isize previous_bytes = brenda_distance_to_codepoint_boundary(
+            input->items, input->count, input->cursor, BRENDA_UTF8_DIRECTION_BACKWARD);
+        isize previous = input->cursor - previous_bytes;
+        if (brenda_distance_to_codepoint_boundary(
+            input->items, input->count, previous, BRENDA_UTF8_DIRECTION_FORWARD) != previous_bytes) {
+            input->cursor = previous;
+        }
+    }
+
+    if (config.id == LAYLA_ELEMENT_ID_NONE) layla_open_container_element();
+    else layla_open_container_element_with_id(config.id);
+
+    Layla_ElementID id = layla_get_open_element_id();
+    u8 flags = TUI_ELEMENT_HOVERABLE | TUI_ELEMENT_FOCUSABLE | TUI_ELEMENT_TEXT_INPUT;
+    if (config.disabled) flags |= TUI_ELEMENT_DISABLED;
+    tui_register_element(id, (Tui_ElementConfig) {.flags = flags});
+
+    if (tui_is_element_focused(id) && config.focused_background.is_set) {
+        config.style.background = config.focused_background;
+    }
+    layla_configure_container_element((Layla_ContainerConfig) {.style = config.style});
+
+    TextInputEventContext event_context = {.state = input};
+    if (tui_is_element_focused(id)) tui_consume_element_specific_events(id, text_input_handle_event, &event_context);
+
+    layla_open_text_element();
+    tui_register_element(layla_get_open_element_id(), (Tui_ElementConfig) {0});
+    layla_configure_text_element((Layla_TextConfig) {
+        .text = input->count == 0
+            ? (Layla_TextSlice) {.items = " ", .count = 1}
+            : (Layla_TextSlice) {.items = input->items, .count = input->count},
+        .style = config.text_style,
+        .userdata = input,
+    });
+    layla_close_element();
+
+    layla_close_element();
+    return event_context.changed;
+}
+
+static inline b32 text_input_handle_event(Tui_Event event, void *userdata) {
+    TextInputEventContext *context = userdata;
+    Tui_TextInputState *input = context->state;
+    Brenda_Event brenda_event = event.event;
+
+    if (brenda_event.type == BRENDA_EVENT_MOUSE_LEFT) return true;
+
+    if (brenda_event.type == BRENDA_EVENT_UTF8) {
+        if (brenda_event.modifiers & (BRENDA_MODIFIER_CTRL | BRENDA_MODIFIER_ALT)) return false;
+        isize byte_count = brenda_event.as.utf8.length;
+        if (byte_count <= 0 || input->count + byte_count > input->capacity) return true;
+
+        memmove(
+            input->items + input->cursor + byte_count,
+            input->items + input->cursor,
+            input->count - input->cursor
+        );
+        memcpy(input->items + input->cursor, brenda_event.as.utf8.bytes, byte_count);
+        input->cursor += byte_count;
+        input->count += byte_count;
+        context->changed = true;
+        return true;
+    }
+
+    if (brenda_event.type != BRENDA_EVENT_TERM_KEY) return false;
+
+    switch (brenda_event.as.term_key) {
+        case BRENDA_TERM_KEY_LEFT:
+            input->cursor -= brenda_distance_to_codepoint_boundary(
+                input->items, input->count, input->cursor, BRENDA_UTF8_DIRECTION_BACKWARD);
+            return true;
+        case BRENDA_TERM_KEY_RIGHT:
+            input->cursor += brenda_distance_to_codepoint_boundary(
+                input->items, input->count, input->cursor, BRENDA_UTF8_DIRECTION_FORWARD);
+            return true;
+        case BRENDA_TERM_KEY_HOME: input->cursor = 0; return true;
+        case BRENDA_TERM_KEY_END: input->cursor = input->count; return true;
+        case BRENDA_TERM_KEY_BACKSPACE:
+            if (input->cursor > 0) {
+                isize previous = input->cursor
+                    - brenda_distance_to_codepoint_boundary(
+                        input->items, input->count, input->cursor, BRENDA_UTF8_DIRECTION_BACKWARD);
+                memmove(input->items + previous, input->items + input->cursor, input->count - input->cursor);
+                input->count -= input->cursor - previous;
+                input->cursor = previous;
+                context->changed = true;
+            }
+            return true;
+        case BRENDA_TERM_KEY_DELETE:
+            if (input->cursor < input->count) {
+                isize next = input->cursor
+                    + brenda_distance_to_codepoint_boundary(
+                        input->items, input->count, input->cursor, BRENDA_UTF8_DIRECTION_FORWARD);
+                memmove(input->items + input->cursor, input->items + next, input->count - next);
+                input->count -= next - input->cursor;
+                context->changed = true;
+            }
+            return true;
+        case BRENDA_TERM_KEY_ENTER:
+            if (input->count < input->capacity) {
+                memmove(input->items + input->cursor + 1, input->items + input->cursor, input->count - input->cursor);
+                input->items[input->cursor++] = '\n';
+                input->count++;
+                context->changed = true;
+            }
+            return true;
+        default: return false;
+    }
 }
