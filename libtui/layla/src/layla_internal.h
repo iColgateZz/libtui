@@ -38,6 +38,7 @@ typedef struct {
         struct {
             Layla_TextSlice text;
             Layla_TextStyle style;
+            Layla_TextMarker marker;
             void *userdata;
         } text;
     } as;

@@ -272,6 +272,7 @@ void layla_configure_text_element(Layla_TextConfig conf) {
     assert(node->type == NODE_TEXT);
     node->as.text.text = conf.text;
     node->as.text.style = conf.style;
+    node->as.text.marker = conf.marker;
     node->as.text.userdata = conf.userdata;
 }
 
@@ -916,20 +917,43 @@ void append_text_command(Node *node, isize line_start_byte, isize line_end_byte,
     Layla_TextStyle style = node->as.text.style;
     Layla_Rectangle line_rectangle = {.x = line_x, .y = line_y, .w = MAX(line_width, 1), .h = 1};
     Layla_Rectangle visible_line_rectangle = intersect_rectangles(active_clip, line_rectangle);
-    if (visible_line_rectangle.w <= 0 || visible_line_rectangle.h <= 0) return;
+    if (visible_line_rectangle.w > 0 && visible_line_rectangle.h > 0) {
+        layla_list_append(&state.commands,
+            ((Layla_Command) {.type = LAYLA_CMD_TEXT, .id = node->id, .as.text = {
+                .x = line_x,
+                .y = line_y,
+                .slice = {
+                    .items = source.items + line_start_byte,
+                    .count = line_end_byte - line_start_byte,
+                },
+                .color = style.color,
+                .userdata = node->as.text.userdata,
+            }})
+        );
+    }
 
-    layla_list_append(&state.commands,
-        ((Layla_Command) {.type = LAYLA_CMD_TEXT, .id = node->id, .as.text = {
-            .x = line_x,
-            .y = line_y,
-            .slice = {
-                .items = source.items + line_start_byte,
-                .count = line_end_byte - line_start_byte,
-            },
-            .color = style.color,
-            .userdata = node->as.text.userdata,
-        }})
-    );
+    Layla_TextMarker marker = node->as.text.marker;
+    b32 marker_is_on_line = marker.userdata != NULL
+        && line_start_byte <= marker.byte_offset && marker.byte_offset < line_end_byte;
+    if (!marker_is_on_line) return;
+
+    Layla_TextSlice prefix = {
+        .items = source.items + line_start_byte,
+        .count = marker.byte_offset - line_start_byte,
+    };
+    i32 marker_x = line_x + measure_text_slice(node->id, prefix);
+    i32 marker_y = line_y;
+    if (marker_x >= node->x + node->w) {
+        marker_x = node->x;
+        marker_y++;
+    }
+
+    if (!rectangle_contains_point(marker_x, marker_y, active_clip)) return;
+    layla_list_append(&state.commands, ((Layla_Command) {
+        .type = LAYLA_CMD_CUSTOM,
+        .id = node->id,
+        .as.custom = {.x = marker_x, .y = marker_y, .w = 1, .h = 1, .userdata = marker.userdata},
+    }));
 }
 
 static inline void test_hover(void) {

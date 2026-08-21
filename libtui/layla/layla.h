@@ -258,8 +258,15 @@ typedef struct {
 } Layla_TextStyle;
 
 typedef struct {
+    isize byte_offset;
+    // If set to a non-null pointer, a 1x1 custom command is emitted at this position in the laid-out text.
+    void *userdata;
+} Layla_TextMarker;
+
+typedef struct {
     Layla_TextSlice text;
     Layla_TextStyle style;
+    Layla_TextMarker marker;
     void *userdata;
 } Layla_TextConfig;
 
