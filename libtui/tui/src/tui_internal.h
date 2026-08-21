@@ -20,13 +20,26 @@ typedef struct {
 
 typedef struct {
     Tui_Event event;
-    b32 consumed;
+    u8 consumed;
 } RoutedEvent;
 
 typedef struct {
     Tui_TextInputState *state;
     b32 changed;
 } TextInputEventContext;
+
+enum {
+    ELEMENT_INTERNAL_CUSTOM_COMMAND = 1 << 7,
+};
+
+typedef struct {
+    enum {
+        CUSTOM_COMMAND_TEXT_INPUT_CURSOR
+    } type;
+    union {
+        Brenda_TextEffect text_input_cursor;
+    } as;
+} CustomCommand;
 
 hash_map_def(Layla_ElementID, InteractionRecord)
 hash_map_def(Layla_ElementID, DragPosition)
@@ -47,6 +60,9 @@ typedef struct {
     Layla_ElementID focused_id;
     u32 generation;
     isize registered_count;
+    struct {
+        CustomCommand text_input_cursor;
+    } custom_commands;
 } State;
 
 static inline u64 hash_element_id(Layla_ElementID id);

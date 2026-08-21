@@ -11,7 +11,6 @@ enum {
     TUI_ELEMENT_ACCEPTS_SCROLL = 1 << 3,
     TUI_ELEMENT_DISABLED       = 1 << 4,
     TUI_ELEMENT_DRAGGABLE      = 1 << 5,
-    TUI_ELEMENT_TEXT_INPUT     = 1 << 6,
 };
 
 // Returning true indicates that command was handled.

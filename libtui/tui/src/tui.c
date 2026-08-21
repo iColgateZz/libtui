@@ -223,8 +223,7 @@ static inline void route_events(Brenda_EventSlice events) {
                 cursor_was_set = true;
 
                 Layla_ElementID click_target = get_interaction_target_by_flags(TUI_ELEMENT_CLICKABLE);
-                Layla_ElementID focus_target = get_interaction_target_by_flags(
-                    TUI_ELEMENT_HOVERABLE | TUI_ELEMENT_FOCUSABLE);
+                Layla_ElementID focus_target = get_interaction_target_by_flags(TUI_ELEMENT_HOVERABLE | TUI_ELEMENT_FOCUSABLE);
                 Layla_ElementID previous_pressed_id = state.pressed_id;
                 Layla_ElementID previous_drag_id = state.active_drag.state.element_id;
                 Layla_ElementID drag_target = LAYLA_ELEMENT_ID_NONE;
@@ -449,8 +448,23 @@ static inline i32 measure_text(Layla_TextSlice text, void *userdata) {
 static inline void draw_commands(Layla_CommandSlice commands) {
     for (isize i = 0; i < commands.count; ++i) {
         Layla_Command command = commands.items[i];
-        if (state.config.command_handler != NULL
-            && state.config.command_handler(command, state.config.command_handler_userdata)) {
+
+        if (command.type == LAYLA_CMD_CUSTOM) {
+            InteractionRecord *record = get_interaction_record_by_id(command.id);
+            if (record != NULL && (record->config.flags & ELEMENT_INTERNAL_CUSTOM_COMMAND)) {
+                CustomCommand *custom = command.as.custom.userdata;
+                switch (custom->type) {
+                    case CUSTOM_COMMAND_TEXT_INPUT_CURSOR:
+                        brenda_apply_text_effect(command.as.custom.x, command.as.custom.y, custom->as.text_input_cursor);
+                        break;
+                }
+                continue;
+            }
+        }
+
+        Tui_CommandHandler handler = state.config.command_handler;
+        void *userdata = state.config.command_handler_userdata;
+        if (handler != NULL && handler(command, userdata)) {
             continue;
         }
 
@@ -468,62 +482,7 @@ static inline void draw_commands(Layla_CommandSlice commands) {
                 Brenda_TextEffect effect = {
                     .color = color_from_layla(text.color),
                 };
-
-                Layla_ElementData text_data = layla_get_element_data(command.id);
-                InteractionRecord *parent = get_interaction_record_by_id(text_data.parent_id);
-                Tui_TextInputState *input = parent != NULL && (parent->config.flags & TUI_ELEMENT_TEXT_INPUT)
-                    ? text.userdata
-                    : NULL;
-                if (input == NULL || state.focused_id != text_data.parent_id) {
-                    brenda_draw_text(text.x, text.y, text.slice.items, text.slice.count, effect);
-                    break;
-                }
-
-                if (input->count == 0) {
-                    effect.flags |= BRENDA_TEXT_EFFECT_UNDERLINE;
-                    brenda_draw_text(text.x, text.y, text.slice.items, text.slice.count, effect);
-                    break;
-                }
-
-                byte *cursor = input->items + input->cursor;
-                byte *slice_end = text.slice.items + text.slice.count;
-                if (cursor < text.slice.items || cursor >= slice_end) {
-                    brenda_draw_text(text.x, text.y, text.slice.items, text.slice.count, effect);
-
-                    b32 cursor_is_at_text_end = input->cursor == input->count;
-                    b32 cursor_is_before_newline = input->cursor < input->count && input->items[input->cursor] == '\n';
-                    if (cursor == slice_end && (cursor_is_at_text_end || cursor_is_before_newline)) {
-                        i32 cursor_x = text.x + brenda_measure_text_width(text.slice.items, text.slice.count);
-                        i32 cursor_y = text.y;
-                        if (cursor_x >= text_data.rectangle.x + text_data.rectangle.w) {
-                            cursor_x = text_data.rectangle.x;
-                            cursor_y++;
-                        }
-
-                        effect.flags |= BRENDA_TEXT_EFFECT_UNDERLINE;
-                        brenda_draw_text(cursor_x, cursor_y, " ", 1, effect);
-                    }
-                    break;
-                }
-
-                isize prefix_length = cursor - text.slice.items;
-                isize cursor_length = brenda_distance_to_codepoint_boundary(
-                    input->items, input->count, input->cursor, BRENDA_UTF8_DIRECTION_FORWARD);
-                cursor_length = MIN(cursor_length, slice_end - cursor);
-
-                i32 prefix_width = brenda_measure_text_width(text.slice.items, prefix_length);
-                i32 cursor_width = brenda_measure_text_width(cursor, cursor_length);
-                brenda_draw_text(text.x, text.y, text.slice.items, prefix_length, effect);
-                effect.flags |= BRENDA_TEXT_EFFECT_UNDERLINE;
-                brenda_draw_text(text.x + prefix_width, text.y, cursor, cursor_length, effect);
-                effect.flags &= ~BRENDA_TEXT_EFFECT_UNDERLINE;
-                brenda_draw_text(
-                    text.x + prefix_width + cursor_width,
-                    text.y,
-                    cursor + cursor_length,
-                    slice_end - cursor - cursor_length,
-                    effect
-                );
+                brenda_draw_text(text.x, text.y, text.slice.items, text.slice.count, effect);
                 break;
             }
             case LAYLA_CMD_BORDER: {
@@ -625,7 +584,8 @@ b32 tui_draw_text_input(Tui_TextInputConfig config) {
     else layla_open_container_element_with_id(config.id);
 
     Layla_ElementID id = layla_get_open_element_id();
-    u8 flags = TUI_ELEMENT_HOVERABLE | TUI_ELEMENT_FOCUSABLE | TUI_ELEMENT_TEXT_INPUT;
+    Layla_ElementData input_data = layla_get_element_data(id);
+    u8 flags = TUI_ELEMENT_HOVERABLE | TUI_ELEMENT_FOCUSABLE;
     if (config.disabled) flags |= TUI_ELEMENT_DISABLED;
     tui_register_element(id, (Tui_ElementConfig) {.flags = flags});
 
@@ -637,16 +597,101 @@ b32 tui_draw_text_input(Tui_TextInputConfig config) {
     TextInputEventContext event_context = {.state = input};
     if (tui_is_element_focused(id)) tui_consume_element_specific_events(id, text_input_handle_event, &event_context);
 
+    config.text_style.alignment = LAYLA_ALIGN_START;
+    config.text_style.wrap_policy = LAYLA_TEXT_WRAP_CHARACTER;
     layla_open_text_element();
-    tui_register_element(layla_get_open_element_id(), (Tui_ElementConfig) {0});
+    Layla_ElementID text_id = layla_get_open_element_id();
+    Layla_ElementData text_data = layla_get_element_data(text_id);
+    tui_register_element(text_id, (Tui_ElementConfig) {0});
     layla_configure_text_element((Layla_TextConfig) {
         .text = input->count == 0
             ? (Layla_TextSlice) {.items = " ", .count = 1}
             : (Layla_TextSlice) {.items = input->items, .count = input->count},
         .style = config.text_style,
-        .userdata = input,
     });
     layla_close_element();
+
+    if (tui_is_element_focused(id) && input_data.found && text_data.found && text_data.rectangle.w > 0) {
+        i32 cursor_column = 0;
+        i32 cursor_row = 0;
+        b32 line_has_codepoint = false;
+        isize byte_offset = 0;
+        while (byte_offset < input->cursor) {
+            if (input->items[byte_offset] == '\n') {
+                cursor_column = 0;
+                cursor_row++;
+                line_has_codepoint = false;
+                byte_offset++;
+                continue;
+            }
+
+            isize codepoint_length = brenda_distance_to_codepoint_boundary(
+                input->items, input->count, byte_offset, BRENDA_UTF8_DIRECTION_FORWARD);
+            codepoint_length = MIN(codepoint_length, input->cursor - byte_offset);
+            i32 codepoint_width = brenda_measure_text_width(input->items + byte_offset, codepoint_length);
+            if (line_has_codepoint && cursor_column + codepoint_width > text_data.rectangle.w) {
+                cursor_column = 0;
+                cursor_row++;
+            }
+            cursor_column += codepoint_width;
+            line_has_codepoint = true;
+            byte_offset += codepoint_length;
+        }
+
+        if (cursor_column >= text_data.rectangle.w) {
+            cursor_column = 0;
+            cursor_row++;
+        } else if (input->cursor < input->count && input->items[input->cursor] != '\n') {
+            isize codepoint_length = brenda_distance_to_codepoint_boundary(
+                input->items, input->count, input->cursor, BRENDA_UTF8_DIRECTION_FORWARD);
+            i32 codepoint_width = brenda_measure_text_width(input->items + input->cursor, codepoint_length);
+            if (line_has_codepoint && cursor_column + codepoint_width > text_data.rectangle.w) {
+                cursor_column = 0;
+                cursor_row++;
+            }
+        }
+
+        i32 content_left = input_data.rectangle.x + config.style.padding.left + config.style.border.width;
+        i32 content_top = input_data.rectangle.y + config.style.padding.top + config.style.border.width;
+        i32 content_right = input_data.rectangle.x + input_data.rectangle.w
+                            - config.style.padding.right - config.style.border.width;
+        i32 content_bottom = input_data.rectangle.y + input_data.rectangle.h
+                             - config.style.padding.bottom - config.style.border.width;
+        i32 cursor_x = text_data.rectangle.x + cursor_column;
+        i32 cursor_y = text_data.rectangle.y + cursor_row;
+        b32 cursor_is_visible = content_left <= cursor_x && cursor_x < content_right
+                                && content_top <= cursor_y && cursor_y < content_bottom;
+
+        if (cursor_is_visible) {
+            state.custom_commands.text_input_cursor = (CustomCommand) {
+                .type = CUSTOM_COMMAND_TEXT_INPUT_CURSOR,
+                .as.text_input_cursor = {.flags = BRENDA_TEXT_EFFECT_UNDERLINE},
+            };
+            Tui_Div(
+                .flags = ELEMENT_INTERNAL_CUSTOM_COMMAND,
+                .style = {
+                    .size = {
+                        .w = LAYLA_FIXED(cursor_column + 1),
+                        .h = LAYLA_FIXED(cursor_row + 1),
+                    },
+                    .padding = {.left = cursor_column, .top = cursor_row},
+                    .overflow = LAYLA_OVERFLOW_VISIBLE,
+                },
+                .floating = {
+                    .attach_to = {
+                        .type = LAYLA_ATTACH_TO_ELEMENT,
+                        .as.element.id = text_id,
+                    },
+                    .attach_point = {
+                        .parent = {.x = LAYLA_ALIGN_START, .y = LAYLA_ALIGN_START},
+                        .element = {.x = LAYLA_ALIGN_START, .y = LAYLA_ALIGN_START},
+                    },
+                    .cursor_capture_mode = LAYLA_CURSOR_FALLTHROUGH,
+                },
+                .custom = &state.custom_commands.text_input_cursor,
+            ) {}
+        }
+    }
 
     layla_close_element();
     return event_context.changed;
