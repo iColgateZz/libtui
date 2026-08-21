@@ -47,7 +47,6 @@ void tui_begin_frame(void) {
 
 void tui_end_frame(void) {
     Layla_CommandSlice commands = layla_end_layout();
-    end_interactions();
     draw_commands(commands);
     brenda_end_frame();
 }
@@ -63,6 +62,7 @@ void tui_register_element(Layla_ElementID id, Tui_ElementConfig config) {
 
     if (config.flags & TUI_ELEMENT_FOCUSABLE) list_append(&state.focus_order, id);
 
+    //TODO: I really dislike the fact that positioning happens here
     DragPosition *position = get_drag_position_by_id(id);
     if (position != NULL && (config.flags & TUI_ELEMENT_DRAGGABLE)) {
         layla_set_element_position(id, position->x, position->y);
@@ -213,20 +213,33 @@ static inline void route_events(Brenda_EventSlice events) {
 
     for (isize i = 0; i < events.count; ++i) {
         Brenda_Event event = events.items[i];
+        RoutedEvent routed = {.event.event = event};
+
+        b32 event_has_cursor_position = event.type == BRENDA_EVENT_MOUSE_LEFT
+            || event.type == BRENDA_EVENT_MOUSE_RIGHT
+            || event.type == BRENDA_EVENT_MOUSE_MIDDLE
+            || event.type == BRENDA_EVENT_MOUSE_MOVE
+            || event.type == BRENDA_EVENT_MOUSE_DRAG
+            || event.type == BRENDA_EVENT_SCROLL_UP
+            || event.type == BRENDA_EVENT_SCROLL_DOWN;
+        if (event_has_cursor_position) {
+            cursor.x = event.as.mouse.x;
+            cursor.y = event.as.mouse.y;
+            if (event.type == BRENDA_EVENT_MOUSE_LEFT) cursor_is_down = event.as.mouse.pressed;
+            if (event.type == BRENDA_EVENT_MOUSE_DRAG) cursor_is_down = true;
+            layla_set_cursor_state(cursor.x, cursor.y, cursor_is_down);
+            cursor_was_set = true;
+            routed.event.target_id = get_interaction_target_by_flags(TUI_ELEMENT_HOVERABLE);
+        }
 
         switch (event.type) {
             case BRENDA_EVENT_MOUSE_LEFT: {
-                cursor.x = event.as.mouse.x;
-                cursor.y = event.as.mouse.y;
-                cursor_is_down = event.as.mouse.pressed;
-                layla_set_cursor_state(cursor.x, cursor.y, cursor_is_down);
-                cursor_was_set = true;
-
                 Layla_ElementID click_target = get_interaction_target_by_flags(TUI_ELEMENT_CLICKABLE);
                 Layla_ElementID focus_target = get_interaction_target_by_flags(TUI_ELEMENT_HOVERABLE | TUI_ELEMENT_FOCUSABLE);
                 Layla_ElementID previous_pressed_id = state.pressed_id;
                 Layla_ElementID previous_drag_id = state.active_drag.state.element_id;
                 Layla_ElementID drag_target = LAYLA_ELEMENT_ID_NONE;
+
                 if (event.as.mouse.pressed) {
                     state.pressed_id = click_target;
                     drag_target = get_interaction_target_by_flags(TUI_ELEMENT_DRAGGABLE);
@@ -274,36 +287,16 @@ static inline void route_events(Brenda_EventSlice events) {
                     state.pressed_id = LAYLA_ELEMENT_ID_NONE;
                 }
 
-                b32 click_was_handled = click_target != LAYLA_ELEMENT_ID_NONE
+                routed.consumed = click_target != LAYLA_ELEMENT_ID_NONE
                     || previous_pressed_id != LAYLA_ELEMENT_ID_NONE;
-                b32 drag_was_handled = drag_target != LAYLA_ELEMENT_ID_NONE
+                routed.consumed |= drag_target != LAYLA_ELEMENT_ID_NONE
                     || previous_drag_id != LAYLA_ELEMENT_ID_NONE;
-                if (!click_was_handled && !drag_was_handled) {
-                    list_append(&state.routed_events, ((RoutedEvent) {.event = {
-                        .target_id = get_interaction_target_by_flags(TUI_ELEMENT_HOVERABLE),
-                        .event = event,
-                    }}));
-                }
                 break;
             }
             case BRENDA_EVENT_MOUSE_RIGHT:
             case BRENDA_EVENT_MOUSE_MIDDLE:
-            case BRENDA_EVENT_MOUSE_MOVE:
-                cursor.x = event.as.mouse.x;
-                cursor.y = event.as.mouse.y;
-                layla_set_cursor_state(cursor.x, cursor.y, cursor_is_down);
-                cursor_was_set = true;
-                list_append(&state.routed_events, ((RoutedEvent) {.event = {
-                    .target_id = get_interaction_target_by_flags(TUI_ELEMENT_HOVERABLE),
-                    .event = event,
-                }}));
-                break;
-            case BRENDA_EVENT_MOUSE_DRAG:
-                cursor.x = event.as.mouse.x;
-                cursor.y = event.as.mouse.y;
-                cursor_is_down = true;
-                layla_set_cursor_state(cursor.x, cursor.y, cursor_is_down);
-                cursor_was_set = true;
+            case BRENDA_EVENT_MOUSE_MOVE: break;
+            case BRENDA_EVENT_MOUSE_DRAG: {
                 Tui_DragState *drag = &state.active_drag.state;
                 if (drag->element_id != LAYLA_ELEMENT_ID_NONE) {
                     drag->delta_x = cursor.x - state.active_drag.cursor_start_x;
@@ -313,61 +306,51 @@ static inline void route_events(Brenda_EventSlice events) {
                         .y = drag->start_y + drag->delta_y,
                     }));
                     drag->interaction_state = TUI_DRAGGING;
-                } else {
-                    list_append(&state.routed_events, ((RoutedEvent) {.event = {
-                        .target_id = get_interaction_target_by_flags(TUI_ELEMENT_HOVERABLE),
-                        .event = event,
-                    }}));
+                    routed.consumed = true;
                 }
                 break;
+            }
             case BRENDA_EVENT_SCROLL_UP:
             case BRENDA_EVENT_SCROLL_DOWN: {
-                cursor.x = event.as.mouse.x;
-                cursor.y = event.as.mouse.y;
-                layla_set_cursor_state(cursor.x, cursor.y, cursor_is_down);
-                cursor_was_set = true;
-
                 Layla_ElementID target = get_interaction_target_by_flags(TUI_ELEMENT_ACCEPTS_SCROLL);
                 Layla_ElementData data = layla_get_element_data(target);
                 if (data.found && (data.flags & LAYLA_ELEMENT_SCROLL_Y)) {
                     i32 delta_y = event.type == BRENDA_EVENT_SCROLL_UP ? -1 : 1;
                     layla_update_scroll_offset(target, delta_y);
-                } else {
-                    list_append(&state.routed_events, ((RoutedEvent) {.event = {
-                        .target_id = get_interaction_target_by_flags(TUI_ELEMENT_HOVERABLE),
-                        .event = event,
-                    }}));
+                    routed.consumed = true;
                 }
                 break;
             }
             default: {
                 if (binding_matches_event(state.config.bindings.focus_clear, event)) {
                     state.focused_id = LAYLA_ELEMENT_ID_NONE;
+                    routed.consumed = true;
                 } else if (binding_matches_event(state.config.bindings.focus_next, event)) {
                     move_focus(1);
+                    routed.consumed = true;
                 } else if (binding_matches_event(state.config.bindings.focus_previous, event)) {
                     move_focus(-1);
+                    routed.consumed = true;
                 } else {
                     InteractionRecord *record = get_interaction_record_by_id(state.focused_id);
-                    if (record != NULL
+                    b32 focused_element_is_enabled = record != NULL && !(record->config.flags & TUI_ELEMENT_DISABLED);
+                    if (focused_element_is_enabled
                         && (record->config.flags & TUI_ELEMENT_CLICKABLE)
                         && (binding_matches_event(state.config.bindings.activate, event)
                             || binding_matches_event(state.config.bindings.activate_alternate, event))) {
                         state.clicked_id = state.focused_id;
+                        routed.consumed = true;
                     } else {
-                        Layla_ElementID target_id = event.type == BRENDA_EVENT_TERM_KEY
-                            || event.type == BRENDA_EVENT_UTF8
-                            ? state.focused_id
-                            : LAYLA_ELEMENT_ID_NONE;
-                        list_append(&state.routed_events, ((RoutedEvent) {.event = {
-                            .target_id = target_id,
-                            .event = event,
-                        }}));
+                        b32 keyboard_event = event.type == BRENDA_EVENT_TERM_KEY
+                            || event.type == BRENDA_EVENT_UTF8;
+                        if (keyboard_event && focused_element_is_enabled) routed.event.target_id = state.focused_id;
                     }
                 }
                 break;
             }
         }
+
+        list_append(&state.routed_events, routed);
     }
 
     if (!cursor_was_set) layla_set_cursor_state(cursor.x, cursor.y, cursor_is_down);
@@ -384,24 +367,6 @@ static inline void route_events(Brenda_EventSlice events) {
     state.generation = next_generation;
     state.registered_count = 0;
     list_clear(&state.focus_order);
-}
-
-static inline void end_interactions(void) {
-    InteractionRecord *focused = get_interaction_record_by_id(state.focused_id);
-    if (focused == NULL || (focused->config.flags & TUI_ELEMENT_DISABLED))
-        state.focused_id = LAYLA_ELEMENT_ID_NONE;
-
-    InteractionRecord *pressed = get_interaction_record_by_id(state.pressed_id);
-    if (pressed == NULL || (pressed->config.flags & TUI_ELEMENT_DISABLED))
-        state.pressed_id = LAYLA_ELEMENT_ID_NONE;
-
-    Layla_ElementID dragged_id = state.active_drag.state.element_id;
-    InteractionRecord *dragged = get_interaction_record_by_id(dragged_id);
-    if (dragged_id != LAYLA_ELEMENT_ID_NONE
-        && (dragged == NULL || (dragged->config.flags & TUI_ELEMENT_DISABLED)
-            || !(dragged->config.flags & TUI_ELEMENT_DRAGGABLE))) {
-        state.active_drag = (ActiveDrag) {0};
-    }
 }
 
 static inline void move_focus(i32 direction) {
@@ -541,6 +506,7 @@ void tui_draw_text(Tui_TextConfig config) {
     layla_configure_text_element((Layla_TextConfig) {
         .text = config.text,
         .style = config.style,
+        .marker = config.marker,
         .userdata = config.userdata,
     });
     layla_close_element();
@@ -567,131 +533,46 @@ b32 tui_draw_button(Tui_ButtonConfig config) {
 
 b32 tui_draw_text_input(Tui_TextInputConfig config) {
     Tui_TextInputState *input = config.state;
-    if (input == NULL || input->items == NULL || input->capacity < 0 || input->count < 0
-        || input->count > input->capacity) return false;
     input->cursor = CLAMP(input->cursor, 0, input->count);
-    if (input->cursor > 0 && input->cursor < input->count) {
-        isize previous_bytes = brenda_distance_to_codepoint_boundary(
-            input->items, input->count, input->cursor, BRENDA_UTF8_DIRECTION_BACKWARD);
-        isize previous = input->cursor - previous_bytes;
-        if (brenda_distance_to_codepoint_boundary(
-            input->items, input->count, previous, BRENDA_UTF8_DIRECTION_FORWARD) != previous_bytes) {
-            input->cursor = previous;
-        }
-    }
 
     if (config.id == LAYLA_ELEMENT_ID_NONE) layla_open_container_element();
     else layla_open_container_element_with_id(config.id);
 
     Layla_ElementID id = layla_get_open_element_id();
-    Layla_ElementData input_data = layla_get_element_data(id);
     u8 flags = TUI_ELEMENT_HOVERABLE | TUI_ELEMENT_FOCUSABLE;
     if (config.disabled) flags |= TUI_ELEMENT_DISABLED;
     tui_register_element(id, (Tui_ElementConfig) {.flags = flags});
 
-    if (tui_is_element_focused(id) && config.focused_background.is_set) {
+    b32 is_focused = tui_is_element_focused(id);
+    if (is_focused && config.focused_background.is_set) {
         config.style.background = config.focused_background;
     }
     layla_configure_container_element((Layla_ContainerConfig) {.style = config.style});
 
     TextInputEventContext event_context = {.state = input};
-    if (tui_is_element_focused(id)) tui_consume_element_specific_events(id, text_input_handle_event, &event_context);
+    if (is_focused) {
+        tui_consume_element_specific_events(id, text_input_handle_event, &event_context);
 
-    config.text_style.alignment = LAYLA_ALIGN_START;
+        state.custom_commands.text_input_cursor = (CustomCommand) {
+            .type = CUSTOM_COMMAND_TEXT_INPUT_CURSOR,
+            .as.text_input_cursor = {.flags = BRENDA_TEXT_EFFECT_UNDERLINE},
+        };
+    }
+
     config.text_style.wrap_policy = LAYLA_TEXT_WRAP_CHARACTER;
-    layla_open_text_element();
-    Layla_ElementID text_id = layla_get_open_element_id();
-    Layla_ElementData text_data = layla_get_element_data(text_id);
-    tui_register_element(text_id, (Tui_ElementConfig) {0});
-    layla_configure_text_element((Layla_TextConfig) {
+    Tui_Text(
         .text = input->count == 0
             ? (Layla_TextSlice) {.items = " ", .count = 1}
             : (Layla_TextSlice) {.items = input->items, .count = input->count},
         .style = config.text_style,
-    });
-    layla_close_element();
-
-    if (tui_is_element_focused(id) && input_data.found && text_data.found && text_data.rectangle.w > 0) {
-        i32 cursor_column = 0;
-        i32 cursor_row = 0;
-        b32 line_has_codepoint = false;
-        isize byte_offset = 0;
-        while (byte_offset < input->cursor) {
-            if (input->items[byte_offset] == '\n') {
-                cursor_column = 0;
-                cursor_row++;
-                line_has_codepoint = false;
-                byte_offset++;
-                continue;
+        .flags = is_focused ? ELEMENT_INTERNAL_CUSTOM_COMMAND : 0,
+        .marker = is_focused
+            ? (Layla_TextMarker) {
+                .byte_offset = input->cursor,
+                .userdata = &state.custom_commands.text_input_cursor,
             }
-
-            isize codepoint_length = brenda_distance_to_codepoint_boundary(
-                input->items, input->count, byte_offset, BRENDA_UTF8_DIRECTION_FORWARD);
-            codepoint_length = MIN(codepoint_length, input->cursor - byte_offset);
-            i32 codepoint_width = brenda_measure_text_width(input->items + byte_offset, codepoint_length);
-            if (line_has_codepoint && cursor_column + codepoint_width > text_data.rectangle.w) {
-                cursor_column = 0;
-                cursor_row++;
-            }
-            cursor_column += codepoint_width;
-            line_has_codepoint = true;
-            byte_offset += codepoint_length;
-        }
-
-        if (cursor_column >= text_data.rectangle.w) {
-            cursor_column = 0;
-            cursor_row++;
-        } else if (input->cursor < input->count && input->items[input->cursor] != '\n') {
-            isize codepoint_length = brenda_distance_to_codepoint_boundary(
-                input->items, input->count, input->cursor, BRENDA_UTF8_DIRECTION_FORWARD);
-            i32 codepoint_width = brenda_measure_text_width(input->items + input->cursor, codepoint_length);
-            if (line_has_codepoint && cursor_column + codepoint_width > text_data.rectangle.w) {
-                cursor_column = 0;
-                cursor_row++;
-            }
-        }
-
-        i32 content_left = input_data.rectangle.x + config.style.padding.left + config.style.border.width;
-        i32 content_top = input_data.rectangle.y + config.style.padding.top + config.style.border.width;
-        i32 content_right = input_data.rectangle.x + input_data.rectangle.w
-                            - config.style.padding.right - config.style.border.width;
-        i32 content_bottom = input_data.rectangle.y + input_data.rectangle.h
-                             - config.style.padding.bottom - config.style.border.width;
-        i32 cursor_x = text_data.rectangle.x + cursor_column;
-        i32 cursor_y = text_data.rectangle.y + cursor_row;
-        b32 cursor_is_visible = content_left <= cursor_x && cursor_x < content_right
-                                && content_top <= cursor_y && cursor_y < content_bottom;
-
-        if (cursor_is_visible) {
-            state.custom_commands.text_input_cursor = (CustomCommand) {
-                .type = CUSTOM_COMMAND_TEXT_INPUT_CURSOR,
-                .as.text_input_cursor = {.flags = BRENDA_TEXT_EFFECT_UNDERLINE},
-            };
-            Tui_Div(
-                .flags = ELEMENT_INTERNAL_CUSTOM_COMMAND,
-                .style = {
-                    .size = {
-                        .w = LAYLA_FIXED(cursor_column + 1),
-                        .h = LAYLA_FIXED(cursor_row + 1),
-                    },
-                    .padding = {.left = cursor_column, .top = cursor_row},
-                    .overflow = LAYLA_OVERFLOW_VISIBLE,
-                },
-                .floating = {
-                    .attach_to = {
-                        .type = LAYLA_ATTACH_TO_ELEMENT,
-                        .as.element.id = text_id,
-                    },
-                    .attach_point = {
-                        .parent = {.x = LAYLA_ALIGN_START, .y = LAYLA_ALIGN_START},
-                        .element = {.x = LAYLA_ALIGN_START, .y = LAYLA_ALIGN_START},
-                    },
-                    .cursor_capture_mode = LAYLA_CURSOR_FALLTHROUGH,
-                },
-                .custom = &state.custom_commands.text_input_cursor,
-            ) {}
-        }
-    }
+            : (Layla_TextMarker) {0},
+    );
 
     layla_close_element();
     return event_context.changed;

@@ -81,6 +81,7 @@ typedef struct {
     Layla_ElementID id;
     Layla_TextSlice text;
     Layla_TextStyle style;
+    Layla_TextMarker marker;
     void *userdata;
     u8 flags;
 } Tui_TextConfig;
