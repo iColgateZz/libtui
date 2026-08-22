@@ -61,12 +61,6 @@ void tui_register_element(Layla_ElementID id, Tui_ElementConfig config) {
     state.registered_count++;
 
     if (config.flags & TUI_ELEMENT_FOCUSABLE) list_append(&state.focus_order, id);
-
-    //TODO: I really dislike the fact that positioning happens here
-    DragPosition *position = get_drag_position_by_id(id);
-    if (position != NULL && (config.flags & TUI_ELEMENT_DRAGGABLE)) {
-        layla_set_element_position(id, position->x, position->y);
-    }
 }
 
 b32 tui_is_element_hovered(Layla_ElementID id) {
@@ -495,6 +489,11 @@ void tui_open_div(Tui_DivConfig config) {
         },
         .custom = config.custom,
     });
+
+    DragPosition *position = get_drag_position_by_id(id);
+    if (position != NULL && (config.flags & TUI_ELEMENT_DRAGGABLE)) {
+        layla_set_element_position(id, position->x, position->y);
+    }
 }
 
 void tui_draw_text(Tui_TextConfig config) {
