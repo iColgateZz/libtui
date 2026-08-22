@@ -28,7 +28,13 @@ typedef struct {
     b32 changed;
 } TextInputEventContext;
 
+typedef struct {
+    Layla_ElementID id;
+    i32 scope;
+} FocusRecord;
+
 enum {
+    //TODO: I dislike this. Either together with the others, or come up with something new.
     ELEMENT_INTERNAL_CUSTOM_COMMAND = 1 << 7,
 };
 
@@ -46,18 +52,22 @@ hash_map_def(Layla_ElementID, DragPosition)
 list_def(Layla_ElementID)
 list_def(Tui_Event)
 list_def(RoutedEvent)
+list_def(FocusRecord)
 
 typedef struct {
     HashMap(Layla_ElementID, InteractionRecord) interaction_records;
     HashMap(Layla_ElementID, DragPosition) drag_positions;
-    List(Layla_ElementID) focus_order;
     List(RoutedEvent) routed_events;
     List(Tui_Event) unhandled_events;
     Tui_Config config;
     ActiveDrag active_drag;
     Layla_ElementID pressed_id;
     Layla_ElementID clicked_id;
-    Layla_ElementID focused_id;
+    struct {
+        Layla_ElementID id;
+        i32 current_scope;
+        List(FocusRecord) order;
+    } focus;
     u32 generation;
     isize registered_count;
     struct {

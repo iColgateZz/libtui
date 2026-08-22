@@ -31,7 +31,7 @@ void tui_deinit(void) {
     brenda_deinit_terminal();
     hash_map_free(&state.interaction_records);
     hash_map_free(&state.drag_positions);
-    list_free(state.focus_order);
+    list_free(state.focus.order);
     list_free(state.routed_events);
     list_free(state.unhandled_events);
 }
@@ -60,7 +60,10 @@ void tui_register_element(Layla_ElementID id, Tui_ElementConfig config) {
     }));
     state.registered_count++;
 
-    if (config.flags & TUI_ELEMENT_FOCUSABLE) list_append(&state.focus_order, id);
+    if (config.flags & TUI_ELEMENT_FOCUSABLE) {
+        FocusRecord record = { .id = id, .scope = state.focus.current_scope };
+        list_append(&state.focus.order, record);
+    }
 }
 
 b32 tui_is_element_hovered(Layla_ElementID id) {
@@ -82,23 +85,23 @@ b32 tui_is_element_clicked(Layla_ElementID id) {
 
 b32 tui_is_element_focused(Layla_ElementID id) {
     InteractionRecord *record = get_interaction_record_by_id(id);
-    return (record == NULL || !(record->config.flags & TUI_ELEMENT_DISABLED)) && state.focused_id == id;
+    return (record == NULL || !(record->config.flags & TUI_ELEMENT_DISABLED)) && state.focus.id == id;
 }
 
 void tui_focus_element(Layla_ElementID id) {
     if (id == LAYLA_ELEMENT_ID_NONE) {
-        state.focused_id = LAYLA_ELEMENT_ID_NONE;
+        state.focus.id = LAYLA_ELEMENT_ID_NONE;
         return;
     }
 
     InteractionRecord *record = get_interaction_record_by_id(id);
     if (record != NULL && (record->config.flags & TUI_ELEMENT_FOCUSABLE)
         && !(record->config.flags & TUI_ELEMENT_DISABLED)) {
-        state.focused_id = id;
+        state.focus.id = id;
     }
 }
 
-Layla_ElementID tui_get_focused_element_id(void) { return state.focused_id; }
+Layla_ElementID tui_get_focused_element_id(void) { return state.focus.id; }
 
 Tui_DragState tui_get_drag_state(Layla_ElementID id) {
     if (state.active_drag.state.element_id == id) return state.active_drag.state;
@@ -258,7 +261,7 @@ static inline void route_events(Brenda_EventSlice events) {
                         state.active_drag = (ActiveDrag) {0};
                     }
 
-                    state.focused_id = focus_target;
+                    state.focus.id = focus_target;
                 } else {
                     Tui_DragState *drag = &state.active_drag.state;
                     if (drag->element_id != LAYLA_ELEMENT_ID_NONE) {
@@ -317,7 +320,7 @@ static inline void route_events(Brenda_EventSlice events) {
             }
             default: {
                 if (binding_matches_event(state.config.bindings.focus_clear, event)) {
-                    state.focused_id = LAYLA_ELEMENT_ID_NONE;
+                    state.focus.id = LAYLA_ELEMENT_ID_NONE;
                     routed.consumed = true;
                 } else if (binding_matches_event(state.config.bindings.focus_next, event)) {
                     move_focus(1);
@@ -326,18 +329,18 @@ static inline void route_events(Brenda_EventSlice events) {
                     move_focus(-1);
                     routed.consumed = true;
                 } else {
-                    InteractionRecord *record = get_interaction_record_by_id(state.focused_id);
+                    InteractionRecord *record = get_interaction_record_by_id(state.focus.id);
                     b32 focused_element_is_enabled = record != NULL && !(record->config.flags & TUI_ELEMENT_DISABLED);
                     if (focused_element_is_enabled
                         && (record->config.flags & TUI_ELEMENT_CLICKABLE)
                         && (binding_matches_event(state.config.bindings.activate, event)
                             || binding_matches_event(state.config.bindings.activate_alternate, event))) {
-                        state.clicked_id = state.focused_id;
+                        state.clicked_id = state.focus.id;
                         routed.consumed = true;
                     } else {
                         b32 keyboard_event = event.type == BRENDA_EVENT_TERM_KEY
                             || event.type == BRENDA_EVENT_UTF8;
-                        if (keyboard_event && focused_element_is_enabled) routed.event.target_id = state.focused_id;
+                        if (keyboard_event && focused_element_is_enabled) routed.event.target_id = state.focus.id;
                     }
                 }
                 break;
@@ -360,37 +363,43 @@ static inline void route_events(Brenda_EventSlice events) {
 
     state.generation = next_generation;
     state.registered_count = 0;
-    list_clear(&state.focus_order);
+    list_clear(&state.focus.order);
 }
 
+//TODO: analyze if I need to add an accessor function for focused element id 
+//      so that we don't accidentally jump out of scope
 static inline void move_focus(i32 direction) {
-    if (state.focus_order.count == 0) {
-        state.focused_id = LAYLA_ELEMENT_ID_NONE;
+    if (state.focus.order.count == 0) {
+        state.focus.id = LAYLA_ELEMENT_ID_NONE;
         return;
     }
 
     isize index = direction > 0 ? -1 : 0;
-    for (isize i = 0; i < state.focus_order.count; ++i) {
-        if (state.focus_order.items[i] == state.focused_id) {
+    for (isize i = 0; i < state.focus.order.count; ++i) {
+        FocusRecord record = state.focus.order.items[i];
+        if (record.id == state.focus.id && record.scope == state.focus.current_scope) {
             index = i;
             break;
         }
     }
 
-    for (isize attempts = 0; attempts < state.focus_order.count; ++attempts) {
+    for (isize attempts = 0; attempts < state.focus.order.count; ++attempts) {
         index += direction;
-        if (index < 0) index = state.focus_order.count - 1;
-        if (index >= state.focus_order.count) index = 0;
+        if (index < 0) index = state.focus.order.count - 1;
+        if (index >= state.focus.order.count) index = 0;
 
-        Layla_ElementID id = state.focus_order.items[index];
-        InteractionRecord *record = get_interaction_record_by_id(id);
-        if (record != NULL && !(record->config.flags & TUI_ELEMENT_DISABLED)) {
-            state.focused_id = id;
+        FocusRecord focus_record = state.focus.order.items[index];
+        InteractionRecord *interaction_record = get_interaction_record_by_id(focus_record.id);
+        if (interaction_record != NULL 
+                && !(interaction_record->config.flags & TUI_ELEMENT_DISABLED)
+                && focus_record.scope == state.focus.current_scope
+        ) {
+            state.focus.id = focus_record.id;
             return;
         }
     }
 
-    state.focused_id = LAYLA_ELEMENT_ID_NONE;
+    state.focus.id = LAYLA_ELEMENT_ID_NONE;
 }
 
 // Layla and Brenda adapter
