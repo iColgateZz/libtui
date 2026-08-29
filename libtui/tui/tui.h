@@ -4,14 +4,15 @@
 #include "layla.h"
 #include "brenda.h"
 
-enum {
+typedef enum {
+    TUI_ELEMENT_NONE           = 0,
     TUI_ELEMENT_HOVERABLE      = 1 << 0,
     TUI_ELEMENT_CLICKABLE      = 1 << 1,
     TUI_ELEMENT_FOCUSABLE      = 1 << 2,
     TUI_ELEMENT_ACCEPTS_SCROLL = 1 << 3,
     TUI_ELEMENT_DISABLED       = 1 << 4,
     TUI_ELEMENT_DRAGGABLE      = 1 << 5,
-};
+} Tui_ElementFlags;
 
 // Returning true indicates that command was handled.
 typedef b32 (*Tui_CommandHandler)(Layla_Command command, void *userdata);
@@ -66,15 +67,14 @@ typedef struct {
 } Tui_Floating;
 
 typedef struct {
-    u8 flags;
-} Tui_ElementConfig;
-
-typedef struct {
     Layla_ElementID id;
     Layla_ContainerStyle style;
     Tui_Floating floating;
     void *custom;
-    u8 flags;
+    Tui_ElementFlags flags;
+    // Starts a nested focus scope for this div and its descendants.
+    // Scopes are identified by nesting depth; the last declared scope is active.
+    b32 focus_scope;
 } Tui_DivConfig;
 
 typedef struct {
@@ -83,7 +83,7 @@ typedef struct {
     Layla_TextStyle style;
     Layla_TextMarker marker;
     void *userdata;
-    u8 flags;
+    Tui_ElementFlags flags;
 } Tui_TextConfig;
 
 typedef struct {
@@ -153,26 +153,31 @@ void tui_consume_element_specific_events(Layla_ElementID id, Tui_EventHandler ha
 // Call after declaring widgets. The slice remains valid until the next call or frame begins.
 Tui_EventSlice tui_get_unhandled_events(void);
 
-void tui_register_element(Layla_ElementID id, Tui_ElementConfig config);
+void tui_register_element(Layla_ElementID id, Tui_ElementFlags flags);
 b32 tui_is_element_hovered(Layla_ElementID id);
 b32 tui_is_element_pressed(Layla_ElementID id);
 b32 tui_is_element_clicked(Layla_ElementID id);
 b32 tui_is_element_focused(Layla_ElementID id);
+// Sets the focused element for its scope. Passing NONE clears the active scope.
 void tui_focus_element(Layla_ElementID id);
+// Returns the focused element in the active scope.
 Layla_ElementID tui_get_focused_element_id(void);
 Tui_DragState tui_get_drag_state(Layla_ElementID id);
 
 void tui_open_div(Tui_DivConfig config);
+void tui_close_div(Tui_DivConfig config);
 void tui_draw_text(Tui_TextConfig config);
 b32 tui_draw_button(Tui_ButtonConfig config);
 b32 tui_draw_text_input(Tui_TextInputConfig config);
 
 #define Tui_Div(...)                                                                                 \
-    for (u8 _tui_latch = (tui_open_div((Tui_DivConfig) {                                             \
+    for (Tui_DivConfig _tui_config = {                                                               \
         .style.size.w = LAYLA_FIT(),                                                                 \
         .style.size.h = LAYLA_FIT(),                                                                 \
         __VA_ARGS__                                                                                  \
-    }), 0); _tui_latch < 1; _tui_latch = 1, layla_close_element())
+    }, *_tui_once = &_tui_config; _tui_once != NULL;                                                 \
+        tui_close_div(_tui_config), _tui_once = NULL)                                                \
+        for (u8 _tui_latch = (tui_open_div(_tui_config), 0); _tui_latch < 1; _tui_latch = 1)
 
 #define Tui_Text(...) tui_draw_text((Tui_TextConfig) {                                               \
     .style.color = LAYLA_COLOR(255, 255, 255),                                                       \

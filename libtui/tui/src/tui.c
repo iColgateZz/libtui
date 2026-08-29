@@ -21,6 +21,7 @@ void tui_init(Tui_Config config) {
     bindings->focus_clear = resolve_binding(bindings->focus_clear, TUI_BINDING_KEY(BRENDA_TERM_KEY_ESCAPE, 0));
     bindings->activate = resolve_binding(bindings->activate, TUI_BINDING_KEY(BRENDA_TERM_KEY_ENTER, 0));
     bindings->activate_alternate = resolve_binding(bindings->activate_alternate, TUI_BINDING_CHAR(' ', 0));
+    list_append(&state.focus.focused_ids, LAYLA_ELEMENT_ID_NONE);
 
     brenda_init_terminal(config.terminal);
     brenda_set_terminal_fps(config.fps == 0 ? 60 : config.fps);
@@ -31,6 +32,7 @@ void tui_deinit(void) {
     brenda_deinit_terminal();
     hash_map_free(&state.interaction_records);
     hash_map_free(&state.drag_positions);
+    list_free(state.focus.focused_ids);
     list_free(state.focus.order);
     list_free(state.routed_events);
     list_free(state.unhandled_events);
@@ -41,67 +43,69 @@ void tui_deinit(void) {
 void tui_begin_frame(void) {
     brenda_begin_frame();
     route_events(brenda_get_events());
+    state.focus.declaration_scope = 0;
+    state.focus.deepest_scope = 0;
     layla_set_screen_dimensions(brenda_get_terminal_width(), brenda_get_terminal_height());
     layla_begin_layout();
 }
 
 void tui_end_frame(void) {
     Layla_CommandSlice commands = layla_end_layout();
+    state.focus.active_scope = state.focus.deepest_scope;
     draw_commands(commands);
     brenda_end_frame();
 }
 
 // Interaction state and event routing
 
-void tui_register_element(Layla_ElementID id, Tui_ElementConfig config) {
+void tui_register_element(Layla_ElementID id, Tui_ElementFlags flags) {
     hash_map_insert(&state.interaction_records, id, ((InteractionRecord) {
-        .config = config,
+        .flags = flags,
+        .focus_scope = state.focus.declaration_scope,
         .generation = state.generation,
     }));
     state.registered_count++;
 
-    if (config.flags & TUI_ELEMENT_FOCUSABLE) {
-        FocusRecord record = { .id = id, .scope = state.focus.current_scope };
-        list_append(&state.focus.order, record);
+    if (flags & TUI_ELEMENT_FOCUSABLE) {
+        list_append(&state.focus.order, id);
     }
 }
 
 b32 tui_is_element_hovered(Layla_ElementID id) {
-    InteractionRecord *record = get_interaction_record_by_id(id);
-    if (record != NULL && (!(record->config.flags & TUI_ELEMENT_HOVERABLE)
-        || (record->config.flags & TUI_ELEMENT_DISABLED))) return false;
-    return layla_is_element_hovered(id);
+    return get_enabled_interaction_record(id, TUI_ELEMENT_HOVERABLE) != NULL
+        && layla_is_element_hovered(id);
 }
 
 b32 tui_is_element_pressed(Layla_ElementID id) {
-    InteractionRecord *record = get_interaction_record_by_id(id);
-    return (record == NULL || !(record->config.flags & TUI_ELEMENT_DISABLED)) && state.pressed_id == id;
+    return get_enabled_interaction_record(id, TUI_ELEMENT_CLICKABLE) != NULL 
+        && state.pressed_id == id;
 }
 
 b32 tui_is_element_clicked(Layla_ElementID id) {
-    InteractionRecord *record = get_interaction_record_by_id(id);
-    return (record == NULL || !(record->config.flags & TUI_ELEMENT_DISABLED)) && state.clicked_id == id;
+    return get_enabled_interaction_record(id, TUI_ELEMENT_CLICKABLE) != NULL 
+        && state.clicked_id == id;
 }
 
 b32 tui_is_element_focused(Layla_ElementID id) {
-    InteractionRecord *record = get_interaction_record_by_id(id);
-    return (record == NULL || !(record->config.flags & TUI_ELEMENT_DISABLED)) && state.focus.id == id;
+    InteractionRecord *record = get_enabled_interaction_record(id, TUI_ELEMENT_FOCUSABLE);
+    return record != NULL
+        && record->focus_scope == state.focus.active_scope
+        && state.focus.focused_ids.items[state.focus.active_scope] == id;
 }
 
 void tui_focus_element(Layla_ElementID id) {
     if (id == LAYLA_ELEMENT_ID_NONE) {
-        state.focus.id = LAYLA_ELEMENT_ID_NONE;
+        state.focus.focused_ids.items[state.focus.active_scope] = LAYLA_ELEMENT_ID_NONE;
         return;
     }
 
-    InteractionRecord *record = get_interaction_record_by_id(id);
-    if (record != NULL && (record->config.flags & TUI_ELEMENT_FOCUSABLE)
-        && !(record->config.flags & TUI_ELEMENT_DISABLED)) {
-        state.focus.id = id;
-    }
+    InteractionRecord *record = get_enabled_interaction_record(id, TUI_ELEMENT_FOCUSABLE);
+    if (record != NULL) state.focus.focused_ids.items[record->focus_scope] = id;
 }
 
-Layla_ElementID tui_get_focused_element_id(void) { return state.focus.id; }
+Layla_ElementID tui_get_focused_element_id(void) {
+    return state.focus.focused_ids.items[state.focus.active_scope];
+}
 
 Tui_DragState tui_get_drag_state(Layla_ElementID id) {
     if (state.active_drag.state.element_id == id) return state.active_drag.state;
@@ -159,10 +163,17 @@ static inline b32 binding_matches_event(Tui_Binding binding, Brenda_Event event)
     return false;
 }
 
-static inline InteractionRecord *get_interaction_record_by_id(Layla_ElementID id) {
+static inline InteractionRecord *get_interaction_record(Layla_ElementID id) {
     InteractionRecord *record = NULL;
     hash_map_get(&state.interaction_records, id, &record);
     return record != NULL && record->generation == state.generation ? record : NULL;
+}
+
+static inline InteractionRecord *get_enabled_interaction_record(Layla_ElementID id, Tui_ElementFlags required_flags) {
+    InteractionRecord *record = get_interaction_record(id);
+    if (record == NULL || (record->flags & TUI_ELEMENT_DISABLED)) return NULL;
+    if ((record->flags & required_flags) != required_flags) return NULL;
+    return record;
 }
 
 static inline DragPosition *get_drag_position_by_id(Layla_ElementID id) {
@@ -171,16 +182,16 @@ static inline DragPosition *get_drag_position_by_id(Layla_ElementID id) {
     return position;
 }
 
-static inline Layla_ElementID get_interaction_target_by_flags(u8 required_flags) {
+static inline Layla_ElementID get_interaction_target_by_flags(Tui_ElementFlags required_flags) {
     Layla_ElementIDSlice hovered = layla_get_hovered_element_ids();
 
     for (isize i = hovered.count; i > 0; --i) {
         Layla_ElementID id = hovered.items[i - 1];
         while (id != LAYLA_ELEMENT_ID_NONE) {
-            InteractionRecord *record = get_interaction_record_by_id(id);
+            InteractionRecord *record = get_interaction_record(id);
             if (record != NULL) {
-                if (record->config.flags & TUI_ELEMENT_DISABLED) break;
-                if ((record->config.flags & required_flags) == required_flags) return id;
+                if (record->flags & TUI_ELEMENT_DISABLED) break;
+                if ((record->flags & required_flags) == required_flags) return id;
             }
 
             Layla_ElementData data = layla_get_element_data(id);
@@ -208,6 +219,14 @@ static inline void route_events(Brenda_EventSlice events) {
         || cursor.interaction_state == LAYLA_CURSOR_PRESSED;
     b32 cursor_was_set = false;
 
+    Layla_ElementID *focused_id = &state.focus.focused_ids.items[state.focus.active_scope];
+    InteractionRecord *focused_record = get_enabled_interaction_record(*focused_id, TUI_ELEMENT_FOCUSABLE);
+    if (*focused_id != LAYLA_ELEMENT_ID_NONE
+        && (focused_record == NULL || focused_record->focus_scope != state.focus.active_scope))
+    {
+        *focused_id = LAYLA_ELEMENT_ID_NONE;
+    }
+
     for (isize i = 0; i < events.count; ++i) {
         Brenda_Event event = events.items[i];
         RoutedEvent routed = {.event.event = event};
@@ -233,6 +252,11 @@ static inline void route_events(Brenda_EventSlice events) {
             case BRENDA_EVENT_MOUSE_LEFT: {
                 Layla_ElementID click_target = get_interaction_target_by_flags(TUI_ELEMENT_CLICKABLE);
                 Layla_ElementID focus_target = get_interaction_target_by_flags(TUI_ELEMENT_HOVERABLE | TUI_ELEMENT_FOCUSABLE);
+                InteractionRecord *focus_record = get_enabled_interaction_record(
+                    focus_target, TUI_ELEMENT_HOVERABLE | TUI_ELEMENT_FOCUSABLE);
+                if (focus_record == NULL || focus_record->focus_scope != state.focus.active_scope) {
+                    focus_target = LAYLA_ELEMENT_ID_NONE;
+                }
                 Layla_ElementID previous_pressed_id = state.pressed_id;
                 Layla_ElementID previous_drag_id = state.active_drag.state.element_id;
                 Layla_ElementID drag_target = LAYLA_ELEMENT_ID_NONE;
@@ -261,7 +285,8 @@ static inline void route_events(Brenda_EventSlice events) {
                         state.active_drag = (ActiveDrag) {0};
                     }
 
-                    state.focus.id = focus_target;
+                    if (focus_target != LAYLA_ELEMENT_ID_NONE || state.focus.active_scope == 0)
+                        *focused_id = focus_target;
                 } else {
                     Tui_DragState *drag = &state.active_drag.state;
                     if (drag->element_id != LAYLA_ELEMENT_ID_NONE) {
@@ -320,7 +345,7 @@ static inline void route_events(Brenda_EventSlice events) {
             }
             default: {
                 if (binding_matches_event(state.config.bindings.focus_clear, event)) {
-                    state.focus.id = LAYLA_ELEMENT_ID_NONE;
+                    *focused_id = LAYLA_ELEMENT_ID_NONE;
                     routed.consumed = true;
                 } else if (binding_matches_event(state.config.bindings.focus_next, event)) {
                     move_focus(1);
@@ -329,18 +354,19 @@ static inline void route_events(Brenda_EventSlice events) {
                     move_focus(-1);
                     routed.consumed = true;
                 } else {
-                    InteractionRecord *record = get_interaction_record_by_id(state.focus.id);
-                    b32 focused_element_is_enabled = record != NULL && !(record->config.flags & TUI_ELEMENT_DISABLED);
+                    InteractionRecord *record = get_enabled_interaction_record(*focused_id, TUI_ELEMENT_NONE);
+                    b32 focused_element_is_enabled = record != NULL
+                        && record->focus_scope == state.focus.active_scope;
                     if (focused_element_is_enabled
-                        && (record->config.flags & TUI_ELEMENT_CLICKABLE)
+                        && (record->flags & TUI_ELEMENT_CLICKABLE)
                         && (binding_matches_event(state.config.bindings.activate, event)
                             || binding_matches_event(state.config.bindings.activate_alternate, event))) {
-                        state.clicked_id = state.focus.id;
+                        state.clicked_id = *focused_id;
                         routed.consumed = true;
                     } else {
                         b32 keyboard_event = event.type == BRENDA_EVENT_TERM_KEY
                             || event.type == BRENDA_EVENT_UTF8;
-                        if (keyboard_event && focused_element_is_enabled) routed.event.target_id = state.focus.id;
+                        if (keyboard_event && focused_element_is_enabled) routed.event.target_id = *focused_id;
                     }
                 }
                 break;
@@ -366,18 +392,16 @@ static inline void route_events(Brenda_EventSlice events) {
     list_clear(&state.focus.order);
 }
 
-//TODO: analyze if I need to add an accessor function for focused element id 
-//      so that we don't accidentally jump out of scope
 static inline void move_focus(i32 direction) {
     if (state.focus.order.count == 0) {
-        state.focus.id = LAYLA_ELEMENT_ID_NONE;
+        state.focus.focused_ids.items[state.focus.active_scope] = LAYLA_ELEMENT_ID_NONE;
         return;
     }
 
+    Layla_ElementID *focused_id = &state.focus.focused_ids.items[state.focus.active_scope];
     isize index = direction > 0 ? -1 : 0;
     for (isize i = 0; i < state.focus.order.count; ++i) {
-        FocusRecord record = state.focus.order.items[i];
-        if (record.id == state.focus.id && record.scope == state.focus.current_scope) {
+        if (state.focus.order.items[i] == *focused_id) {
             index = i;
             break;
         }
@@ -388,18 +412,16 @@ static inline void move_focus(i32 direction) {
         if (index < 0) index = state.focus.order.count - 1;
         if (index >= state.focus.order.count) index = 0;
 
-        FocusRecord focus_record = state.focus.order.items[index];
-        InteractionRecord *interaction_record = get_interaction_record_by_id(focus_record.id);
-        if (interaction_record != NULL 
-                && !(interaction_record->config.flags & TUI_ELEMENT_DISABLED)
-                && focus_record.scope == state.focus.current_scope
-        ) {
-            state.focus.id = focus_record.id;
+        Layla_ElementID id = state.focus.order.items[index];
+        InteractionRecord *interaction_record = get_enabled_interaction_record(id, TUI_ELEMENT_FOCUSABLE);
+        if (interaction_record != NULL
+            && interaction_record->focus_scope == state.focus.active_scope) {
+            *focused_id = id;
             return;
         }
     }
 
-    state.focus.id = LAYLA_ELEMENT_ID_NONE;
+    *focused_id = LAYLA_ELEMENT_ID_NONE;
 }
 
 // Layla and Brenda adapter
@@ -418,8 +440,8 @@ static inline void draw_commands(Layla_CommandSlice commands) {
         Layla_Command command = commands.items[i];
 
         if (command.type == LAYLA_CMD_CUSTOM) {
-            InteractionRecord *record = get_interaction_record_by_id(command.id);
-            if (record != NULL && (record->config.flags & ELEMENT_INTERNAL_CUSTOM_COMMAND)) {
+            InteractionRecord *record = get_enabled_interaction_record(command.id, ELEMENT_INTERNAL_CUSTOM_COMMAND);
+            if (record != NULL) {
                 CustomCommand *custom = command.as.custom.userdata;
                 switch (custom->type) {
                     case CUSTOM_COMMAND_TEXT_INPUT_CURSOR:
@@ -484,7 +506,7 @@ void tui_open_div(Tui_DivConfig config) {
         config.flags |= TUI_ELEMENT_HOVERABLE | TUI_ELEMENT_ACCEPTS_SCROLL;
     if (config.floating.attach_to.type != LAYLA_ATTACH_TO_NONE && config.floating.draggable)
         config.flags |= TUI_ELEMENT_DRAGGABLE;
-    tui_register_element(id, (Tui_ElementConfig) {.flags = config.flags});
+    tui_register_element(id, config.flags);
     layla_configure_container_element((Layla_ContainerConfig) {
         .style = config.style,
         .floating = {
@@ -503,6 +525,19 @@ void tui_open_div(Tui_DivConfig config) {
     if (position != NULL && (config.flags & TUI_ELEMENT_DRAGGABLE)) {
         layla_set_element_position(id, position->x, position->y);
     }
+
+    if (config.focus_scope) {
+        state.focus.declaration_scope++;
+        state.focus.deepest_scope = state.focus.declaration_scope;
+        if (state.focus.focused_ids.count == state.focus.declaration_scope) {
+            list_append(&state.focus.focused_ids, LAYLA_ELEMENT_ID_NONE);
+        }
+    }
+}
+
+void tui_close_div(Tui_DivConfig config) {
+    layla_close_element();
+    if (config.focus_scope && state.focus.declaration_scope > 0) state.focus.declaration_scope--;
 }
 
 void tui_draw_text(Tui_TextConfig config) {
@@ -510,7 +545,7 @@ void tui_draw_text(Tui_TextConfig config) {
     else layla_open_text_element_with_id(config.id);
 
     Layla_ElementID id = layla_get_open_element_id();
-    tui_register_element(id, (Tui_ElementConfig) {.flags = config.flags});
+    tui_register_element(id, config.flags);
     layla_configure_text_element((Layla_TextConfig) {
         .text = config.text,
         .style = config.style,
@@ -525,9 +560,9 @@ b32 tui_draw_button(Tui_ButtonConfig config) {
     else layla_open_container_element_with_id(config.id);
 
     Layla_ElementID id = layla_get_open_element_id();
-    u8 flags = TUI_ELEMENT_HOVERABLE | TUI_ELEMENT_CLICKABLE | TUI_ELEMENT_FOCUSABLE;
+    Tui_ElementFlags flags = TUI_ELEMENT_HOVERABLE | TUI_ELEMENT_CLICKABLE | TUI_ELEMENT_FOCUSABLE;
     if (config.disabled) flags |= TUI_ELEMENT_DISABLED;
-    tui_register_element(id, (Tui_ElementConfig) {.flags = flags});
+    tui_register_element(id, flags);
 
     if      (tui_is_element_pressed(id)) config.style.background = config.pressed_background;
     else if (tui_is_element_hovered(id)) config.style.background = config.hovered_background;
@@ -547,9 +582,9 @@ b32 tui_draw_text_input(Tui_TextInputConfig config) {
     else layla_open_container_element_with_id(config.id);
 
     Layla_ElementID id = layla_get_open_element_id();
-    u8 flags = TUI_ELEMENT_HOVERABLE | TUI_ELEMENT_FOCUSABLE;
+    Tui_ElementFlags flags = TUI_ELEMENT_HOVERABLE | TUI_ELEMENT_FOCUSABLE;
     if (config.disabled) flags |= TUI_ELEMENT_DISABLED;
-    tui_register_element(id, (Tui_ElementConfig) {.flags = flags});
+    tui_register_element(id, flags);
 
     b32 is_focused = tui_is_element_focused(id);
     if (is_focused && config.focused_background.is_set) {
@@ -573,7 +608,7 @@ b32 tui_draw_text_input(Tui_TextInputConfig config) {
             ? (Layla_TextSlice) {.items = " ", .count = 1}
             : (Layla_TextSlice) {.items = input->items, .count = input->count},
         .style = config.text_style,
-        .flags = is_focused ? ELEMENT_INTERNAL_CUSTOM_COMMAND : 0,
+        .flags = is_focused ? ELEMENT_INTERNAL_CUSTOM_COMMAND : TUI_ELEMENT_NONE,
         .marker = is_focused
             ? (Layla_TextMarker) {
                 .byte_offset = input->cursor,

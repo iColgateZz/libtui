@@ -7,7 +7,8 @@
 #include "psh_core.h"
 
 typedef struct {
-    Tui_ElementConfig config;
+    Tui_ElementFlags flags;
+    i32 focus_scope;
     u32 generation;
 } InteractionRecord;
 
@@ -28,15 +29,8 @@ typedef struct {
     b32 changed;
 } TextInputEventContext;
 
-typedef struct {
-    Layla_ElementID id;
-    i32 scope;
-} FocusRecord;
-
-enum {
-    //TODO: I dislike this. Either together with the others, or come up with something new.
-    ELEMENT_INTERNAL_CUSTOM_COMMAND = 1 << 7,
-};
+//TODO: I dislike this. Either together with the others, or come up with something new.
+#define ELEMENT_INTERNAL_CUSTOM_COMMAND ((Tui_ElementFlags) (1 << 7))
 
 typedef struct {
     enum {
@@ -52,7 +46,6 @@ hash_map_def(Layla_ElementID, DragPosition)
 list_def(Layla_ElementID)
 list_def(Tui_Event)
 list_def(RoutedEvent)
-list_def(FocusRecord)
 
 typedef struct {
     HashMap(Layla_ElementID, InteractionRecord) interaction_records;
@@ -64,9 +57,15 @@ typedef struct {
     Layla_ElementID pressed_id;
     Layla_ElementID clicked_id;
     struct {
-        Layla_ElementID id;
-        i32 current_scope;
-        List(FocusRecord) order;
+        // Index is scope depth. Entry zero is the root scope.
+        List(Layla_ElementID) focused_ids;
+        List(Layla_ElementID) order;
+        // Used to route events and render focus from the last completed layout.
+        i32 active_scope;
+        // Tracks nesting while the current layout is being declared.
+        i32 declaration_scope;
+        // Becomes active after the current layout is complete.
+        i32 deepest_scope;
     } focus;
     u32 generation;
     isize registered_count;
@@ -81,9 +80,10 @@ static inline Brenda_Color color_from_layla(Layla_Color color);
 static inline i32 measure_text(Layla_TextSlice text, void *userdata);
 static inline Tui_Binding resolve_binding(Tui_Binding binding, Tui_Binding default_binding);
 static inline b32 binding_matches_event(Tui_Binding binding, Brenda_Event event);
-static inline InteractionRecord *get_interaction_record_by_id(Layla_ElementID id);
+static inline InteractionRecord *get_interaction_record(Layla_ElementID id);
+static inline InteractionRecord *get_enabled_interaction_record(Layla_ElementID id, Tui_ElementFlags required_flags);
 static inline DragPosition *get_drag_position_by_id(Layla_ElementID id);
-static inline Layla_ElementID get_interaction_target_by_flags(u8 required_flags);
+static inline Layla_ElementID get_interaction_target_by_flags(Tui_ElementFlags required_flags);
 static inline void route_events(Brenda_EventSlice events);
 static inline void move_focus(i32 direction);
 static inline void draw_commands(Layla_CommandSlice commands);

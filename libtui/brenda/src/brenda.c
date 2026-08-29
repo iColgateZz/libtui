@@ -1032,6 +1032,7 @@ static TerminalTextUnit decode_terminal_text_unit(byte **cursor, byte *end) {
     return text_unit_from_bytes(start, *cursor - start, get_cell_width_from_unicode(codepoint));
 }
 
+//TODO: check zig docs. In grammar section, there is something about this.
 static u8 get_cell_width_from_unicode(Unicode codepoint) {
     if (codepoint < 32 || (codepoint >= 0x7F && codepoint < 0xA0)) return 0;
 
