@@ -498,6 +498,14 @@ static inline void draw_commands(Layla_CommandSlice commands) {
 // Widgets
 
 void tui_open_div(Tui_DivConfig config) {
+    if (config.focus_scope) {
+        state.focus.declaration_scope++;
+        state.focus.deepest_scope = state.focus.declaration_scope;
+        if (state.focus.focused_ids.count == state.focus.declaration_scope) {
+            list_append(&state.focus.focused_ids, LAYLA_ELEMENT_ID_NONE);
+        }
+    }
+
     if (config.id == LAYLA_ELEMENT_ID_NONE) layla_open_container_element();
     else layla_open_container_element_with_id(config.id);
 
@@ -524,14 +532,6 @@ void tui_open_div(Tui_DivConfig config) {
     DragPosition *position = get_drag_position_by_id(id);
     if (position != NULL && (config.flags & TUI_ELEMENT_DRAGGABLE)) {
         layla_set_element_position(id, position->x, position->y);
-    }
-
-    if (config.focus_scope) {
-        state.focus.declaration_scope++;
-        state.focus.deepest_scope = state.focus.declaration_scope;
-        if (state.focus.focused_ids.count == state.focus.declaration_scope) {
-            list_append(&state.focus.focused_ids, LAYLA_ELEMENT_ID_NONE);
-        }
     }
 }
 
