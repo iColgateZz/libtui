@@ -14,13 +14,8 @@ typedef struct {
 typedef struct { i32 x, y; } DragPosition;
 
 typedef struct {
-    Tui_DragState state;
-    i32 cursor_start_x, cursor_start_y;
-} ActiveDrag;
-
-typedef struct {
     Tui_Event event;
-    u8 consumed;
+    b32 consumed;
 } RoutedEvent;
 
 typedef struct {
@@ -40,7 +35,10 @@ typedef struct {
     List(RoutedEvent) routed_events;
     List(Tui_Event) unhandled_events;
     Tui_Config config;
-    ActiveDrag active_drag;
+    struct {
+        Tui_DragState state;
+        i32 cursor_start_x, cursor_start_y;
+    } active_drag;
     Layla_ElementID pressed_id;
     Layla_ElementID clicked_id;
     struct {

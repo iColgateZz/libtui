@@ -22,10 +22,8 @@ void draggable_panel(i32 id, i32 z_index, Layla_Color color, Layla_TextSlice tex
             .draggable = true,
             .attach_to = {.type = LAYLA_ATTACH_TO_ROOT},
             .z_index = z_index,
-            .attach_point = {
-                .parent =  {.x = LAYLA_ALIGN_END, .y = LAYLA_ALIGN_START},
-                .element = {.x = LAYLA_ALIGN_END, .y = LAYLA_ALIGN_START},
-            },
+            .parent_attach_point =  {.x = LAYLA_ALIGN_END, .y = LAYLA_ALIGN_START},
+            .element_attach_point = {.x = LAYLA_ALIGN_END, .y = LAYLA_ALIGN_START},
         },
         .style = {
             .size = {.w = LAYLA_FIXED(26), .h = LAYLA_FIXED(4)},
@@ -107,9 +105,9 @@ i32 main(void) {
 
         Tui_EventSlice events = tui_get_unhandled_events();
         for (isize i = 0; i < events.count; ++i) {
-            Brenda_Event event = events.items[i].event;
-            if (event.type == BRENDA_EVENT_UTF8 && event.as.utf8.length == 1
-                && event.as.utf8.bytes[0] == 'q') {
+            Brenda_Event input_event = events.items[i].input;
+            if (input_event.type == BRENDA_EVENT_UTF8 && input_event.as.utf8.length == 1
+                && input_event.as.utf8.bytes[0] == 'q') {
                 quit = true;
             }
         }

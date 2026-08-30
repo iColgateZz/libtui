@@ -17,15 +17,13 @@ typedef enum {
 // Returning true indicates that command was handled.
 typedef b32 (*Tui_CommandHandler)(Layla_Command command, void *userdata);
 
-typedef enum {
-    TUI_BINDING_USE_DEFAULT,
-    TUI_BINDING_DISABLED,
-    TUI_BINDING_TERM_KEY,
-    TUI_BINDING_CHARACTER,
-} Tui_BindingType;
-
 typedef struct {
-    Tui_BindingType type;
+    enum {
+        TUI_BINDING_USE_DEFAULT,
+        TUI_BINDING_DISABLED,
+        TUI_BINDING_TERM_KEY,
+        TUI_BINDING_CHARACTER,
+    } type;
     u8 modifiers;
     union {
         Brenda_TermKey term_key;
@@ -56,20 +54,16 @@ typedef struct {
 } Tui_Config;
 
 typedef struct {
-    b32 draggable;
-    Layla_FloatingAttachTo attach_to;
-    struct {
-        Layla_FloatingAttachPoint parent;
-        Layla_FloatingAttachPoint element;
-    } attach_point;
-    Layla_CursorCaptureMode cursor_capture_mode;
-    i32 z_index;
-} Tui_Floating;
-
-typedef struct {
     Layla_ElementID id;
     Layla_ContainerStyle style;
-    Tui_Floating floating;
+    struct {
+        b32 draggable;
+        Layla_FloatingAttachTo attach_to;
+        Layla_FloatingAttachPoint parent_attach_point;
+        Layla_FloatingAttachPoint element_attach_point;
+        Layla_CursorCaptureMode cursor_capture_mode;
+        i32 z_index;
+    } floating;
     void *custom;
     Tui_ElementFlags flags;
     // Starts a nested focus scope for this div and its descendants.
@@ -99,7 +93,7 @@ typedef struct {
 
 typedef struct {
     Layla_ElementID target_id;
-    Brenda_Event event;
+    Brenda_Event input;
 } Tui_Event;
 
 typedef struct {
@@ -110,16 +104,14 @@ typedef struct {
 // Return true when the event was handled and should not be exposed to the application.
 typedef b32 (*Tui_EventHandler)(Tui_Event event, void *userdata);
 
-typedef enum {
-    TUI_DRAG_NONE,
-    TUI_DRAG_STARTED,
-    TUI_DRAGGING,
-    TUI_DRAG_RELEASED,
-} Tui_DragInteractionState;
-
 typedef struct {
     Layla_ElementID element_id;
-    Tui_DragInteractionState interaction_state;
+    enum {
+        TUI_DRAG_NONE,
+        TUI_DRAG_STARTED,
+        TUI_DRAGGING,
+        TUI_DRAG_RELEASED,
+    } phase;
     // Element position at the start of the current drag.
     i32 start_x, start_y;
     // Total displacement from the drag start position.

@@ -208,10 +208,10 @@ static inline void route_events(Brenda_EventSlice events) {
     list_clear(&state.routed_events);
     list_clear(&state.unhandled_events);
 
-    if (state.active_drag.state.interaction_state == TUI_DRAG_STARTED) {
-        state.active_drag.state.interaction_state = TUI_DRAGGING;
-    } else if (state.active_drag.state.interaction_state == TUI_DRAG_RELEASED) {
-        state.active_drag = (ActiveDrag) {0};
+    if (state.active_drag.state.phase == TUI_DRAG_STARTED) {
+        state.active_drag.state.phase = TUI_DRAGGING;
+    } else if (state.active_drag.state.phase == TUI_DRAG_RELEASED) {
+        state.active_drag.state = (Tui_DragState) {0};
     }
 
     Layla_CursorState cursor = layla_get_cursor_state();
@@ -229,7 +229,7 @@ static inline void route_events(Brenda_EventSlice events) {
 
     for (isize i = 0; i < events.count; ++i) {
         Brenda_Event event = events.items[i];
-        RoutedEvent routed = {.event.event = event};
+        RoutedEvent routed = {.event.input = event};
 
         b32 event_has_cursor_position = event.type == BRENDA_EVENT_MOUSE_LEFT
             || event.type == BRENDA_EVENT_MOUSE_RIGHT
@@ -276,13 +276,13 @@ static inline void route_events(Brenda_EventSlice events) {
                         }
 
                         state.active_drag.state.element_id = drag_target;
-                        state.active_drag.state.interaction_state = TUI_DRAG_STARTED;
+                        state.active_drag.state.phase = TUI_DRAG_STARTED;
                         state.active_drag.state.delta_x = 0;
                         state.active_drag.state.delta_y = 0;
                         state.active_drag.cursor_start_x = cursor.x;
                         state.active_drag.cursor_start_y = cursor.y;
                     } else {
-                        state.active_drag = (ActiveDrag) {0};
+                        state.active_drag.state = (Tui_DragState) {0};
                     }
 
                     if (focus_target != LAYLA_ELEMENT_ID_NONE || state.focus.active_scope == 0)
@@ -299,7 +299,7 @@ static inline void route_events(Brenda_EventSlice events) {
                                 .y = drag->start_y + drag->delta_y,
                             }));
                         }
-                        drag->interaction_state = TUI_DRAG_RELEASED;
+                        drag->phase = TUI_DRAG_RELEASED;
                     }
 
                     b32 element_was_dragged = drag->element_id != LAYLA_ELEMENT_ID_NONE
@@ -327,7 +327,7 @@ static inline void route_events(Brenda_EventSlice events) {
                         .x = drag->start_x + drag->delta_x,
                         .y = drag->start_y + drag->delta_y,
                     }));
-                    drag->interaction_state = TUI_DRAGGING;
+                    drag->phase = TUI_DRAGGING;
                     routed.consumed = true;
                 }
                 break;
@@ -504,8 +504,8 @@ void tui_open_div(Tui_DivConfig config) {
         .floating = {
             .attach_to = config.floating.attach_to,
             .attach_point = {
-                .parent = config.floating.attach_point.parent,
-                .element = config.floating.attach_point.element,
+                .parent = config.floating.parent_attach_point,
+                .element = config.floating.element_attach_point,
             },
             .cursor_capture_mode = config.floating.cursor_capture_mode,
             .z_index = config.floating.z_index,
@@ -604,13 +604,13 @@ b32 tui_draw_text_input(Tui_TextInputConfig config) {
 static inline b32 text_input_handle_event(Tui_Event event, void *userdata) {
     TextInputEventContext *context = userdata;
     Tui_TextInputState *input = context->state;
-    Brenda_Event brenda_event = event.event;
+    Brenda_Event input_event = event.input;
 
-    if (brenda_event.type == BRENDA_EVENT_MOUSE_LEFT) return true;
+    if (input_event.type == BRENDA_EVENT_MOUSE_LEFT) return true;
 
-    if (brenda_event.type == BRENDA_EVENT_UTF8) {
-        if (brenda_event.modifiers & (BRENDA_MODIFIER_CTRL | BRENDA_MODIFIER_ALT)) return false;
-        isize byte_count = brenda_event.as.utf8.length;
+    if (input_event.type == BRENDA_EVENT_UTF8) {
+        if (input_event.modifiers & (BRENDA_MODIFIER_CTRL | BRENDA_MODIFIER_ALT)) return false;
+        isize byte_count = input_event.as.utf8.length;
         if (byte_count <= 0 || input->count + byte_count > input->capacity) return true;
 
         memmove(
@@ -618,16 +618,16 @@ static inline b32 text_input_handle_event(Tui_Event event, void *userdata) {
             input->items + input->cursor,
             input->count - input->cursor
         );
-        memcpy(input->items + input->cursor, brenda_event.as.utf8.bytes, byte_count);
+        memcpy(input->items + input->cursor, input_event.as.utf8.bytes, byte_count);
         input->cursor += byte_count;
         input->count += byte_count;
         context->changed = true;
         return true;
     }
 
-    if (brenda_event.type != BRENDA_EVENT_TERM_KEY) return false;
+    if (input_event.type != BRENDA_EVENT_TERM_KEY) return false;
 
-    switch (brenda_event.as.term_key) {
+    switch (input_event.as.term_key) {
         case BRENDA_TERM_KEY_LEFT:
             input->cursor -= brenda_distance_to_codepoint_boundary(
                 input->items, input->count, input->cursor, BRENDA_UTF8_DIRECTION_BACKWARD);
