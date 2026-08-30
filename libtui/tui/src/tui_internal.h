@@ -9,7 +9,6 @@
 typedef struct {
     Tui_ElementFlags flags;
     i32 focus_scope;
-    u32 generation;
 } InteractionRecord;
 
 typedef struct { i32 x, y; } DragPosition;
@@ -28,18 +27,6 @@ typedef struct {
     Tui_TextInputState *state;
     b32 changed;
 } TextInputEventContext;
-
-//TODO: I dislike this. Either together with the others, or come up with something new.
-#define ELEMENT_INTERNAL_CUSTOM_COMMAND ((Tui_ElementFlags) (1 << 7))
-
-typedef struct {
-    enum {
-        CUSTOM_COMMAND_TEXT_INPUT_CURSOR
-    } type;
-    union {
-        Brenda_TextEffect text_input_cursor;
-    } as;
-} CustomCommand;
 
 hash_map_def(Layla_ElementID, InteractionRecord)
 hash_map_def(Layla_ElementID, DragPosition)
@@ -67,11 +54,7 @@ typedef struct {
         // Becomes active after the current layout is complete.
         i32 deepest_scope;
     } focus;
-    u32 generation;
-    isize registered_count;
-    struct {
-        CustomCommand text_input_cursor;
-    } custom_commands;
+    Brenda_TextEffect text_input_cursor_effect;
 } State;
 
 static inline u64 hash_element_id(Layla_ElementID id);

@@ -59,12 +59,12 @@ void tui_end_frame(void) {
 // Interaction state and event routing
 
 void tui_register_element(Layla_ElementID id, Tui_ElementFlags flags) {
+    if (flags == TUI_ELEMENT_NONE) return;
+
     hash_map_insert(&state.interaction_records, id, ((InteractionRecord) {
         .flags = flags,
         .focus_scope = state.focus.declaration_scope,
-        .generation = state.generation,
     }));
-    state.registered_count++;
 
     if (flags & TUI_ELEMENT_FOCUSABLE) {
         list_append(&state.focus.order, id);
@@ -166,7 +166,7 @@ static inline b32 binding_matches_event(Tui_Binding binding, Brenda_Event event)
 static inline InteractionRecord *get_interaction_record(Layla_ElementID id) {
     InteractionRecord *record = NULL;
     hash_map_get(&state.interaction_records, id, &record);
-    return record != NULL && record->generation == state.generation ? record : NULL;
+    return record;
 }
 
 static inline InteractionRecord *get_enabled_interaction_record(Layla_ElementID id, Tui_ElementFlags required_flags) {
@@ -378,17 +378,7 @@ static inline void route_events(Brenda_EventSlice events) {
 
     if (!cursor_was_set) layla_set_cursor_state(cursor.x, cursor.y, cursor_is_down);
 
-    u32 next_generation = state.generation + 1;
-    b32 no_live_records = state.registered_count == 0 && state.interaction_records.count > 0;
-    b32 too_many_stale_records = state.registered_count > 0
-        && state.interaction_records.count >= state.registered_count * 2;
-    if (next_generation == 0 || no_live_records || too_many_stale_records) {
-        hash_map_clear(&state.interaction_records);
-        if (next_generation == 0) next_generation = 1;
-    }
-
-    state.generation = next_generation;
-    state.registered_count = 0;
+    if (state.interaction_records.count > 0) hash_map_clear(&state.interaction_records);
     list_clear(&state.focus.order);
 }
 
@@ -439,17 +429,10 @@ static inline void draw_commands(Layla_CommandSlice commands) {
     for (isize i = 0; i < commands.count; ++i) {
         Layla_Command command = commands.items[i];
 
-        if (command.type == LAYLA_CMD_CUSTOM) {
-            InteractionRecord *record = get_enabled_interaction_record(command.id, ELEMENT_INTERNAL_CUSTOM_COMMAND);
-            if (record != NULL) {
-                CustomCommand *custom = command.as.custom.userdata;
-                switch (custom->type) {
-                    case CUSTOM_COMMAND_TEXT_INPUT_CURSOR:
-                        brenda_apply_text_effect(command.as.custom.x, command.as.custom.y, custom->as.text_input_cursor);
-                        break;
-                }
-                continue;
-            }
+        if (command.type == LAYLA_CMD_CUSTOM
+            && command.as.custom.userdata == &state.text_input_cursor_effect) {
+            brenda_apply_text_effect(command.as.custom.x, command.as.custom.y, state.text_input_cursor_effect);
+            continue;
         }
 
         Tui_CommandHandler handler = state.config.command_handler;
@@ -497,6 +480,7 @@ static inline void draw_commands(Layla_CommandSlice commands) {
 
 // Widgets
 
+//TODO: Maybe flags for concrete widgets should not be exposed to the user?
 void tui_open_div(Tui_DivConfig config) {
     if (config.focus_scope) {
         state.focus.declaration_scope++;
@@ -596,10 +580,7 @@ b32 tui_draw_text_input(Tui_TextInputConfig config) {
     if (is_focused) {
         tui_consume_element_specific_events(id, text_input_handle_event, &event_context);
 
-        state.custom_commands.text_input_cursor = (CustomCommand) {
-            .type = CUSTOM_COMMAND_TEXT_INPUT_CURSOR,
-            .as.text_input_cursor = {.flags = BRENDA_TEXT_EFFECT_UNDERLINE},
-        };
+        state.text_input_cursor_effect = (Brenda_TextEffect) {.flags = BRENDA_TEXT_EFFECT_UNDERLINE};
     }
 
     config.text_style.wrap_policy = LAYLA_TEXT_WRAP_CHARACTER;
@@ -608,11 +589,10 @@ b32 tui_draw_text_input(Tui_TextInputConfig config) {
             ? (Layla_TextSlice) {.items = " ", .count = 1}
             : (Layla_TextSlice) {.items = input->items, .count = input->count},
         .style = config.text_style,
-        .flags = is_focused ? ELEMENT_INTERNAL_CUSTOM_COMMAND : TUI_ELEMENT_NONE,
         .marker = is_focused
             ? (Layla_TextMarker) {
                 .byte_offset = input->cursor,
-                .userdata = &state.custom_commands.text_input_cursor,
+                .userdata = &state.text_input_cursor_effect,
             }
             : (Layla_TextMarker) {0},
     );
