@@ -73,12 +73,7 @@ typedef struct {
     i32 max_y;
 } ScrollState;
 
-typedef struct {
-    Layla_ElementData data;
-    u32 generation;
-} ElementRecord;
-
-hash_map_def(Layla_ElementID, ElementRecord)
+hash_map_def(Layla_ElementID, Layla_ElementData)
 hash_map_def(Layla_ElementID, ScrollState)
 
 typedef enum {
@@ -105,9 +100,8 @@ typedef struct {
     List(Layla_Command) commands;
     List(Layla_Error) errors;
     List(Layla_ElementID) hovered_element_ids;
-    HashMap(Layla_ElementID, ElementRecord) element_records;
+    HashMap(Layla_ElementID, Layla_ElementData) element_datas;
     HashMap(Layla_ElementID, ScrollState) scroll_states;
-    u32 completed_generation;
     i32 width, height;
     Layla_CursorState cursor;
     Layla_TextMeasureFunction text_measure_function;

@@ -12,7 +12,7 @@ static TempID FLOATING_ROOTS[LAYLA_MAX_NODES];
 static Layla_Command COMMANDS[LAYLA_MAX_COMMANDS];
 static Layla_Error ERRORS[LAYLA_MAX_ERRORS];
 static Layla_ElementID HOVERED_ELEMENT_IDS[LAYLA_MAX_NODES];
-static HashMapEntry(Layla_ElementID, ElementRecord) ELEMENT_RECORDS_BY_ID[LAYLA_MAX_NODES * 2];
+static HashMapEntry(Layla_ElementID, Layla_ElementData) ELEMENT_DATA_BY_ID[LAYLA_MAX_NODES * 2];
 static HashMapEntry(Layla_ElementID, ScrollState) SCROLL_STATES_BY_ELEMENT_ID[LAYLA_MAX_SCROLL_STATES];
 static union { // try different alignments
     void *pointer;
@@ -29,8 +29,8 @@ static State state = {
     .commands = { .items = COMMANDS, .capacity = LAYLA_MAX_COMMANDS },
     .errors = { .items = ERRORS, .capacity = LAYLA_MAX_ERRORS },
     .hovered_element_ids = { .items = HOVERED_ELEMENT_IDS, .capacity = LAYLA_MAX_NODES },
-    .element_records = {
-        .items = ELEMENT_RECORDS_BY_ID,
+    .element_data = {
+        .items = ELEMENT_DATA_BY_ID,
         .capacity = LAYLA_MAX_NODES * 2,
         .fixed_capacity = true,
         .key_hash = hash_element_id,
@@ -58,7 +58,7 @@ static State state = {
     } while (0)
 #else //!LAYLA_STATIC_STORAGE
 static State state = {
-    .element_records = { .key_hash = hash_element_id, .key_equal = equal_element_ids },
+    .element_datas = { .key_hash = hash_element_id, .key_equal = equal_element_ids },
     .scroll_states = { .key_hash = hash_element_id, .key_equal = equal_element_ids },
     .cursor = {.x = -1, .y = -1},
 };
@@ -135,12 +135,9 @@ Layla_CursorState layla_get_cursor_state(void) {
 }
 
 Layla_ElementData layla_get_element_data(Layla_ElementID id) {
-    ElementRecord *record = NULL;
-    hash_map_get(&state.element_records, id, &record);
-    if (record == NULL || record->generation != state.completed_generation) {
-        return (Layla_ElementData) {0};
-    }
-    return record->data;
+    Layla_ElementData *data = NULL;
+    hash_map_get(&state.element_datas, id, &data);
+    return data != NULL ? *data : (Layla_ElementData) {0};
 }
 
 void layla_set_element_position(Layla_ElementID id, i32 x, i32 y) {
@@ -200,16 +197,8 @@ Layla_CommandSlice layla_end_layout(void) {
     for (isize i = 0; i < state.floating_roots.count; ++i)
         floating_layout(get_node_by_temp_id(state.floating_roots.items[i]));
 
-    u32 next_generation = state.completed_generation + 1;
-    isize record_count = state.element_records.count;
-    isize current_count = state.nodes.count;
-    b32 too_many_stale_records = record_count >= current_count * 2;
-    b32 fixed_map_needs_room = state.element_records.fixed_capacity
-        && record_count > state.element_records.capacity - current_count
-        && record_count > current_count;
-    if (next_generation == 0 || too_many_stale_records || fixed_map_needs_room) {
-        hash_map_clear(&state.element_records);
-    }
+    // Keep the previous snapshot available until the new layout is complete.
+    if (state.element_datas.count > 0) hash_map_clear(&state.element_datas);
 
     for (isize i = 0; i < state.nodes.count; ++i) {
         Node node = state.nodes.items[i];
@@ -219,18 +208,14 @@ Layla_CommandSlice layla_end_layout(void) {
         if (node_is_scroll_y(&node)) flags |= LAYLA_ELEMENT_SCROLL_Y;
         if (node_is_floating(&node)) flags |= LAYLA_ELEMENT_FLOATING;
 
-        hash_map_insert(&state.element_records, node.id, ((ElementRecord) {
-            .generation = next_generation,
-            .data = {
-                .id = node.id,
-                .parent_id = parent_id,
-                .rectangle = node_get_rectangle(&node),
-                .flags = flags,
-                .found = true,
-            },
+        hash_map_insert(&state.element_datas, node.id, ((Layla_ElementData) {
+            .id = node.id,
+            .parent_id = parent_id,
+            .rectangle = node_get_rectangle(&node),
+            .flags = flags,
+            .found = true,
         }));
     }
-    state.completed_generation = next_generation;
 
     return (Layla_CommandSlice) {
         .items = state.commands.items,
