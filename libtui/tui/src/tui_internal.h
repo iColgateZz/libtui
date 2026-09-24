@@ -20,8 +20,9 @@ typedef struct {
 
 typedef struct {
     Tui_TextInputState *state;
+    Tui_Binding submit_binding;
     b32 single_line;
-    b32 changed;
+    Tui_TextInputResult result;
 } TextInputEventContext;
 
 hash_map_def(Layla_ElementID, InteractionRecord)

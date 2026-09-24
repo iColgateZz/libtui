@@ -40,6 +40,7 @@ i32 main(void) {
     tui_init((Tui_Config) {.fps = 60});
 
     i32 count = 0;
+    i32 submission_count = 0;
     b32 quit = false;
     byte input_text[256] = "";
     Tui_TextInputState input = tui_make_text_input_state(input_text, sizeof(input_text));
@@ -48,7 +49,7 @@ i32 main(void) {
         tui_begin_frame();
 
         byte count_text[64] = {0};
-        i32 count_text_length = snprintf(count_text, sizeof(count_text), "Button clicks: %d", count);
+        i32 count_text_length = snprintf(count_text, sizeof(count_text), "Button clicks: %d; submissions: %d", count, submission_count);
 
         Tui_Div(.style = {
             .size = {.w = LAYLA_FILL(), .h = LAYLA_FILL()},
@@ -69,12 +70,14 @@ i32 main(void) {
 
             Tui_Text(.text = ((Layla_TextSlice) {.items = count_text, .count = count_text_length}));
 
-            Tui_Text(.text = LAYLA_TEXT_SLICE("Text input (Enter adds a row; Escape releases focus):"));
-            Tui_TextInput(
+            Tui_Text(.text = LAYLA_TEXT_SLICE("Text input (Enter: new row; Ctrl+S: submit; Escape: release focus):"));
+            Tui_TextInputResult input_result = Tui_TextInput(
                 .id = TUI_EXAMPLE_TEXT_INPUT_ID,
                 .state = &input,
                 .placeholder = LAYLA_TEXT_SLICE("Click here and type. Long text wraps inside the input."),
+                .submit_binding = TUI_BINDING_CHAR('s', BRENDA_MODIFIER_CTRL),
             );
+            if (input_result.submitted) submission_count++;
 
             Tui_Div(
                 .id = TUI_EXAMPLE_SCROLL_ID,

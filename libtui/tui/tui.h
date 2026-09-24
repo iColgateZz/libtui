@@ -126,9 +126,17 @@ typedef struct {
 } Tui_TextInputState;
 
 typedef struct {
+    b32 changed;
+    b32 submitted;
+} Tui_TextInputResult;
+
+typedef struct {
     Layla_ElementID id;
     Tui_TextInputState *state;
     Layla_TextSlice placeholder;
+    // Defaults to Enter for single-line inputs, disabled for multiline inputs. NONE disables submission.
+    // Matching events are consumed before editing; global focus bindings take precedence.
+    Tui_Binding submit_binding;
     Layla_ContainerStyle style;
     Layla_TextStyle text_style;
     Layla_Color focused_background;
@@ -162,7 +170,8 @@ void tui_close_div(Tui_DivConfig config);
 void tui_draw_text(Tui_TextConfig config);
 b32 tui_draw_button(Tui_ButtonConfig config);
 Tui_TextInputState tui_make_text_input_state(byte *buffer, isize capacity);
-b32 tui_draw_text_input(Tui_TextInputConfig config);
+// Reports edits and submissions handled during this call. Both may be true; cursor movement is not an edit.
+Tui_TextInputResult tui_draw_text_input(Tui_TextInputConfig config);
 
 #define Tui_Div(...)                                                                                 \
     for (Tui_DivConfig _tui_config = {                                                               \

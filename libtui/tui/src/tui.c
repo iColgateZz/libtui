@@ -564,7 +564,7 @@ Tui_TextInputState tui_make_text_input_state(byte *buffer, isize capacity) {
     return (Tui_TextInputState) {.items = buffer, .count = count, .capacity = capacity, .cursor = count};
 }
 
-b32 tui_draw_text_input(Tui_TextInputConfig config) {
+Tui_TextInputResult tui_draw_text_input(Tui_TextInputConfig config) {
     Tui_TextInputState *input = config.state;
     input->cursor = CLAMP(input->cursor, 0, input->count);
 
@@ -586,6 +586,8 @@ b32 tui_draw_text_input(Tui_TextInputConfig config) {
         .state = input,
         .single_line = config.text_style.wrap_policy == LAYLA_TEXT_SINGLE_LINE,
     };
+    event_context.submit_binding = resolve_binding(config.submit_binding,
+        event_context.single_line ? TUI_BINDING_KEY(BRENDA_TERM_KEY_ENTER, 0) : TUI_BINDING_NONE);
     if (is_focused) {
         tui_consume_element_specific_events(id, text_input_handle_event, &event_context);
         state.text_input_cursor_effect = (Brenda_TextEffect) {.flags = BRENDA_TEXT_EFFECT_UNDERLINE};
@@ -605,13 +607,18 @@ b32 tui_draw_text_input(Tui_TextInputConfig config) {
     );
 
     layla_close_element();
-    return event_context.changed;
+    return event_context.result;
 }
 
 static inline b32 text_input_handle_event(Tui_Event event, void *userdata) {
     TextInputEventContext *context = userdata;
     Tui_TextInputState *input = context->state;
     Brenda_Event input_event = event.input;
+
+    if (binding_matches_event(context->submit_binding, input_event)) {
+        context->result.submitted = true;
+        return true;
+    }
 
     if (input_event.type == BRENDA_EVENT_MOUSE_LEFT) return true;
 
@@ -633,7 +640,7 @@ static inline b32 text_input_handle_event(Tui_Event event, void *userdata) {
         memcpy(input->items + input->cursor, input_event.as.utf8.bytes, byte_count);
         input->cursor += byte_count;
         input->count += byte_count;
-        context->changed = true;
+        context->result.changed = true;
         return true;
     }
 
@@ -658,7 +665,7 @@ static inline b32 text_input_handle_event(Tui_Event event, void *userdata) {
                 memmove(input->items + previous, input->items + input->cursor, input->count - input->cursor);
                 input->count -= input->cursor - previous;
                 input->cursor = previous;
-                context->changed = true;
+                context->result.changed = true;
             }
             return true;
         case BRENDA_TERM_KEY_DELETE:
@@ -668,7 +675,7 @@ static inline b32 text_input_handle_event(Tui_Event event, void *userdata) {
                         input->items, input->count, input->cursor, BRENDA_UTF8_DIRECTION_FORWARD);
                 memmove(input->items + input->cursor, input->items + next, input->count - next);
                 input->count -= next - input->cursor;
-                context->changed = true;
+                context->result.changed = true;
             }
             return true;
         case BRENDA_TERM_KEY_ENTER:
@@ -677,7 +684,7 @@ static inline b32 text_input_handle_event(Tui_Event event, void *userdata) {
                 memmove(input->items + input->cursor + 1, input->items + input->cursor, input->count - input->cursor);
                 input->items[input->cursor++] = '\n';
                 input->count++;
-                context->changed = true;
+                context->result.changed = true;
             }
             return true;
         default: return false;
