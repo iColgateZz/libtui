@@ -20,6 +20,7 @@ typedef struct {
 
 typedef struct {
     Tui_TextInputState *state;
+    b32 single_line;
     b32 changed;
 } TextInputEventContext;
 

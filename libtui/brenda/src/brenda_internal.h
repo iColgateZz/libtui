@@ -44,8 +44,6 @@ list_def(Brenda_Event)
 typedef struct {
     i32 x, y;
     b32 is_visible;
-    b32 terminal_is_visible;
-    b32 position_needs_update;
 } CursorState;
 
 typedef struct {

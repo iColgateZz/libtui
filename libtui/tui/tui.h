@@ -128,6 +128,7 @@ typedef struct {
 typedef struct {
     Layla_ElementID id;
     Tui_TextInputState *state;
+    Layla_TextSlice placeholder;
     Layla_ContainerStyle style;
     Layla_TextStyle text_style;
     Layla_Color focused_background;
@@ -160,6 +161,7 @@ void tui_open_div(Tui_DivConfig config);
 void tui_close_div(Tui_DivConfig config);
 void tui_draw_text(Tui_TextConfig config);
 b32 tui_draw_button(Tui_ButtonConfig config);
+Tui_TextInputState tui_make_text_input_state(byte *buffer, isize capacity);
 b32 tui_draw_text_input(Tui_TextInputConfig config);
 
 #define Tui_Div(...)                                                                                 \
@@ -192,7 +194,7 @@ b32 tui_draw_text_input(Tui_TextInputConfig config);
 
 #define Tui_TextInput(...) tui_draw_text_input((Tui_TextInputConfig) {                               \
     .style = {                                                                                       \
-        .size = {.w = LAYLA_FILL(), .h = LAYLA_FIXED(5)},                                            \
+        .size = {.w = LAYLA_FILL(), .h = LAYLA_FIT(.min = 3)},                                      \
         .background = LAYLA_COLOR(35, 42, 55),                                                       \
         .padding = {.left = 1, .right = 1},                                                          \
         .border = {.width = 1, .color = LAYLA_COLOR(90, 105, 130)},                                  \

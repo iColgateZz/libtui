@@ -249,6 +249,8 @@ typedef i32 (*Layla_TextMeasureFunction)(Layla_TextSlice text, void *userdata);
 typedef LAYLA_PACKED_ENUM {
     LAYLA_TEXT_WRAP_WORD,
     LAYLA_TEXT_WRAP_CHARACTER,
+    LAYLA_TEXT_WRAP_NONE, // Only explicit newlines start another line.
+    LAYLA_TEXT_SINGLE_LINE, // No wrapping; newlines are displayed as spaces.
 } Layla_TextWrapPolicy;
 
 typedef struct {
@@ -260,6 +262,7 @@ typedef struct {
 typedef struct {
     isize byte_offset;
     // If set to a non-null pointer, a 1x1 custom command is emitted at this position in the laid-out text.
+    // Empty text reserves one cell; with wrapping, a marker at the right edge reserves another line.
     void *userdata;
 } Layla_TextMarker;
 

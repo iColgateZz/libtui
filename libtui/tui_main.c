@@ -41,16 +41,8 @@ i32 main(void) {
 
     i32 count = 0;
     b32 quit = false;
-    //TODO: same string 3 times!!!
-    //TODO: provide optional placeholder text
-    //TODO: otherwise the input zone should be empty
-    byte input_text[256] = "Click here and type. Long text wraps inside the input.";
-    Tui_TextInputState input = {
-        .items = input_text,
-        .count = sizeof("Click here and type. Long text wraps inside the input.") - 1,
-        .capacity = sizeof(input_text),
-        .cursor = sizeof("Click here and type. Long text wraps inside the input.") - 1,
-    };
+    byte input_text[256] = "";
+    Tui_TextInputState input = tui_make_text_input_state(input_text, sizeof(input_text));
 
     while (!quit) {
         tui_begin_frame();
@@ -77,8 +69,12 @@ i32 main(void) {
 
             Tui_Text(.text = ((Layla_TextSlice) {.items = count_text, .count = count_text_length}));
 
-            Tui_Text(.text = LAYLA_TEXT_SLICE("Text input (Escape releases focus):"));
-            Tui_TextInput(.id = TUI_EXAMPLE_TEXT_INPUT_ID, .state = &input);
+            Tui_Text(.text = LAYLA_TEXT_SLICE("Text input (Enter adds a row; Escape releases focus):"));
+            Tui_TextInput(
+                .id = TUI_EXAMPLE_TEXT_INPUT_ID,
+                .state = &input,
+                .placeholder = LAYLA_TEXT_SLICE("Click here and type. Long text wraps inside the input."),
+            );
 
             Tui_Div(
                 .id = TUI_EXAMPLE_SCROLL_ID,

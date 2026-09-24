@@ -558,6 +558,12 @@ b32 tui_draw_button(Tui_ButtonConfig config) {
     return tui_is_element_clicked(id);
 }
 
+Tui_TextInputState tui_make_text_input_state(byte *buffer, isize capacity) {
+    isize count = 0;
+    while (count < capacity && buffer[count] != '\0') count++;
+    return (Tui_TextInputState) {.items = buffer, .count = count, .capacity = capacity, .cursor = count};
+}
+
 b32 tui_draw_text_input(Tui_TextInputConfig config) {
     Tui_TextInputState *input = config.state;
     input->cursor = CLAMP(input->cursor, 0, input->count);
@@ -576,18 +582,19 @@ b32 tui_draw_text_input(Tui_TextInputConfig config) {
     }
     layla_configure_container_element((Layla_ContainerConfig) {.style = config.style});
 
-    TextInputEventContext event_context = {.state = input};
+    TextInputEventContext event_context = {
+        .state = input,
+        .single_line = config.text_style.wrap_policy == LAYLA_TEXT_SINGLE_LINE,
+    };
     if (is_focused) {
         tui_consume_element_specific_events(id, text_input_handle_event, &event_context);
-
         state.text_input_cursor_effect = (Brenda_TextEffect) {.flags = BRENDA_TEXT_EFFECT_UNDERLINE};
     }
 
-    config.text_style.wrap_policy = LAYLA_TEXT_WRAP_CHARACTER;
     Tui_Text(
-        .text = input->count == 0
-            ? (Layla_TextSlice) {.items = " ", .count = 1}
-            : (Layla_TextSlice) {.items = input->items, .count = input->count},
+        .text = input->count > 0 || is_focused
+            ? (Layla_TextSlice) {.items = input->items, .count = input->count}
+            : config.placeholder,
         .style = config.text_style,
         .marker = is_focused
             ? (Layla_TextMarker) {
@@ -611,6 +618,11 @@ static inline b32 text_input_handle_event(Tui_Event event, void *userdata) {
     if (input_event.type == BRENDA_EVENT_UTF8) {
         if (input_event.modifiers & (BRENDA_MODIFIER_CTRL | BRENDA_MODIFIER_ALT)) return false;
         isize byte_count = input_event.as.utf8.length;
+        if (context->single_line) {
+            for (isize i = 0; i < byte_count; ++i) {
+                if (input_event.as.utf8.bytes[i] == '\n' || input_event.as.utf8.bytes[i] == '\r') return false;
+            }
+        }
         if (byte_count <= 0 || input->count + byte_count > input->capacity) return true;
 
         memmove(
@@ -660,6 +672,7 @@ static inline b32 text_input_handle_event(Tui_Event event, void *userdata) {
             }
             return true;
         case BRENDA_TERM_KEY_ENTER:
+            if (context->single_line) return false;
             if (input->count < input->capacity) {
                 memmove(input->items + input->cursor + 1, input->items + input->cursor, input->count - input->cursor);
                 input->items[input->cursor++] = '\n';
