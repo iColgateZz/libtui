@@ -29,7 +29,7 @@ static State state = {
     .commands = { .items = COMMANDS, .capacity = LAYLA_MAX_COMMANDS },
     .errors = { .items = ERRORS, .capacity = LAYLA_MAX_ERRORS },
     .hovered_element_ids = { .items = HOVERED_ELEMENT_IDS, .capacity = LAYLA_MAX_NODES },
-    .element_data = {
+    .element_datas = {
         .items = ELEMENT_DATA_BY_ID,
         .capacity = LAYLA_MAX_NODES * 2,
         .fixed_capacity = true,
