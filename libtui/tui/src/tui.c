@@ -30,6 +30,7 @@ void tui_init(Tui_Config config) {
 
 void tui_deinit(void) {
     brenda_deinit_terminal();
+    layla_deinit();
     hash_map_free(&state.interaction_records);
     hash_map_free(&state.drag_positions);
     list_free(state.focus.focused_ids);
@@ -52,6 +53,21 @@ void tui_begin_frame(void) {
 void tui_end_frame(void) {
     Layla_CommandSlice commands = layla_end_layout();
     state.focus.active_scope = state.focus.deepest_scope;
+
+    for (isize i = 0; i < state.drag_positions.capacity; ++i) {
+        if (state.drag_positions.items[i].header.state != PSH_HASH_MAP_ENTRY_OCCUPIED) continue;
+
+        Layla_ElementID id = state.drag_positions.items[i].key;
+        if (get_enabled_interaction_record(id, TUI_ELEMENT_DRAGGABLE) == NULL) {
+            hash_map_remove(&state.drag_positions, id);
+        }
+    }
+
+    if (state.active_drag.state.element_id != LAYLA_ELEMENT_ID_NONE
+            && get_enabled_interaction_record(state.active_drag.state.element_id, TUI_ELEMENT_DRAGGABLE) == NULL) {
+        state.active_drag.state = (Tui_DragState) {0};
+    }
+
     draw_commands(commands);
     brenda_end_frame();
 }

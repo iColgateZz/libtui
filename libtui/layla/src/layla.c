@@ -104,6 +104,22 @@ void layla_set_screen_dimensions(i32 w, i32 h) {
     state.height = h;
 }
 
+void layla_deinit(void) {
+#ifndef LAYLA_STATIC_STORAGE
+    list_free(state.nodes);
+    list_free(state.open_node_stack);
+    list_free(state.temporary_child_stack);
+    list_free(state.frame_children);
+    list_free(state.floating_roots);
+    list_free(state.commands);
+    list_free(state.errors);
+    list_free(state.hovered_element_ids);
+    hash_map_free(&state.element_datas);
+    hash_map_free(&state.scroll_states);
+    if (state.tmp.base_ptr != NULL) arena_destroy(state.tmp);
+#endif
+}
+
 void layla_set_cursor_state(i32 x, i32 y, b32 is_down) {
     state.cursor.x = x;
     state.cursor.y = y;
@@ -215,6 +231,17 @@ Layla_CommandSlice layla_end_layout(void) {
             .flags = flags,
             .found = true,
         }));
+    }
+
+    for (isize i = 0; i < state.scroll_states.capacity; ++i) {
+        if (state.scroll_states.items[i].header.state != PSH_HASH_MAP_ENTRY_OCCUPIED) continue;
+
+        Layla_ElementID id = state.scroll_states.items[i].key;
+        Layla_ElementData *data = NULL;
+        hash_map_get(&state.element_datas, id, &data);
+        if (data == NULL || !(data->flags & LAYLA_ELEMENT_SCROLL_Y)) {
+            hash_map_remove(&state.scroll_states, id);
+        }
     }
 
     return (Layla_CommandSlice) {
@@ -341,22 +368,26 @@ Layla_ElementID layla_get_open_element_id(void) {
 }
 
 void layla_set_scroll_offset(Layla_ElementID id, i32 offset_y) {
-    get_scroll_state_by_id(id)->y = offset_y;
+    ensure_scroll_state_by_id(id)->y = offset_y;
 }
 
 void layla_update_scroll_offset(Layla_ElementID id, i32 delta_y) {
     if (delta_y == 0) return;
-    ScrollState *scroll = get_scroll_state_by_id(id);
+    ScrollState *scroll = ensure_scroll_state_by_id(id);
     i64 offset_y = (i64)scroll->y + (i64)delta_y;
     scroll->y = (i32)CLAMP(offset_y, (i64)INT32_MIN, (i64)INT32_MAX);
 }
 
 i32 layla_get_scroll_offset(Layla_ElementID id) {
-    return get_scroll_state_by_id(id)->y;
+    ScrollState *scroll = NULL;
+    hash_map_get(&state.scroll_states, id, &scroll);
+    return scroll != NULL ? scroll->y : 0;
 }
 
 i32 layla_get_max_scroll_offset(Layla_ElementID id) {
-    return get_scroll_state_by_id(id)->max_y;
+    ScrollState *scroll = NULL;
+    hash_map_get(&state.scroll_states, id, &scroll);
+    return scroll != NULL ? scroll->max_y : 0;
 }
 
 static inline void floating_layout(Node *node) {
@@ -768,7 +799,7 @@ static inline void container_positions(Node *node) {
     }
 
     if (node_is_scroll_y(node)) {
-        ScrollState *scroll = get_scroll_state_by_id(node->id);
+        ScrollState *scroll = ensure_scroll_state_by_id(node->id);
         i32 content_h = MAX(content_bottom + vertical_padding.end - node->y, 0);
         scroll->max_y = MAX(content_h - node->h, 0);
         scroll->y = CLAMP(scroll->y, 0, scroll->max_y);
@@ -1283,7 +1314,7 @@ static inline void distribute_space(i32 space, List(NodePtr) nodes, Dimension di
     }
 }
 
-static inline ScrollState *get_scroll_state_by_id(Layla_ElementID id) {
+static inline ScrollState *ensure_scroll_state_by_id(Layla_ElementID id) {
     ScrollState *scroll_state = NULL;
     hash_map_get(&state.scroll_states, id, &scroll_state);
     if (scroll_state != NULL) return scroll_state;

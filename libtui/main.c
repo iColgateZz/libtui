@@ -205,6 +205,7 @@ i32 main(void) {
         brenda_end_frame();
     }
 
+    layla_deinit();
     brenda_deinit_terminal();
     return 0;
 }

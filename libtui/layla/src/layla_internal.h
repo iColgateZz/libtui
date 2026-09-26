@@ -165,7 +165,7 @@ static inline i32 resolve_alignment_position(Layla_Alignment alignment, i32 size
 static inline Layla_Alignment node_get_align_self(Node *node);
 static inline b32 node_is_scroll_y(Node *node);
 static inline b32 node_is_floating(Node *node);
-static inline ScrollState *get_scroll_state_by_id(Layla_ElementID id);
+static inline ScrollState *ensure_scroll_state_by_id(Layla_ElementID id);
 static inline void floating_measure_size(Node *node, Node *attached, Dimension dim);
 
 #endif

@@ -344,6 +344,7 @@ Layla_ErrorSlice layla_get_errors(void);
 
 void layla_set_text_measure_function(Layla_TextMeasureFunction function, void *userdata);
 void layla_set_screen_dimensions(i32 w, i32 h);
+void layla_deinit(void);
 
 // Call once per frame before layla_begin_layout(). Hit-tests the last completed layout and updates interaction_state.
 void layla_set_cursor_state(i32 x, i32 y, b32 is_down);
