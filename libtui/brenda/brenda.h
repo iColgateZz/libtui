@@ -43,6 +43,7 @@ typedef struct {
 } Brenda_TerminalConfig;
 
 enum {
+    BRENDA_MODIFIER_NONE  = 0,
     BRENDA_MODIFIER_SHIFT = 1 << 0,
     BRENDA_MODIFIER_ALT   = 1 << 1,
     BRENDA_MODIFIER_CTRL  = 1 << 2,

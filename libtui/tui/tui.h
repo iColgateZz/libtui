@@ -5,7 +5,7 @@
 #include "brenda.h"
 
 typedef enum {
-    TUI_ELEMENT_NONE           = 0,
+    TUI_ELEMENT_NO_FLAGS       = 0,
     TUI_ELEMENT_HOVERABLE      = 1 << 0,
     TUI_ELEMENT_CLICKABLE      = 1 << 1,
     TUI_ELEMENT_FOCUSABLE      = 1 << 2,

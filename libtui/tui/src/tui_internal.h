@@ -68,6 +68,9 @@ static inline InteractionRecord *get_enabled_interaction_record(Layla_ElementID 
 static inline DragPosition *get_drag_position_by_id(Layla_ElementID id);
 static inline Layla_ElementID get_interaction_target_by_flags(Tui_ElementFlags required_flags);
 static inline void route_events(Brenda_EventSlice events);
+static inline RoutedEvent route_pointer_event(Brenda_Event event);
+static inline RoutedEvent route_keyboard_event(Brenda_Event event);
+static inline void update_active_drag(Brenda_Event event);
 static inline void move_focus(i32 direction);
 static inline void draw_commands(Layla_CommandSlice commands);
 static inline b32 text_input_handle_event(Tui_Event event, void *userdata);
